@@ -108,6 +108,10 @@ export function GuidePage() {
       toast.error("Silakan pilih gunung tujuan.");
       return;
     }
+    if (bookingGuide.busyDates && bookingGuide.busyDates.includes(bookingDate)) {
+      toast.error(`Guide ${bookingGuide.name} sudah memiliki jadwal trip (busy) pada tanggal ${bookingDate}. Silakan pilih tanggal lain.`);
+      return;
+    }
 
     const priceProposed = parseInt(proposedPrice) || bookingGuide.price;
 
@@ -119,7 +123,8 @@ export function GuidePage() {
       pendakiId: currentUser?.id || "guest",
       pendakiName: currentUser?.name || "Pendaki Demo",
       bookingDate,
-      price: priceProposed
+      price: priceProposed,
+      bookingType: "mandiri"
     });
 
     // 2. If price is different, create negotiation entry
@@ -271,6 +276,9 @@ export function GuidePage() {
                           )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1 font-semibold truncate">{guide.specialty}</p>
+                        <p className="text-[10px] text-emerald-800 font-bold bg-emerald-50/50 border border-emerald-100 rounded px-1.5 py-0.5 mt-1 max-w-max">
+                          🗻 Spesialisasi: {guide.specialtyMountains.join(", ")}
+                        </p>
                         <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                           <MapPin className="size-3" />
                           {guide.location}
@@ -496,6 +504,18 @@ export function GuidePage() {
                   </div>
                 </div>
               </div>
+
+              {bookingGuide.busyDates && bookingGuide.busyDates.length > 0 && (
+                <div className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
+                  ⚠️ <b>Jadwal Booked / Sibuk Guide:</b>
+                  <div className="flex gap-1.5 flex-wrap mt-1">
+                    {bookingGuide.busyDates.map((d: string) => (
+                      <span key={d} className="bg-white border border-amber-300 px-1.5 py-0.5 rounded text-[10px] font-bold text-amber-800">{d}</span>
+                    ))}
+                  </div>
+                  <p className="text-[9px] text-gray-500 mt-1">Guide tidak dapat dipesan pada tanggal-tanggal di atas.</p>
+                </div>
+              )}
               
               <div>
                 <label className="text-xs font-semibold text-gray-700 block mb-1">Harga Awal Guide (Per Hari)</label>

@@ -175,7 +175,8 @@ export function GunungPage() {
       pendakiName: currentUser?.name || "Pendaki Demo",
       bookingDate,
       price,
-      officialTicketBooking: true
+      officialTicketBooking: true,
+      bookingType: "mandiri"
     });
 
     setBookingModalOpen(false);
@@ -836,7 +837,7 @@ export function GunungPage() {
               <h3 className="text-lg">Pesan Tiket Masuk Gunung</h3>
             </div>
             <p className="text-xs text-gray-500 mb-4 leading-relaxed font-normal">
-              Anda memesan tiket masuk/izin pendakian resmi untuk **{bookingMountain.name}**. Biaya tiket bersifat pas (fixed) dan langsung diteruskan ke instansi pengelola.
+              Anda memesan tiket masuk/izin pendakian resmi untuk **{bookingMountain.name}**. Biaya tiket bersifat pas (fixed). Tiket ini dikelola oleh Super Admin yang akan mendaftarkannya secara manual ke pihak pengelola gunung via **{bookingMountain.adminContactMethod}: {bookingMountain.adminContactValue}** setelah pembayaran escrow terverifikasi.
             </p>
             <div className="space-y-4 text-sm">
               <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-100">

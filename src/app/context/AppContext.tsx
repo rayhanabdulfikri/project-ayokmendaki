@@ -27,6 +27,8 @@ export interface Mountain {
   lng: number;
   status: "Buka" | "Tutup";
   ticketPrice: number;
+  adminContactMethod: "Instagram" | "Website Resmi" | "WhatsApp";
+  adminContactValue: string;
 }
 
 export interface Guide {
@@ -42,6 +44,8 @@ export interface Guide {
   certifications: string[];
   status: "Aktif" | "Libur" | "Non-Aktif";
   verified: boolean;
+  specialtyMountains: string[];
+  busyDates: string[];
 }
 
 export interface Vendor {
@@ -67,6 +71,23 @@ export interface EquipmentItem {
   category: "tent" | "carrier" | "other";
 }
 
+export interface TripPackage {
+  id: string;
+  title: string;
+  guideId: string;
+  guideName: string;
+  vendorId?: string;
+  vendorName?: string;
+  description: string;
+  duration: string; // e.g. "3 Hari 2 Malam"
+  price: number;
+  promoDeadline: string; // date string
+  services: string[];
+  rundown: string[];
+  image: string;
+  targetMountain: string;
+}
+
 export interface Booking {
   id: string;
   mountainName: string;
@@ -77,9 +98,14 @@ export interface Booking {
   bookingDate: string; // trip date
   createdAt: string;
   price: number; // fixed ticket or nego guide price
-  status: "Menunggu Konfirmasi" | "Menunggu Pembayaran" | "Telah Dibayar" | "Berangkat" | "Basecamp" | "Summit" | "Selesai" | "Dibatalkan" | "Dispute";
+  status: "Menunggu Konfirmasi" | "Menunggu Pembayaran" | "Telah Dibayar" | "Start" | "Muncak" | "Selesai" | "Dibatalkan" | "Dispute";
   disputeNotes?: string;
   officialTicketBooking?: boolean;
+  bookingType: "mandiri" | "paket";
+  packageId?: string;
+  preTripMeetingDate?: string;
+  preTripMeetingTime?: string;
+  preTripMeetingLink?: string;
 }
 
 export interface RentalOrder {
@@ -144,6 +170,9 @@ interface AppContextType {
   vendors: Vendor[];
   equipment: EquipmentItem[];
   setEquipment: React.Dispatch<React.SetStateAction<EquipmentItem[]>>;
+  tripPackages: TripPackage[];
+  setTripPackages: React.Dispatch<React.SetStateAction<TripPackage[]>>;
+  addTripPackage: (pkg: Omit<TripPackage, "id">) => void;
   bookings: Booking[];
   addBooking: (booking: Omit<Booking, "id" | "createdAt" | "status">) => string;
   updateBookingStatus: (id: string, status: Booking["status"]) => void;
@@ -169,26 +198,26 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 // ─── Initial Mock Data ────────────────────────────────────────────────────────
 const INITIAL_MOUNTAINS: Mountain[] = [
-  { name: "Gunung Semeru", location: "Jawa Timur", province: "Jawa Timur", elevation: "3.676 mdpl", elevationM: 3676, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1605860632725-fa88d0ce7a07?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.8, reviews: 2341, lat: -8.1077, lng: 112.9224, status: "Buka", ticketPrice: 35000 },
-  { name: "Gunung Rinjani", location: "Lombok, NTB", province: "NTB", elevation: "3.726 mdpl", elevationM: 3726, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1589309736404-2e142a2acdf0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.9, reviews: 1876, lat: -8.4119, lng: 116.4675, status: "Buka", ticketPrice: 150000 },
-  { name: "Gunung Bromo", location: "Jawa Timur", province: "Jawa Timur", elevation: "2.329 mdpl", elevationM: 2329, difficulty: "Mudah", image: "https://images.unsplash.com/photo-1587651687979-77cf05d1b841?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.7, reviews: 3210, lat: -7.9425, lng: 112.9530, status: "Tutup", ticketPrice: 29000 },
-  { name: "Gunung Prau", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "2.565 mdpl", elevationM: 2565, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1568516475772-498b4379829c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.6, reviews: 1543, lat: -7.1884, lng: 109.9219, status: "Buka", ticketPrice: 20000 },
-  { name: "Gunung Merbabu", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "3.145 mdpl", elevationM: 3145, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1562157778-81d81be57eec?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.7, reviews: 1987, lat: -7.4549, lng: 110.4332, status: "Buka", ticketPrice: 25000 },
-  { name: "Gunung Gede Pangrango", location: "Jawa Barat", province: "Jawa Barat", elevation: "2.958 mdpl", elevationM: 2958, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1510797215324-95aa89f43c33?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.5, reviews: 2156, lat: -6.7893, lng: 106.9852, status: "Buka", ticketPrice: 29000 },
+  { name: "Gunung Semeru", location: "Jawa Timur", province: "Jawa Timur", elevation: "3.676 mdpl", elevationM: 3676, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1605860632725-fa88d0ce7a07?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.8, reviews: 2341, lat: -8.1077, lng: 112.9224, status: "Buka", ticketPrice: 35000, adminContactMethod: "Instagram", adminContactValue: "@semeru_official" },
+  { name: "Gunung Rinjani", location: "Lombok, NTB", province: "NTB", elevation: "3.726 mdpl", elevationM: 3726, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1589309736404-2e142a2acdf0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.9, reviews: 1876, lat: -8.4119, lng: 116.4675, status: "Buka", ticketPrice: 150000, adminContactMethod: "Website Resmi", adminContactValue: "https://bookingrinjani.id" },
+  { name: "Gunung Bromo", location: "Jawa Timur", province: "Jawa Timur", elevation: "2.329 mdpl", elevationM: 2329, difficulty: "Mudah", image: "https://images.unsplash.com/photo-1587651687979-77cf05d1b841?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.7, reviews: 3210, lat: -7.9425, lng: 112.9530, status: "Tutup", ticketPrice: 29000, adminContactMethod: "Website Resmi", adminContactValue: "https://bookingbromo.id" },
+  { name: "Gunung Prau", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "2.565 mdpl", elevationM: 2565, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1568516475772-498b4379829c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.6, reviews: 1543, lat: -7.1884, lng: 109.9219, status: "Buka", ticketPrice: 20000, adminContactMethod: "WhatsApp", adminContactValue: "+628123456789" },
+  { name: "Gunung Merbabu", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "3.145 mdpl", elevationM: 3145, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1562157778-81d81be57eec?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.7, reviews: 1987, lat: -7.4549, lng: 110.4332, status: "Buka", ticketPrice: 25000, adminContactMethod: "Website Resmi", adminContactValue: "https://tngmerbabu.id" },
+  { name: "Gunung Gede Pangrango", location: "Jawa Barat", province: "Jawa Barat", elevation: "2.958 mdpl", elevationM: 2958, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1510797215324-95aa89f43c33?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.5, reviews: 2156, lat: -6.7893, lng: 106.9852, status: "Buka", ticketPrice: 29000, adminContactMethod: "Instagram", adminContactValue: "@gedepangrango_official" },
 ];
 
 const INITIAL_GUIDES: Guide[] = [
-  { id: "guide1", name: "Ahmad Hidayat", specialty: "Gunung Semeru & Bromo", location: "Malang, Jawa Timur", experience: "8 Tahun", trips: 245, rating: 4.9, verified: true, price: 500000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmad", certifications: ["APIGI", "Pertolongan Pertama"], status: "Aktif" },
-  { id: "guide2", name: "Budi Santoso", specialty: "Gunung Rinjani", location: "Lombok, NTB", experience: "10 Tahun", trips: 312, rating: 5.0, verified: true, price: 650000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Budi", certifications: ["APIGI", "HPI"], status: "Libur" },
-  { id: "guide3", name: "Candra Wijaya", specialty: "Pendakian Jawa Tengah", location: "Magelang, Jawa Tengah", experience: "6 Tahun", trips: 178, rating: 4.8, verified: true, price: 450000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Candra", certifications: ["APIGI"], status: "Non-Aktif" },
-  { id: "guide4", name: "Doni Prasetyo", specialty: "Gunung Gede Pangrango", location: "Bogor, Jawa Barat", experience: "7 Tahun", trips: 198, rating: 4.7, verified: false, price: 400000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Doni", certifications: ["APIGI", "SAR"], status: "Aktif" }, // Needs admin verification
+  { id: "guide1", name: "Ahmad Hidayat", specialty: "Gunung Semeru & Bromo", location: "Malang, Jawa Timur", experience: "8 Tahun", trips: 245, rating: 4.9, verified: true, price: 500000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmad", certifications: ["APIGI", "Pertolongan Pertama"], status: "Aktif", specialtyMountains: ["Gunung Semeru", "Gunung Bromo"], busyDates: ["2026-07-15", "2026-07-20"] },
+  { id: "guide2", name: "Budi Santoso", specialty: "Gunung Rinjani", location: "Lombok, NTB", experience: "10 Tahun", trips: 312, rating: 5.0, verified: true, price: 650000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Budi", certifications: ["APIGI", "HPI"], status: "Libur", specialtyMountains: ["Gunung Rinjani"], busyDates: ["2026-07-18"] },
+  { id: "guide3", name: "Candra Wijaya", specialty: "Pendakian Jawa Tengah", location: "Magelang, Jawa Tengah", experience: "6 Tahun", trips: 178, rating: 4.8, verified: true, price: 450000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Candra", certifications: ["APIGI"], status: "Non-Aktif", specialtyMountains: ["Gunung Prau", "Gunung Merbabu"], busyDates: [] },
+  { id: "guide4", name: "Doni Prasetyo", specialty: "Semua Gunung di Indonesia", location: "Bogor, Jawa Barat", experience: "7 Tahun", trips: 198, rating: 4.7, verified: false, price: 400000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Doni", certifications: ["APIGI", "SAR"], status: "Aktif", specialtyMountains: ["Semua Gunung"], busyDates: ["2026-07-10"] },
 ];
 
 const INITIAL_VENDORS: Vendor[] = [
   { id: "vendor1", name: "Outdoor Adventure Store", location: "Malang, Jawa Timur", rating: 4.8, verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=outdoor", distances: { "Gunung Semeru": 3.5, "Gunung Bromo": 8.0, "Gunung Rinjani": 380, "Gunung Prau": 350, "Gunung Merbabu": 320, "Gunung Gede Pangrango": 710 } },
   { id: "vendor2", name: "Summit Gear Rental", location: "Lombok, NTB", rating: 4.9, verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=summit", distances: { "Gunung Rinjani": 2.1, "Gunung Semeru": 340, "Gunung Bromo": 330, "Gunung Prau": 420, "Gunung Merbabu": 410, "Gunung Gede Pangrango": 890 } },
   { id: "vendor3", name: "Mountain Camp Store", location: "Wonosobo, Jawa Tengah", rating: 4.7, verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=mountain", distances: { "Gunung Prau": 9.2, "Gunung Merbabu": 28.0, "Gunung Semeru": 280, "Gunung Bromo": 270, "Gunung Rinjani": 520, "Gunung Gede Pangrango": 310 } },
-  { id: "vendor4", name: "Cianjur Lestari Rental", location: "Cianjur, Jawa Barat", rating: 4.5, verified: false, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=cianjur", distances: { "Gunung Gede Pangrango": 5.4, "Gunung Prau": 290, "Gunung Semeru": 690, "Gunung Bromo": 680, "Gunung Rinjani": 910, "Gunung Merbabu": 410 } }, // Needs verification
+  { id: "vendor4", name: "Cianjur Lestari Rental", location: "Cianjur, Jawa Barat", rating: 4.5, verified: false, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=cianjur", distances: { "Gunung Gede Pangrango": 5.4, "Gunung Prau": 290, "Gunung Semeru": 690, "Gunung Bromo": 680, "Gunung Rinjani": 910, "Gunung Merbabu": 410 } },
 ];
 
 const INITIAL_EQUIPMENT: EquipmentItem[] = [
@@ -202,6 +231,41 @@ const INITIAL_EQUIPMENT: EquipmentItem[] = [
   { id: "eq8", name: "Trekking Pole Set", description: "Adjustable, anti-slip grip, aluminium", price: 25000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.5, available: 15, category: "other" },
 ];
 
+const INITIAL_PACKAGES: TripPackage[] = [
+  {
+    id: "pkg1",
+    title: "Paket Rinjani Summit Premium (All-In)",
+    guideId: "guide2",
+    guideName: "Budi Santoso",
+    vendorId: "vendor2",
+    vendorName: "Summit Gear Rental",
+    description: "Paket pendakian Rinjani premium lengkap dengan tenda ultralight, makanan mewah selama pendakian, porter tim, dan transportasi PP dari Bandara Lombok.",
+    duration: "3 Hari 2 Malam",
+    price: 1850000,
+    promoDeadline: "2026-07-01",
+    services: ["Simaksi & Asuransi Rinjani", "Tenda Ultralight Double Layer", "Menu Makan Premium 3x sehari", "Transport Bandara PP Lombok", "Sleeping Bag & Matras Angin"],
+    rundown: ["Hari 1: Penjemputan di Bandara, perjalanan ke Sembalun, trekking ke Crater Rim Sembalun", "Hari 2: Summit Attack 3726m, turun ke Segara Anak (Mancing & Berendam Air Panas)", "Hari 3: Trekking naik ke Senaru Rim, turun ke basecamp Senaru, transfer Bandara"],
+    image: "https://images.unsplash.com/photo-1589309736404-2e142a2acdf0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600",
+    targetMountain: "Gunung Rinjani"
+  },
+  {
+    id: "pkg2",
+    title: "Paket Hemat Prau Sunrise Trip",
+    guideId: "guide3",
+    guideName: "Candra Wijaya",
+    vendorId: "vendor3",
+    vendorName: "Mountain Camp Store",
+    description: "Nikmati keindahan sunrise terbaik se-Jawa di Puncak Gunung Prau Dieng. Paket hemat sudah termasuk guide berlisensi, perlengkapan tidur hangat, dan dokumentasi puncak.",
+    duration: "2 Hari 1 Malam",
+    price: 650000,
+    promoDeadline: "2026-06-30",
+    services: ["Simaksi Prau", "Guide Berlisensi APIGI", "Sleeping Bag Hangat", "Tenda Dome Sharing", "Makan Malam & Sarapan Hangat"],
+    rundown: ["Hari 1: Trekking santai lewat Patak Banteng ke Area Camp, hunting Sunset", "Hari 2: Menikmati Golden Sunrise di sunrise point Prau, sarapan, trekking turun kembali"],
+    image: "https://images.unsplash.com/photo-1568516475772-498b4379829c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600",
+    targetMountain: "Gunung Prau"
+  }
+];
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [mountains, setMountains] = useState<Mountain[]>(INITIAL_MOUNTAINS);
@@ -209,11 +273,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [equipment, setEquipment] = useState<EquipmentItem[]>(INITIAL_EQUIPMENT);
 
   // Load dynamically created data from LocalStorage or use defaults
+  const [tripPackages, setTripPackages] = useState<TripPackage[]>(() => {
+    const saved = localStorage.getItem("ayok_packages");
+    return saved ? JSON.parse(saved) : INITIAL_PACKAGES;
+  });
+
   const [bookings, setBookings] = useState<Booking[]>(() => {
     const saved = localStorage.getItem("ayok_bookings");
     return saved ? JSON.parse(saved) : [
-      { id: "book_mock1", mountainName: "Gunung Semeru", guideId: "guide1", guideName: "Ahmad Hidayat", pendakiName: "Zaki Firdaus", pendakiId: "pendaki1", bookingDate: "2026-07-10", createdAt: "2026-06-15", price: 500000, status: "Telah Dibayar" },
-      { id: "book_mock2", mountainName: "Gunung Semeru", pendakiName: "Zaki Firdaus", pendakiId: "pendaki1", bookingDate: "2026-07-10", createdAt: "2026-06-15", price: 35000, status: "Telah Dibayar", officialTicketBooking: true }
+      { id: "book_mock1", mountainName: "Gunung Semeru", guideId: "guide1", guideName: "Ahmad Hidayat", pendakiName: "Zaki Firdaus", pendakiId: "pendaki1", bookingDate: "2026-07-10", createdAt: "2026-06-15", price: 500000, status: "Telah Dibayar", bookingType: "mandiri", preTripMeetingDate: "2026-07-09", preTripMeetingTime: "19:00 - 19:30", preTripMeetingLink: "https://meet.google.com/abc-defg-hij" },
+      { id: "book_mock2", mountainName: "Gunung Semeru", pendakiName: "Zaki Firdaus", pendakiId: "pendaki1", bookingDate: "2026-07-10", createdAt: "2026-06-15", price: 35000, status: "Telah Dibayar", officialTicketBooking: true, bookingType: "mandiri" }
     ];
   });
 
@@ -247,6 +316,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   // Save changes to localStorage
+  useEffect(() => { localStorage.setItem("ayok_packages", JSON.stringify(tripPackages)); }, [tripPackages]);
   useEffect(() => { localStorage.setItem("ayok_bookings", JSON.stringify(bookings)); }, [bookings]);
   useEffect(() => { localStorage.setItem("ayok_rentals", JSON.stringify(rentalOrders)); }, [rentalOrders]);
   useEffect(() => { localStorage.setItem("ayok_negos", JSON.stringify(negotiations)); }, [negotiations]);
@@ -256,11 +326,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ─── Booking Actions ────────────────────────────────────────────────────────
   const addBooking = (bookingData: Omit<Booking, "id" | "createdAt" | "status">) => {
     const id = "book_" + Math.random().toString(36).substring(2, 9);
+    
+    // Automatically pre-populate pre-trip meeting link & date for guide booking
+    let preTripDate = "";
+    let preTripTime = "";
+    let preTripLink = "";
+    if (bookingData.guideId) {
+      const bDate = new Date(bookingData.bookingDate);
+      const mDate = new Date(bDate.getTime() - 24 * 60 * 60 * 1000); // 1 day before trip
+      preTripDate = mDate.toISOString().split("T")[0];
+      preTripTime = "19:30 - 20:00 WIB";
+      preTripLink = "https://meet.google.com/yok-mend-meet";
+    }
+
     const newBooking: Booking = {
       ...bookingData,
       id,
       createdAt: new Date().toISOString().split("T")[0],
-      status: bookingData.guideId ? "Menunggu Konfirmasi" : "Menunggu Pembayaran",
+      status: bookingData.guideId && bookingData.bookingType === "mandiri" ? "Menunggu Konfirmasi" : "Menunggu Pembayaran",
+      preTripMeetingDate: preTripDate || undefined,
+      preTripMeetingTime: preTripTime || undefined,
+      preTripMeetingLink: preTripLink || undefined
     };
     setBookings((prev) => [newBooking, ...prev]);
     return id;
@@ -432,6 +518,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEquipment((prev) => prev.filter((eq) => eq.id !== id));
   };
 
+  // ─── Trip Package Actions ───────────────────────────────────────────────────
+  const addTripPackage = (pkgData: Omit<TripPackage, "id">) => {
+    const id = "pkg_" + Math.random().toString(36).substring(2, 9);
+    const newPkg: TripPackage = {
+      ...pkgData,
+      id
+    };
+    setTripPackages((prev) => [newPkg, ...prev]);
+  };
+
   // ─── Dispute Actions ────────────────────────────────────────────────────────
   const submitDispute = (type: "booking" | "rental", id: string, notes: string) => {
     if (type === "booking") {
@@ -469,6 +565,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         vendors: INITIAL_VENDORS,
         equipment,
         setEquipment,
+        tripPackages,
+        setTripPackages,
+        addTripPackage,
         bookings,
         addBooking,
         updateBookingStatus,

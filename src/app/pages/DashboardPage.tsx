@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useApp, Booking, RentalOrder, Negotiation, UserRole, EquipmentItem, User } from "../context/AppContext";
+import { useApp, Booking, RentalOrder, Negotiation, UserRole, EquipmentItem, User, Mountain } from "../context/AppContext";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -52,6 +52,7 @@ export function DashboardPage() {
     currentUser,
     setCurrentUser,
     mountains,
+    setMountains,
     guides,
     setGuides,
     vendors,
@@ -75,7 +76,10 @@ export function DashboardPage() {
     updateEquipmentItem,
     deleteEquipmentItem,
     submitDispute,
-    resolveDispute
+    resolveDispute,
+    tripPackages,
+    setTripPackages,
+    addTripPackage
   } = useApp();
 
   const location = useLocation();
@@ -138,6 +142,27 @@ export function DashboardPage() {
   const [verDocName, setVerDocName] = useState("Scan Sertifikasi APIGI");
   const [verDocFile, setVerDocFile] = useState("https://images.unsplash.com/photo-1586075010923-2dd4570fb338?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400");
 
+  // Guide Package Ads form states
+  const [pkgFormOpen, setPkgFormOpen] = useState(false);
+  const [pkgTitle, setPkgTitle] = useState("");
+  const [pkgMountain, setPkgMountain] = useState("");
+  const [pkgPrice, setPkgPrice] = useState("");
+  const [pkgDuration, setPkgDuration] = useState("3 Hari 2 Malam");
+  const [pkgDeadline, setPkgDeadline] = useState("");
+  const [pkgDesc, setPkgDesc] = useState("");
+  const [pkgServices, setPkgServices] = useState<string[]>([]);
+  const [pkgRundown, setPkgRundown] = useState("");
+  const [pkgVendorId, setPkgVendorId] = useState("");
+
+  // Super Admin Mountain management states
+  const [editingMountain, setEditingMountain] = useState<Mountain | null>(null);
+  const [mountainForm, setMountainForm] = useState({
+    ticketPrice: "",
+    adminContactMethod: "Instagram" as "Instagram" | "Website Resmi" | "WhatsApp",
+    adminContactValue: "",
+    status: "Buka" as "Buka" | "Tutup"
+  });
+
   // Filter messages for current chat session
   const activeChatMessages = useMemo(() => {
     if (!currentUser || !selectedChatPartnerId) return [];
@@ -169,6 +194,16 @@ export function DashboardPage() {
       setSelectedChatPartnerName(chatPartnersList[0].name);
     }
   }, [chatPartnersList, selectedChatPartnerId]);
+
+  // Initialize package form select values
+  useEffect(() => {
+    if (mountains.length > 0 && !pkgMountain) {
+      setPkgMountain(mountains[0].name);
+    }
+    if (vendors.length > 0 && !pkgVendorId) {
+      setPkgVendorId(vendors[0].id);
+    }
+  }, [mountains, vendors, pkgMountain, pkgVendorId]);
 
   // Simulating mock auto reply after sending message
   const handleSendChatMessage = (e: React.FormEvent) => {
@@ -366,6 +401,41 @@ export function DashboardPage() {
     toast.success("Dokumen baru dikirim ke Admin untuk ditinjau!");
   };
 
+  // Super Admin Mountain handlers
+  const handleOpenMountainEdit = (mountain: Mountain) => {
+    setEditingMountain(mountain);
+    setMountainForm({
+      ticketPrice: mountain.ticketPrice.toString(),
+      adminContactMethod: mountain.adminContactMethod,
+      adminContactValue: mountain.adminContactValue,
+      status: mountain.status
+    });
+  };
+
+  const handleSaveMountain = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMountain) return;
+    
+    const { ticketPrice, adminContactMethod, adminContactValue, status } = mountainForm;
+    
+    setMountains((prev) =>
+      prev.map((m) =>
+        m.name === editingMountain.name
+          ? {
+              ...m,
+              ticketPrice: parseInt(ticketPrice) || 0,
+              adminContactMethod,
+              adminContactValue,
+              status
+            }
+          : m
+      )
+    );
+    
+    setEditingMountain(null);
+    toast.success(`Kontak tiket resmi ${editingMountain.name} berhasil diperbarui!`);
+  };
+
   // Status helper colors
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -376,12 +446,10 @@ export function DashboardPage() {
       case "Telah Dibayar":
       case "Siap Diambil":
         return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Escrow Aman (Lunas)</Badge>;
-      case "Berangkat":
-        return <Badge variant="outline" className="bg-emerald-600 text-white border-emerald-700">Trip: Berangkat</Badge>;
-      case "Basecamp":
-        return <Badge variant="outline" className="bg-emerald-700 text-white border-emerald-800">Trip: Pos Basecamp</Badge>;
-      case "Summit":
-        return <Badge variant="outline" className="bg-emerald-800 text-white border-emerald-900 animate-pulse">Trip: Puncak (Summit)</Badge>;
+      case "Start":
+        return <Badge variant="outline" className="bg-emerald-600 text-white border-emerald-700 animate-pulse">Trip: Start (Mendaki)</Badge>;
+      case "Muncak":
+        return <Badge variant="outline" className="bg-emerald-800 text-white border-emerald-900 animate-bounce">Trip: Muncak (Puncak)</Badge>;
       case "Sedang Disewa":
         return <Badge variant="outline" className="bg-emerald-600 text-white">Sedang Disewa</Badge>;
       case "Selesai":
@@ -495,6 +563,7 @@ export function DashboardPage() {
                 {[
                   { id: "bookings", label: "Booking Masuk", icon: <FileText className="size-4" /> },
                   { id: "trips", label: "Trip Lapangan", icon: <Activity className="size-4" /> },
+                  { id: "packages", label: "Iklan Paket (Ads)", icon: <Award className="size-4" /> },
                   { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> }
                 ].map(t => (
                   <button
@@ -529,6 +598,7 @@ export function DashboardPage() {
                 {[
                   { id: "catalog", label: "Kelola Katalog", icon: <Plus className="size-4" /> },
                   { id: "bookings", label: "Penyewaan Masuk", icon: <FileText className="size-4" /> },
+                  { id: "collaborations", label: "Kolaborasi Guide", icon: <Users className="size-4" /> },
                   { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> }
                 ].map(t => (
                   <button
@@ -563,6 +633,7 @@ export function DashboardPage() {
                   { id: "verify", label: "Verifikasi Berkas", icon: <UserCheck className="size-4" /> },
                   { id: "escrow", label: "Monitoring Transaksi", icon: <DollarSign className="size-4" /> },
                   { id: "disputes", label: "Penyelesaian Dispute", icon: <ShieldAlert className="size-4" /> },
+                  { id: "manage_mountains", label: "Kontak Tiket Gunung", icon: <MountainIcon className="size-4" /> },
                   { id: "reports", label: "Laporan Keuangan", icon: <TrendingUp className="size-4" /> }
                 ].map(t => (
                   <button
@@ -603,23 +674,79 @@ export function DashboardPage() {
                         <div className="text-center py-12 text-gray-400 text-sm">Belum ada pemesanan.</div>
                       ) : (
                         bookings.filter(b => b.pendakiId === currentUser.id).map((b) => (
-                          <div key={b.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-sm transition-shadow">
-                            <div>
-                              <div className="flex items-center gap-2 flex-wrap mb-1">
-                                <h4 className="font-bold text-gray-800">{b.mountainName}</h4>
-                                {b.officialTicketBooking ? (
-                                  <Badge className="bg-emerald-100 text-emerald-800 text-[9px] py-0">Tiket Masuk Resmi</Badge>
-                                ) : (
-                                  <Badge className="bg-blue-100 text-blue-800 text-[9px] py-0">Jasa Guide: {b.guideName}</Badge>
-                                )}
+                          <div key={b.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col hover:shadow-md transition-all">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap mb-1">
+                                  <h4 className="font-bold text-gray-800">{b.mountainName}</h4>
+                                  {b.officialTicketBooking ? (
+                                    <Badge className="bg-emerald-100 text-emerald-800 text-[9px] py-0">Tiket Masuk Resmi (Mandiri)</Badge>
+                                  ) : b.bookingType === "paket" ? (
+                                    <Badge className="bg-amber-100 text-amber-800 text-[9px] py-0">Paket Kemitraan (Ads)</Badge>
+                                  ) : (
+                                    <Badge className="bg-blue-100 text-blue-800 text-[9px] py-0">Jasa Guide Mandiri: {b.guideName}</Badge>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-500 flex items-center gap-1"><Calendar className="size-3.5" /> Tanggal Pendakian: <b>{b.bookingDate}</b></p>
+                                <p className="text-xs text-emerald-700 font-bold mt-1">Total Biaya: Rp {b.price.toLocaleString("id-ID")}</p>
                               </div>
-                              <p className="text-xs text-gray-500 flex items-center gap-1"><Calendar className="size-3.5" /> Tanggal Pendakian: **{b.bookingDate}**</p>
-                              <p className="text-xs text-emerald-700 font-bold mt-1">Total Biaya: Rp {b.price.toLocaleString("id-ID")}</p>
+                              
+                              <div className="flex flex-col items-end gap-2 w-full md:w-auto shrink-0 border-t md:border-t-0 pt-2.5 md:pt-0">
+                                <div className="mb-1">{getStatusBadge(b.status)}</div>
+                              </div>
                             </div>
-                            
-                            <div className="flex flex-col items-end gap-2 w-full md:w-auto shrink-0 border-t md:border-t-0 pt-2.5 md:pt-0">
-                              <div className="mb-1">{getStatusBadge(b.status)}</div>
-                              <div className="flex gap-2 w-full md:w-auto justify-end">
+
+                            {/* 📅 Pre-Trip Meeting 30 Menit */}
+                            {b.preTripMeetingDate && ["Telah Dibayar", "Start", "Muncak"].includes(b.status) && (
+                              <div className="mt-3 p-3 bg-amber-50 rounded-xl border border-amber-200/50 max-w-lg">
+                                <p className="text-[10px] font-bold text-amber-800 flex items-center gap-1">
+                                  📅 Pre-Trip Meeting Persiapan (30 Menit) Terjadwal:
+                                </p>
+                                <p className="text-xs text-gray-700 mt-1 font-semibold">
+                                  Jadwal: {b.preTripMeetingDate} &middot; {b.preTripMeetingTime}
+                                </p>
+                                <p className="text-[9px] text-gray-500 leading-tight mt-0.5">
+                                  *Wajib bergabung untuk briefing fisik, peralatan, logistik, rundown, dan koordinasi dengan Guide.*
+                                </p>
+                                <Button 
+                                  size="xs" 
+                                  className="mt-2 bg-amber-600 hover:bg-amber-700 text-white text-[10px] h-7 px-3 font-semibold"
+                                  onClick={() => {
+                                    window.open(b.preTripMeetingLink, "_blank");
+                                    toast.success("[Simulasi] Bergabung ke video call Google Meet Pre-Trip persiapan.");
+                                  }}
+                                >
+                                  Gabung Google Meet (30 Menit)
+                                </Button>
+                              </div>
+                            )}
+
+                            {/* 📍 Simplified Stepper */}
+                            {["Telah Dibayar", "Start", "Muncak", "Selesai"].includes(b.status) && (
+                              <div className="mt-3 p-3 bg-emerald-50/40 rounded-xl border border-emerald-100 max-w-lg">
+                                <p className="text-[10px] font-bold text-emerald-800 mb-2">📍 Status Perjalanan Lapangan (Live Status):</p>
+                                <div className="flex items-center gap-2">
+                                  {[
+                                    { label: "1. Start (Mulai)", active: b.status === "Start" || b.status === "Muncak" || b.status === "Selesai" },
+                                    { label: "2. Muncak (Puncak)", active: b.status === "Muncak" || b.status === "Selesai" },
+                                    { label: "3. Selesai", active: b.status === "Selesai" }
+                                  ].map((step, idx) => (
+                                    <div key={idx} className="flex items-center gap-2 flex-1">
+                                      <div className={`flex-1 text-center py-1 px-1.5 rounded-lg border text-[9px] font-extrabold ${
+                                        step.active 
+                                          ? "bg-emerald-600 text-white border-emerald-600 shadow-xs" 
+                                          : "bg-white text-gray-400 border-gray-250"
+                                      }`}>
+                                        {step.label}
+                                      </div>
+                                      {idx < 2 && <span className="text-gray-300 text-[10px] font-bold">➔</span>}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex gap-2 w-full justify-end border-t border-gray-100 pt-3 mt-3">
                                 {b.status === "Menunggu Pembayaran" && (
                                   <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => handleOpenPayment(b.id, "booking", b.price)}>
                                     <CreditCard className="size-3.5 mr-1" /> Bayar Simulasi
@@ -637,7 +764,6 @@ export function DashboardPage() {
                                 )}
                               </div>
                             </div>
-                          </div>
                         ))
                       )}
                     </CardContent>
@@ -868,10 +994,10 @@ export function DashboardPage() {
                       <CardDescription className="text-xs">Perbarui titik progres pendakian manual Anda di lapangan untuk notifikasi live pendaki.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {bookings.filter(b => b.guideId === currentUser.id && ["Telah Dibayar", "Berangkat", "Basecamp", "Summit"].includes(b.status)).length === 0 ? (
+                      {bookings.filter(b => b.guideId === currentUser.id && ["Telah Dibayar", "Start", "Muncak"].includes(b.status)).length === 0 ? (
                         <div className="text-center py-12 text-gray-400 text-sm">Tidak ada trip aktif saat ini.</div>
                       ) : (
-                        bookings.filter(b => b.guideId === currentUser.id && ["Telah Dibayar", "Berangkat", "Basecamp", "Summit"].includes(b.status)).map((b) => (
+                        bookings.filter(b => b.guideId === currentUser.id && ["Telah Dibayar", "Start", "Muncak"].includes(b.status)).map((b) => (
                           <div key={b.id} className="p-5 rounded-xl border border-gray-150 bg-white space-y-4">
                             <div className="flex justify-between items-center flex-wrap gap-2">
                               <div>
@@ -884,12 +1010,11 @@ export function DashboardPage() {
                             {/* Check-in stepper buttons */}
                             <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100">
                               <p className="text-xs font-bold text-emerald-800 mb-3">📍 Papan Kendali Check-in Progres (Manual Guide):</p>
-                              <div className="grid grid-cols-4 gap-2">
+                              <div className="grid grid-cols-3 gap-2">
                                 {[
-                                  { label: "1. Berangkat", status: "Berangkat" as const, desc: "Basecamp awal" },
-                                  { label: "2. Pos Basecamp", status: "Basecamp" as const, desc: "Pos peristirahatan" },
-                                  { label: "3. Summit", status: "Summit" as const, desc: "Puncak gunung" },
-                                  { label: "4. Finish", status: "Selesai" as const, desc: "Kembali selamat" }
+                                  { label: "1. Start", status: "Start" as const, desc: "Mulai trekking" },
+                                  { label: "2. Muncak", status: "Muncak" as const, desc: "Sampai puncak" },
+                                  { label: "3. Selesai", status: "Selesai" as const, desc: "Kembali ke camp" }
                                 ].map((step) => {
                                   const isActiveStep = b.status === step.status;
                                   return (
@@ -913,6 +1038,222 @@ export function DashboardPage() {
                                   );
                                 })}
                               </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {activeTab === "packages" && (
+                  <Card className="border border-gray-150 shadow-sm">
+                    <CardHeader className="flex flex-row items-center justify-between border-b border-gray-100 py-4 flex-wrap gap-2">
+                      <div>
+                        <CardTitle className="text-lg font-bold">Kelola Iklan Paket Pendakian (Ads)</CardTitle>
+                        <CardDescription className="text-xs">Publish iklan paket trip komplit untuk mempermudah pemesanan pendaki mandiri.</CardDescription>
+                      </div>
+                      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-3 text-white font-bold" onClick={() => {
+                        setPkgTitle("");
+                        setPkgPrice("");
+                        setPkgDuration("3 Hari 2 Malam");
+                        setPkgDeadline("");
+                        setPkgDesc("");
+                        setPkgServices([]);
+                        setPkgRundown("");
+                        setPkgFormOpen(true);
+                      }}>
+                        <Plus className="size-3.5 mr-1" /> Buat Paket Baru
+                      </Button>
+                    </CardHeader>
+                    <CardContent className="space-y-4 pt-6">
+                      {/* Package creation form */}
+                      {pkgFormOpen && (
+                        <form onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!pkgTitle || !pkgPrice || !pkgDeadline) {
+                            toast.error("Wajib mengisi judul, tarif, dan tenggat promo.");
+                            return;
+                          }
+                          const chosenVendor = vendors.find(v => v.id === pkgVendorId);
+                          addTripPackage({
+                            title: pkgTitle,
+                            guideId: currentUser.id,
+                            guideName: currentUser.name,
+                            vendorId: pkgVendorId || undefined,
+                            vendorName: chosenVendor?.name || undefined,
+                            description: pkgDesc || "Paket pendakian bersama guide berlisensi.",
+                            duration: pkgDuration,
+                            price: parseInt(pkgPrice) || 500000,
+                            promoDeadline: pkgDeadline,
+                            services: pkgServices.length > 0 ? pkgServices : ["Jasa Pemandu"],
+                            rundown: pkgRundown ? pkgRundown.split("\n").filter(l => l.trim()) : ["Hari 1: Trekking", "Hari 2: Selesai"],
+                            image: "https://images.unsplash.com/photo-1605860632725-fa88d0ce7a07?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600",
+                            targetMountain: pkgMountain || (mountains[0]?.name || "")
+                          });
+                          setPkgFormOpen(false);
+                          toast.success("Iklan Paket Pendakian baru berhasil dipublish!");
+                        }} className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/10 space-y-4 mb-4 animate-in slide-in-from-top-3">
+                          <h4 className="text-xs font-bold text-emerald-800 border-b border-emerald-100 pb-1.5 flex items-center justify-between">
+                            <span>Buat Paket Ads Pendakian Kolaborasi</span>
+                            <button type="button" onClick={() => setPkgFormOpen(false)} className="text-gray-400 hover:text-gray-600"><X className="size-4" /></button>
+                          </h4>
+                          
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-semibold text-gray-700">Nama/Judul Paket</label>
+                              <Input
+                                placeholder="Contoh: Paket All-in Semeru Eksklusif"
+                                className="bg-white border-gray-255 text-xs text-gray-700 h-9"
+                                value={pkgTitle}
+                                onChange={(e) => setPkgTitle(e.target.value)}
+                              />
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-semibold text-gray-700">Pilih Gunung Spesialisasi</label>
+                              <select
+                                className="w-full px-3 py-2 text-xs border border-gray-250 bg-white rounded-lg focus:outline-emerald-500 h-9"
+                                value={pkgMountain}
+                                onChange={(e) => setPkgMountain(e.target.value)}
+                              >
+                                <option value="">-- Pilih Gunung --</option>
+                                {mountains.map((m) => (
+                                  <option key={m.name} value={m.name}>{m.name}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-semibold text-gray-700">Tarif Per Orang (Rp)</label>
+                              <Input
+                                type="number"
+                                placeholder="Contoh: 1200000"
+                                className="bg-white border-gray-255 text-xs text-gray-700 h-9"
+                                value={pkgPrice}
+                                onChange={(e) => setPkgPrice(e.target.value)}
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-semibold text-gray-700">Durasi Perjalanan</label>
+                              <Input
+                                placeholder="Contoh: 3 Hari 2 Malam"
+                                className="bg-white border-gray-255 text-xs text-gray-700 h-9"
+                                value={pkgDuration}
+                                onChange={(e) => setPkgDuration(e.target.value)}
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-semibold text-gray-700">Tenggat Promo / Batas Booking</label>
+                              <Input
+                                type="date"
+                                className="bg-white border-gray-255 text-xs text-gray-700 h-9"
+                                value={pkgDeadline}
+                                onChange={(e) => setPkgDeadline(e.target.value)}
+                                min={new Date().toISOString().split("T")[0]}
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-semibold text-gray-700">Mitra Vendor Kolaborasi (Logistik/Alat)</label>
+                              <select
+                                className="w-full px-3 py-2 text-xs border border-gray-250 bg-white rounded-lg focus:outline-emerald-500 h-9"
+                                value={pkgVendorId}
+                                onChange={(e) => setPkgVendorId(e.target.value)}
+                              >
+                                <option value="">Tanpa Vendor (Hanya Guide)</option>
+                                {vendors.filter(v => v.verified).map((v) => (
+                                  <option key={v.id} value={v.id}>{v.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2.5">
+                            <label className="text-[11px] font-semibold text-gray-700 block">Fasilitas & Layanan Termasuk</label>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {[
+                                "Simaksi Resmi (Tiket Gunung)",
+                                "Jasa Pemandu (Guide APIGI)",
+                                "Tenda & Sleeping Bag",
+                                "Logistik Makan 3x Sehari",
+                                "Transport PP Bandara/Stasiun",
+                                "Porter Porter Tim"
+                              ].map((serv) => {
+                                const isChecked = pkgServices.includes(serv);
+                                return (
+                                  <label key={serv} className="flex items-center gap-1.5 text-xs text-gray-650 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      className="accent-emerald-600 size-3.5"
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setPkgServices([...pkgServices, serv]);
+                                        } else {
+                                          setPkgServices(pkgServices.filter(s => s !== serv));
+                                        }
+                                      }}
+                                    />
+                                    <span>{serv}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-gray-700">Deskripsi Iklan Paket</label>
+                            <textarea
+                              placeholder="Deskripsikan kelebihan dan detail penawaran paket Anda..."
+                              className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-emerald-500 h-16 resize-none text-gray-750"
+                              value={pkgDesc}
+                              onChange={(e) => setPkgDesc(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-gray-700">Rundown Perjalanan (Satu baris untuk setiap hari/pos)</label>
+                            <textarea
+                              placeholder="Contoh:&#10;Hari 1: Penjemputan di stasiun & trekking ke pos 2&#10;Hari 2: Summit attack puncak & kemping di danau&#10;Hari 3: Kembali ke basecamp & pengantaran pulang"
+                              className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-emerald-500 h-24 text-gray-750"
+                              value={pkgRundown}
+                              onChange={(e) => setPkgRundown(e.target.value)}
+                            />
+                          </div>
+                          
+                          <div className="flex gap-2 justify-end pt-1">
+                            <button type="button" className="px-3 py-1.5 text-xs border border-gray-250 bg-white hover:bg-gray-50 rounded-lg" onClick={() => setPkgFormOpen(false)}>Batal</button>
+                            <Button type="submit" size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs text-white">Publish Paket Ads</Button>
+                          </div>
+                        </form>
+                      )}
+
+                      {/* Display Guide's current packages */}
+                      {tripPackages.filter(p => p.guideId === currentUser.id).length === 0 ? (
+                        <div className="text-center py-12 text-gray-400 text-sm">Belum ada paket pendakian yang Anda publish.</div>
+                      ) : (
+                        tripPackages.filter(p => p.guideId === currentUser.id).map((p) => (
+                          <div key={p.id} className="p-4 rounded-xl border border-gray-150 bg-white flex justify-between items-center gap-4 hover:shadow-sm transition-all">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <h4 className="font-bold text-gray-800">{p.title}</h4>
+                                <Badge variant="outline" className="text-[9px] uppercase">{p.duration}</Badge>
+                              </div>
+                              <p className="text-xs text-gray-500">Gunung Target: **{p.targetMountain}**</p>
+                              {p.vendorName && <p className="text-xs text-emerald-800">⛺ Mitra Vendor: **{p.vendorName}**</p>}
+                              <p className="text-xs text-emerald-700 font-bold mt-1">Rp {p.price.toLocaleString("id-ID")} / Orang &middot; Promo s/d: {p.promoDeadline}</p>
+                            </div>
+                            
+                            <div className="flex gap-2 shrink-0">
+                              <Button variant="outline" size="sm" className="text-xs border-red-200 text-red-600 hover:bg-red-50" onClick={() => {
+                                setTripPackages(prev => prev.filter(pk => pk.id !== p.id));
+                                toast.success("Paket pendakian dihapus!");
+                              }}>
+                                Hapus
+                              </Button>
                             </div>
                           </div>
                         ))
@@ -1118,6 +1459,53 @@ export function DashboardPage() {
                             </div>
                           );
                         })
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* 3. Tab Kolaborasi Guide */}
+                {activeTab === "collaborations" && (
+                  <Card className="border border-gray-150 shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Kolaborasi Paket Pendakian (Guide Ads)</CardTitle>
+                      <CardDescription className="text-xs">
+                        Lihat iklan paket trip pendakian aktif hasil kolaborasi toko rental Anda dengan pemandu (guide) profesional.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {tripPackages.filter(p => p.vendorId === currentUser.id).length === 0 ? (
+                        <div className="text-center py-12 text-gray-400 text-sm">
+                          Belum ada kolaborasi paket pendakian aktif dengan Tour Guide saat ini.
+                        </div>
+                      ) : (
+                        tripPackages.filter(p => p.vendorId === currentUser.id).map((p) => (
+                          <div key={p.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-md transition-all">
+                            <div className="flex gap-3 items-start">
+                              <img src={p.image} className="w-16 h-16 object-cover rounded-lg shrink-0 border border-gray-100" />
+                              <div>
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <h4 className="font-bold text-gray-800 text-sm">{p.title}</h4>
+                                  <Badge className="bg-emerald-50 text-emerald-800 text-[9px] border-emerald-200 border">{p.duration}</Badge>
+                                </div>
+                                <p className="text-xs text-gray-500">Pemandu: **{p.guideName}** &middot; Gunung: **{p.targetMountain}**</p>
+                                <p className="text-xs text-gray-500 mt-0.5">Tenggat Booking: {p.promoDeadline}</p>
+                                <p className="text-xs text-emerald-700 font-bold mt-1">Total Paket: Rp {p.price.toLocaleString("id-ID")}</p>
+                              </div>
+                            </div>
+                            <div className="shrink-0 flex flex-col items-end gap-1.5 w-full sm:w-auto border-t sm:border-t-0 pt-2.5 sm:pt-0">
+                              <Badge className="bg-emerald-600 text-white text-[10px]">Kolaborasi Aktif</Badge>
+                              <Button variant="outline" size="sm" className="text-xs w-full sm:w-auto" onClick={() => {
+                                setSelectedChatPartnerId(p.guideId);
+                                setSelectedChatPartnerName(p.guideName);
+                                setActiveTab("chat");
+                                toast.info(`Membuka obrolan dengan ${p.guideName}`);
+                              }}>
+                                Hubungi Guide
+                              </Button>
+                            </div>
+                          </div>
+                        ))
                       )}
                     </CardContent>
                   </Card>
@@ -1397,6 +1785,54 @@ export function DashboardPage() {
                             </ResponsiveContainer>
                           </div>
                         </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* 5. Tab Pengelolaan Kontak Tiket Gunung */}
+                {activeTab === "manage_mountains" && (
+                  <Card className="border border-gray-150 shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Pengelolaan Kontak Tiket Resmi Gunung</CardTitle>
+                      <CardDescription className="text-xs">
+                        Atur harga tiket masuk (Simaksi) dan link booking/sosial media pengelola resmi untuk masing-masing gunung.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left text-gray-500">
+                          <thead className="text-[10px] text-gray-400 uppercase bg-gray-50/50">
+                            <tr>
+                              <th scope="col" className="px-4 py-3">Gunung</th>
+                              <th scope="col" className="px-4 py-3">Status</th>
+                              <th scope="col" className="px-4 py-3">Harga Tiket</th>
+                              <th scope="col" className="px-4 py-3">Metode Kontak</th>
+                              <th scope="col" className="px-4 py-3">Nilai Kontak</th>
+                              <th scope="col" className="px-4 py-3 text-right">Aksi</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {mountains.map((m) => (
+                              <tr key={m.name} className="hover:bg-gray-50/50 transition-colors">
+                                <td className="px-4 py-3 font-bold text-gray-800">{m.name}</td>
+                                <td className="px-4 py-3">
+                                  <Badge className={m.status === "Buka" ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}>
+                                    {m.status}
+                                  </Badge>
+                                </td>
+                                <td className="px-4 py-3 font-semibold text-gray-700">Rp {m.ticketPrice.toLocaleString("id-ID")}</td>
+                                <td className="px-4 py-3">{m.adminContactMethod}</td>
+                                <td className="px-4 py-3 font-mono text-gray-600 max-w-[150px] truncate">{m.adminContactValue}</td>
+                                <td className="px-4 py-3 text-right">
+                                  <Button size="xs" variant="outline" className="text-emerald-700 border-emerald-200 hover:bg-emerald-50 h-7" onClick={() => handleOpenMountainEdit(m)}>
+                                    <Edit2 className="size-3 mr-1" /> Edit
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </CardContent>
                   </Card>
@@ -1720,6 +2156,76 @@ export function DashboardPage() {
               <div className="flex gap-2.5 pt-2">
                 <Button type="button" variant="outline" className="flex-1 text-xs" onClick={() => setVerFormOpen(false)}>Batal</Button>
                 <Button type="submit" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Ajukan Berkas</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Super Admin Mountain Edit Modal */}
+      {editingMountain && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200">
+            <button onClick={() => setEditingMountain(null)} className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400">
+              <X className="size-5" />
+            </button>
+            <div className="flex items-center gap-2 text-emerald-800 font-bold mb-3">
+              <MountainIcon className="size-6 text-emerald-600 shrink-0" />
+              <h3 className="text-lg">Edit Kontak Tiket Resmi</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+              Sesuaikan info tiket resmi untuk **{editingMountain.name}**. Perubahan ini akan langsung diperbarui pada halaman informasi gunung bagi Pendaki.
+            </p>
+            <form onSubmit={handleSaveMountain} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Status Gunung</label>
+                <select
+                  className="w-full px-3 py-2 text-xs border border-gray-200 bg-gray-50 rounded-lg focus:outline-emerald-500 h-9"
+                  value={mountainForm.status}
+                  onChange={(e) => setMountainForm({ ...mountainForm, status: e.target.value as "Buka" | "Tutup" })}
+                >
+                  <option value="Buka">Buka (Terbuka untuk Booking)</option>
+                  <option value="Tutup">Tutup (Ditutup Sementara)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Harga Tiket Masuk (Rp)</label>
+                <Input
+                  type="number"
+                  className="text-xs bg-gray-50"
+                  value={mountainForm.ticketPrice}
+                  onChange={(e) => setMountainForm({ ...mountainForm, ticketPrice: e.target.value })}
+                  placeholder="Contoh: 35000"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Metode Kontak Tiket</label>
+                <select
+                  className="w-full px-3 py-2 text-xs border border-gray-200 bg-gray-50 rounded-lg focus:outline-emerald-500 h-9"
+                  value={mountainForm.adminContactMethod}
+                  onChange={(e) => setMountainForm({ ...mountainForm, adminContactMethod: e.target.value as any })}
+                >
+                  <option value="Instagram">Instagram (DM)</option>
+                  <option value="Website Resmi">Website Resmi (Tautan)</option>
+                  <option value="WhatsApp">WhatsApp (Chat)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Nilai Kontak / Tautan</label>
+                <Input
+                  className="text-xs bg-gray-50"
+                  value={mountainForm.adminContactValue}
+                  onChange={(e) => setMountainForm({ ...mountainForm, adminContactValue: e.target.value })}
+                  placeholder="Contoh: @semeru_official atau https://bookingsemeru.id"
+                />
+              </div>
+              
+              <div className="flex gap-2.5 pt-2">
+                <Button type="button" variant="outline" className="flex-1 text-xs" onClick={() => setEditingMountain(null)}>Batal</Button>
+                <Button type="submit" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Simpan Perubahan</Button>
               </div>
             </form>
           </div>
