@@ -24,9 +24,8 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 const ITEMS_PER_PAGE = 4;
-
 export function GuidePage() {
-  const { guides, mountains, currentUser, addBooking, createNegotiation } = useApp();
+  const { guides, mountains, currentUser, addBooking, createNegotiation, climberDeposit } = useApp();
   const navigate = useNavigate();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -40,6 +39,7 @@ export function GuidePage() {
   const [targetMountain, setTargetMountain] = useState("");
   const [proposedPrice, setProposedPrice] = useState("");
   const [negoNotes, setNegoNotes] = useState("");
+  const [climbersCount, setClimbersCount] = useState(1);
 
   const filterOptions = ["Semua", "Rating Tertinggi", "Harga Terendah", "Paling Berpengalaman", "Jawa Timur", "Jawa Tengah"];
 
@@ -96,6 +96,7 @@ export function GuidePage() {
     setTargetMountain(openM[0].name);
     setProposedPrice(guide.price.toString());
     setNegoNotes("");
+    setClimbersCount(1);
     setBookingModalOpen(true);
   };
 
@@ -113,7 +114,15 @@ export function GuidePage() {
       return;
     }
 
-    const priceProposed = parseInt(proposedPrice) || bookingGuide.price;
+    if (currentUser && currentUser.role === "pendaki" && (climberDeposit || 0) < 100000) {
+      toast.error("Saldo deposit Anda kurang dari Rp 100.000. Silakan lakukan Top Up di Dashboard terlebih dahulu.");
+      return;
+    }
+
+    const basePriceProposed = parseInt(proposedPrice) || bookingGuide.price;
+    const discountPercent = bookingGuide.groupDiscountEnabled ? (climbersCount >= 5 ? 30 : climbersCount >= 4 ? 20 : climbersCount >= 2 ? 10 : 0) : 0;
+    const finalPricePerPerson = Math.round(basePriceProposed * (1 - discountPercent / 100));
+    const finalTotalPrice = finalPricePerPerson * climbersCount;
 
     // 1. Create Booking in Pending status
     const bookingId = addBooking({
@@ -123,8 +132,9 @@ export function GuidePage() {
       pendakiId: currentUser?.id || "guest",
       pendakiName: currentUser?.name || "Pendaki Demo",
       bookingDate,
-      price: priceProposed,
-      bookingType: "mandiri"
+      price: finalTotalPrice,
+      bookingType: "mandiri",
+      climbersCount: climbersCount
     });
 
     // 2. If price is different, create negotiation entry
@@ -518,7 +528,21 @@ export function GuidePage() {
               )}
               
               <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1">Harga Awal Guide (Per Hari)</label>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Jumlah Anggota Rombongan</label>
+                <div className="relative">
+                  <Users className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400 pointer-events-none" />
+                  <Input 
+                    type="number" 
+                    min={1} 
+                    className="pl-9 text-xs bg-white text-gray-800" 
+                    value={climbersCount}
+                    onChange={(e) => setClimbersCount(Math.max(1, parseInt(e.target.value) || 1))}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Harga Awal Guide (Per Orang / Hari)</label>
                 <div className="p-2.5 bg-gray-50 border border-gray-150 rounded-lg text-xs font-bold text-gray-750 flex justify-between">
                   <span>Tarif Normal:</span>
                   <span>Rp {bookingGuide.price.toLocaleString("id-ID")}</span>
@@ -526,7 +550,7 @@ export function GuidePage() {
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1">Harga Penawaran Anda (Nego)</label>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Harga Penawaran Anda Per Orang (Nego)</label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-emerald-600 font-bold" />
                   <Input 
@@ -539,6 +563,39 @@ export function GuidePage() {
                 </div>
                 <p className="text-[10px] text-gray-400 mt-1">Isi sama dengan tarif normal jika tidak ingin melakukan negosiasi.</p>
               </div>
+
+              {/* Discount and Deposit Calculation Breakdown */}
+              {(() => {
+                const base = parseInt(proposedPrice) || bookingGuide.price;
+                const isDiscEnabled = bookingGuide.groupDiscountEnabled;
+                const disc = isDiscEnabled ? (climbersCount >= 5 ? 30 : climbersCount >= 4 ? 20 : climbersCount >= 2 ? 10 : 0) : 0;
+                const ratePerPerson = Math.round(base * (1 - disc / 100));
+                const subTotal = ratePerPerson * climbersCount;
+                const deposit = 100000;
+
+                return (
+                  <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 text-xs space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Subtotal Sewa ({climbersCount} Orang):</span>
+                      <span className="font-bold text-gray-700">Rp {subTotal.toLocaleString("id-ID")}</span>
+                    </div>
+                    {isDiscEnabled && disc > 0 && (
+                      <div className="flex justify-between items-center text-emerald-700 font-semibold text-[11px]">
+                        <span>Diskon Rombongan ({disc}%):</span>
+                        <span>- Rp {Math.round(base * disc / 100 * climbersCount).toLocaleString("id-ID")}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center text-blue-700">
+                      <span>Deposit Jaminan (Kembali Penuh):</span>
+                      <span className="font-bold">Rp {deposit.toLocaleString("id-ID")}</span>
+                    </div>
+                    <div className="border-t border-emerald-200/50 pt-2 flex justify-between items-center text-sm font-extrabold text-emerald-800">
+                      <span>Total Bayar (Simulasi):</span>
+                      <span>Rp {(subTotal + deposit).toLocaleString("id-ID")}</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="text-xs font-semibold text-gray-700 block mb-1">Catatan / Pesan Negosiasi</label>

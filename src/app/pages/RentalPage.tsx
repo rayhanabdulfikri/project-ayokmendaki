@@ -27,7 +27,7 @@ import { toast } from "sonner";
 const ITEMS_PER_PAGE = 3;
 
 export function RentalPage() {
-  const { equipment, vendors, mountains, currentUser, addRentalOrder, createNegotiation } = useApp();
+  const { equipment, vendors, mountains, currentUser, addRentalOrder, createNegotiation, climberDeposit } = useApp();
   const navigate = useNavigate();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -132,10 +132,21 @@ export function RentalPage() {
 
     if (!selectedItem) return;
 
+    if (currentUser && currentUser.role === "pendaki" && (climberDeposit || 0) < 100000) {
+      toast.error("Saldo deposit Anda kurang dari Rp 100.000. Silakan lakukan Top Up di Dashboard terlebih dahulu.");
+      return;
+    }
+
     const days = getDaysDiff(startDate, endDate);
-    const originalPriceTotal = selectedItem.price * quantity * days;
+    const isDiscEnabled = selectedItem.groupDiscountEnabled;
+    const disc = isDiscEnabled ? (quantity >= 5 ? 30 : quantity >= 4 ? 20 : quantity >= 2 ? 10 : 0) : 0;
+    
     const priceProposedPerDay = parseInt(proposedPrice) || selectedItem.price;
-    const proposedPriceTotal = priceProposedPerDay * quantity * days;
+    const ratePerUnitPerDay = Math.round(priceProposedPerDay * (1 - disc / 100));
+    const proposedPriceTotal = ratePerUnitPerDay * quantity * days;
+    
+    const originalRatePerUnitPerDay = Math.round(selectedItem.price * (1 - disc / 100));
+    const originalPriceTotal = originalRatePerUnitPerDay * quantity * days;
 
     // 1. Create Rental Order in Pending status
     const orderId = addRentalOrder({
@@ -511,18 +522,46 @@ export function RentalPage() {
                 />
               </div>
 
-              <div className="border-t border-gray-150 pt-3 flex justify-between items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
-                <div>
-                  <p className="text-[10px] text-gray-400">Total Durasi & Kuantitas</p>
-                  <p className="text-xs font-bold text-gray-700">{quantity} Unit &times; {startDate && endDate ? getDaysDiff(startDate, endDate) : 1} Hari</p>
+              {selectedItem.damageTerms && (
+                <div className="text-[10px] text-red-700 bg-red-50 p-2.5 rounded-lg border border-red-100/50 leading-tight">
+                  ⚠️ <b>Kebijakan Kerusakan/Kehilangan Vendor:</b>
+                  <p className="mt-0.5 italic">{selectedItem.damageTerms}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs text-gray-500 font-semibold">Estimasi Total Nego</p>
-                  <p className="text-base font-bold text-emerald-600">
-                    Rp {((parseInt(proposedPrice) || selectedItem.price) * quantity * (startDate && endDate ? getDaysDiff(startDate, endDate) : 1)).toLocaleString("id-ID")}
-                  </p>
-                </div>
-              </div>
+              )}
+
+              {(() => {
+                const basePricePerDay = parseInt(proposedPrice) || selectedItem.price;
+                const days = startDate && endDate ? getDaysDiff(startDate, endDate) : 1;
+                const isDiscEnabled = selectedItem.groupDiscountEnabled;
+                const disc = isDiscEnabled ? (quantity >= 5 ? 30 : quantity >= 4 ? 20 : quantity >= 2 ? 10 : 0) : 0;
+                
+                const ratePerUnitPerDay = Math.round(basePricePerDay * (1 - disc / 100));
+                const subTotal = ratePerUnitPerDay * quantity * days;
+                const deposit = 100000;
+
+                return (
+                  <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 text-xs space-y-2">
+                    <div className="flex justify-between items-center text-gray-500">
+                      <span>Subtotal Sewa ({quantity} Unit &times; {days} Hari):</span>
+                      <span className="font-bold text-gray-700">Rp {subTotal.toLocaleString("id-ID")}</span>
+                    </div>
+                    {isDiscEnabled && disc > 0 && (
+                      <div className="flex justify-between items-center text-emerald-700 font-semibold text-[11px]">
+                        <span>Diskon Rombongan ({disc}%):</span>
+                        <span>- Rp {Math.round(basePricePerDay * disc / 100 * quantity * days).toLocaleString("id-ID")}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center text-blue-700">
+                      <span>Deposit Jaminan (Kembali Penuh):</span>
+                      <span className="font-bold">Rp {deposit.toLocaleString("id-ID")}</span>
+                    </div>
+                    <div className="border-t border-emerald-200/50 pt-2 flex justify-between items-center text-sm font-extrabold text-emerald-800">
+                      <span>Total Bayar (Simulasi):</span>
+                      <span>Rp {(subTotal + deposit).toLocaleString("id-ID")}</span>
+                    </div>
+                  </div>
+                );
+              })()}
               
               <div className="flex gap-2.5 pt-2">
                 <Button variant="outline" className="flex-1 text-xs" onClick={() => setRentalModalOpen(false)}>Batal</Button>

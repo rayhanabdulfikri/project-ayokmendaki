@@ -29,7 +29,8 @@ import {
   UserCheck,
   TrendingUp,
   Award,
-  Package
+  Package,
+  Wallet
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router";
@@ -79,7 +80,15 @@ export function DashboardPage() {
     resolveDispute,
     tripPackages,
     setTripPackages,
-    addTripPackage
+    addTripPackage,
+    toggleGroupDiscount,
+    confirmEscrow,
+    reportDamage,
+    resolveEscrowWithDeposit,
+    climberDeposit,
+    depositTransactions,
+    topUpDeposit,
+    withdrawDeposit
   } = useApp();
 
   const location = useLocation();
@@ -117,6 +126,10 @@ export function DashboardPage() {
   const [disputeItem, setDisputeItem] = useState<{ id: string; type: "booking" | "rental" } | null>(null);
   const [disputeNotesInput, setDisputeNotesInput] = useState("");
 
+  const [topUpModalOpen, setTopUpModalOpen] = useState(false);
+  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
+  const [depositAmountInput, setDepositAmountInput] = useState("");
+
   const [counterModalOpen, setCounterModalOpen] = useState(false);
   const [counterNego, setCounterNego] = useState<Negotiation | null>(null);
   const [counterPriceInput, setCounterPriceInput] = useState("");
@@ -129,8 +142,17 @@ export function DashboardPage() {
     description: "",
     price: "",
     available: "",
-    category: "tent" as "tent" | "carrier" | "other"
+    category: "tent" as "tent" | "carrier" | "other",
+    groupDiscountEnabled: false,
+    damageTerms: ""
   });
+
+  // Fine / Damage Claim Modal states
+  const [fineModalOpen, setFineModalOpen] = useState(false);
+  const [fineTargetId, setFineTargetId] = useState("");
+  const [fineTargetType, setFineTargetType] = useState<"booking" | "rental">("rental");
+  const [fineAmountInput, setFineAmountInput] = useState("");
+  const [fineNotesInput, setFineNotesInput] = useState("");
 
   // Chat State
   const [selectedChatPartnerId, setSelectedChatPartnerId] = useState("");
@@ -335,7 +357,9 @@ export function DashboardPage() {
         description: item.description,
         price: item.price.toString(),
         available: item.available.toString(),
-        category: item.category
+        category: item.category,
+        groupDiscountEnabled: item.groupDiscountEnabled || false,
+        damageTerms: item.damageTerms || ""
       });
     } else {
       setEditingItem(null);
@@ -344,7 +368,9 @@ export function DashboardPage() {
         description: "",
         price: "",
         available: "",
-        category: "tent"
+        category: "tent",
+        groupDiscountEnabled: false,
+        damageTerms: ""
       });
     }
     setItemFormOpen(true);
@@ -352,7 +378,7 @@ export function DashboardPage() {
 
   const handleSaveCatalogItem = (e: React.FormEvent) => {
     e.preventDefault();
-    const { name, description, price, available, category } = catalogForm;
+    const { name, description, price, available, category, groupDiscountEnabled, damageTerms } = catalogForm;
 
     if (!name || !price || !available) {
       toast.error("Wajib mengisi nama, tarif, dan jumlah stok.");
@@ -365,7 +391,9 @@ export function DashboardPage() {
         description,
         price: parseInt(price),
         available: parseInt(available),
-        category
+        category,
+        groupDiscountEnabled,
+        damageTerms
       });
       toast.success("Barang katalog berhasil diperbarui!");
     } else {
@@ -376,12 +404,61 @@ export function DashboardPage() {
         available: parseInt(available),
         category,
         vendorId: currentUser?.id || "vendor1",
-        vendorName: currentUser?.name || "Toko Outdoor"
+        vendorName: currentUser?.name || "Toko Outdoor",
+        groupDiscountEnabled,
+        damageTerms
       });
       toast.success("Barang camping baru ditambahkan ke katalog!");
     }
 
     setItemFormOpen(false);
+  };
+
+  const handleOpenFineModal = (id: string, type: "booking" | "rental") => {
+    setFineTargetId(id);
+    setFineTargetType(type);
+    setFineAmountInput("");
+    setFineNotesInput("");
+    setFineModalOpen(true);
+  };
+
+  const handleSaveFine = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!fineTargetId || !fineAmountInput.trim()) return;
+
+    reportDamage(fineTargetType, fineTargetId, parseInt(fineAmountInput) || 0, fineNotesInput);
+    setFineModalOpen(false);
+    toast.warning("Klaim denda kerusakan berhasil dikirim ke Super Admin!");
+  };
+
+  const handleTopUpSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseInt(depositAmountInput);
+    if (!amount || amount <= 0) {
+      toast.error("Masukkan nominal yang valid!");
+      return;
+    }
+    topUpDeposit(amount);
+    setTopUpModalOpen(false);
+    setDepositAmountInput("");
+    toast.success(`Berhasil melakukan top up deposit sebesar Rp ${amount.toLocaleString("id-ID")}!`);
+  };
+
+  const handleWithdrawSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseInt(depositAmountInput);
+    if (!amount || amount <= 0) {
+      toast.error("Masukkan nominal yang valid!");
+      return;
+    }
+    if (amount > climberDeposit) {
+      toast.error("Saldo deposit tidak mencukupi!");
+      return;
+    }
+    withdrawDeposit(amount);
+    setWithdrawModalOpen(false);
+    setDepositAmountInput("");
+    toast.success(`Berhasil menarik deposit sebesar Rp ${amount.toLocaleString("id-ID")}!`);
   };
 
   // Submit Partnership Verification Document
@@ -539,6 +616,7 @@ export function DashboardPage() {
                   { id: "bookings", label: "Booking Gunung", icon: <MountainIcon className="size-4" /> },
                   { id: "rentals", label: "Penyewaan Alat", icon: <Package className="size-4" /> },
                   { id: "negos", label: "Negosiasi Harga", icon: <DollarSign className="size-4" /> },
+                  { id: "deposit_wallet", label: "Deposit & Dompet", icon: <Wallet className="size-4" /> },
                   { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> }
                 ].map(t => (
                   <button
@@ -746,10 +824,48 @@ export function DashboardPage() {
                               </div>
                             )}
 
+                            {/* Deposit Jaminan Status */}
+                            {b.depositAmount && (
+                              <div className="mt-3 flex items-center justify-between text-xs p-2.5 rounded-lg border bg-gray-50/50">
+                                <span className="text-gray-500 font-semibold">Deposit Jaminan (Held in Escrow):</span>
+                                <div className="flex items-center gap-1.5 font-bold">
+                                  <span>Rp {b.depositAmount.toLocaleString("id-ID")}</span>
+                                  {b.depositStatus === "held" && <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[9px] py-0">Ditahan</Badge>}
+                                  {b.depositStatus === "refunded" && <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[9px] py-0">Di-refund Penuh</Badge>}
+                                  {b.depositStatus === "partially_refunded" && <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[9px] py-0">Di-refund Sebagian</Badge>}
+                                  {b.depositStatus === "forfeited" && <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-[9px] py-0">Hangus (Denda)</Badge>}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Fine notification */}
+                            {b.fineAmount && b.fineAmount > 0 && (
+                              <div className="mt-3 p-3 bg-red-50 rounded-xl border border-red-200/50 max-w-lg text-xs text-red-800 space-y-1">
+                                <p className="font-bold flex items-center gap-1">⚠️ Pelanggaran / Denda Dilaporkan Mitra:</p>
+                                <p>Nominal: **Rp {b.fineAmount.toLocaleString("id-ID")}**</p>
+                                <p className="italic">Alasan: "{b.fineNotes}"</p>
+                                <p className="text-[10px] text-gray-500 mt-1 font-normal leading-tight">Denda ini akan dikonfirmasi oleh Super Admin dan otomatis dipotong dari dana deposit jaminan Anda.</p>
+                              </div>
+                            )}
+
                             <div className="flex gap-2 w-full justify-end border-t border-gray-100 pt-3 mt-3">
                                 {b.status === "Menunggu Pembayaran" && (
                                   <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => handleOpenPayment(b.id, "booking", b.price)}>
                                     <CreditCard className="size-3.5 mr-1" /> Bayar Simulasi
+                                  </Button>
+                                )}
+                                {["Telah Dibayar", "Start", "Muncak"].includes(b.status) && (
+                                  <Button 
+                                    size="sm" 
+                                    variant={b.pendakiConfirmed ? "outline" : "default"} 
+                                    className={`text-xs px-4 ${b.pendakiConfirmed ? "text-gray-400 border-gray-200 bg-white" : "bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"}`}
+                                    onClick={() => {
+                                      confirmEscrow("booking", b.id, "pendaki");
+                                      toast.success("Konfirmasi penyelesaian trip Anda terkirim. Menunggu persetujuan Mitra & Admin.");
+                                    }}
+                                    disabled={b.pendakiConfirmed}
+                                  >
+                                    {b.pendakiConfirmed ? "✓ Trip Dikonfirmasi Selesai" : "Konfirmasikan Trip Selesai"}
                                   </Button>
                                 )}
                                 {b.status === "Telah Dibayar" && (
@@ -782,20 +898,62 @@ export function DashboardPage() {
                         <div className="text-center py-12 text-gray-400 text-sm">Belum ada penyewaan.</div>
                       ) : (
                         rentalOrders.filter(r => r.pendakiId === currentUser.id).map((r) => (
-                          <div key={r.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-sm transition-shadow">
-                            <div>
-                              <h4 className="font-bold text-gray-800">{r.itemName}</h4>
-                              <p className="text-xs text-gray-500 mt-1">Vendor: **{r.vendorName}** &nbsp;•&nbsp; Jumlah: **{r.qty} Unit**</p>
-                              <p className="text-xs text-gray-500 mt-0.5">Tanggal Sewa: **{r.startDate}** s/d **{r.endDate}**</p>
-                              <p className="text-xs text-emerald-700 font-bold mt-1">Total Biaya: Rp {r.totalPrice.toLocaleString("id-ID")}</p>
+                          <div key={r.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col hover:shadow-md transition-shadow">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                              <div>
+                                <h4 className="font-bold text-gray-800">{r.itemName}</h4>
+                                <p className="text-xs text-gray-500 mt-1">Vendor: **{r.vendorName}** &nbsp;•&nbsp; Jumlah: **{r.qty} Unit**</p>
+                                <p className="text-xs text-gray-500 mt-0.5">Tanggal Sewa: **{r.startDate}** s/d **{r.endDate}**</p>
+                                <p className="text-xs text-emerald-700 font-bold mt-1">Total Biaya: Rp {r.totalPrice.toLocaleString("id-ID")}</p>
+                              </div>
+                              
+                              <div className="flex flex-col items-end gap-2 w-full md:w-auto shrink-0 border-t md:border-t-0 pt-2.5 md:pt-0">
+                                <div className="mb-1">{getStatusBadge(r.status)}</div>
+                              </div>
                             </div>
-                            
-                            <div className="flex flex-col items-end gap-2 w-full md:w-auto shrink-0 border-t md:border-t-0 pt-2.5 md:pt-0">
-                              <div className="mb-1">{getStatusBadge(r.status)}</div>
-                              <div className="flex gap-2 w-full md:w-auto justify-end">
+
+                            {/* Deposit Jaminan Status */}
+                            {r.depositAmount && (
+                              <div className="mt-3 flex items-center justify-between text-xs p-2.5 rounded-lg border bg-gray-50/50">
+                                <span className="text-gray-500 font-semibold">Deposit Jaminan (Held in Escrow):</span>
+                                <div className="flex items-center gap-1.5 font-bold">
+                                  <span>Rp {r.depositAmount.toLocaleString("id-ID")}</span>
+                                  {r.depositStatus === "held" && <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[9px] py-0">Ditahan</Badge>}
+                                  {r.depositStatus === "refunded" && <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-[9px] py-0">Di-refund Penuh</Badge>}
+                                  {r.depositStatus === "partially_refunded" && <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[9px] py-0">Di-refund Sebagian</Badge>}
+                                  {r.depositStatus === "forfeited" && <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-[9px] py-0">Hangus (Denda)</Badge>}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Fine notification */}
+                            {r.fineAmount && r.fineAmount > 0 && (
+                              <div className="mt-3 p-3 bg-red-50 rounded-xl border border-red-200/50 max-w-lg text-xs text-red-800 space-y-1">
+                                <p className="font-bold flex items-center gap-1">⚠️ Pelanggaran / Denda Dilaporkan Vendor:</p>
+                                <p>Nominal: **Rp {r.fineAmount.toLocaleString("id-ID")}**</p>
+                                <p className="italic">Alasan: "{r.fineNotes}"</p>
+                                <p className="text-[10px] text-gray-500 mt-1 font-normal leading-tight">Denda ini akan dikonfirmasi oleh Super Admin dan otomatis dipotong dari dana deposit jaminan Anda.</p>
+                              </div>
+                            )}
+
+                            <div className="flex gap-2 w-full justify-end border-t border-gray-100 pt-3 mt-3">
                                 {r.status === "Menunggu Pembayaran" && (
-                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => handleOpenPayment(r.id, "rental", r.totalPrice)}>
+                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-semibold" onClick={() => handleOpenPayment(r.id, "rental", r.totalPrice)}>
                                     <CreditCard className="size-3.5 mr-1" /> Bayar Simulasi
+                                  </Button>
+                                )}
+                                {["Telah Dibayar", "Siap Diambil", "Sedang Disewa"].includes(r.status) && (
+                                  <Button 
+                                    size="sm" 
+                                    variant={r.pendakiConfirmed ? "outline" : "default"} 
+                                    className={`text-xs px-4 ${r.pendakiConfirmed ? "text-gray-400 border-gray-200 bg-white" : "bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"}`}
+                                    onClick={() => {
+                                      confirmEscrow("rental", r.id, "pendaki");
+                                      toast.success("Konfirmasi pengembalian alat sewaan Anda terkirim. Menunggu persetujuan Vendor & Admin.");
+                                    }}
+                                    disabled={r.pendakiConfirmed}
+                                  >
+                                    {r.pendakiConfirmed ? "✓ Alat Dikonfirmasi Kembali" : "Konfirmasikan Alat Dikembalikan"}
                                   </Button>
                                 )}
                                 {r.status === "Telah Dibayar" && (
@@ -809,7 +967,6 @@ export function DashboardPage() {
                                   </Button>
                                 )}
                               </div>
-                            </div>
                           </div>
                         ))
                       )}
@@ -874,6 +1031,128 @@ export function DashboardPage() {
                     </CardContent>
                   </Card>
                 )}
+
+                {activeTab === "deposit_wallet" && (
+                  <Card className="border border-gray-150 shadow-sm overflow-hidden font-sans">
+                    <CardHeader className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border-b border-gray-100 py-5">
+                      <div className="flex justify-between items-center flex-wrap gap-3">
+                        <div>
+                          <CardTitle className="text-lg font-bold text-gray-800">Dompet & Saldo Deposit Jaminan</CardTitle>
+                          <CardDescription className="text-xs text-gray-500">
+                            Kelola saldo jaminan pendakian Anda untuk otomatisasi denda pelanggaran atau klaim kerusakan.
+                          </CardDescription>
+                        </div>
+                        <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono px-3 py-1 font-extrabold text-sm shadow-sm flex items-center gap-1.5 rounded-xl">
+                          <Wallet className="size-4 shrink-0" />
+                          Rp {climberDeposit.toLocaleString("id-ID")}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="p-6 space-y-6">
+                      {/* Action buttons with wallet details */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 rounded-2xl border border-gray-100 bg-white shadow-xs space-y-3">
+                          <h4 className="text-sm font-bold text-gray-700">Manajemen Saldo Deposit</h4>
+                          <p className="text-xs text-gray-400 leading-relaxed font-normal">
+                            Saldo deposit digunakan untuk menjamin setiap pesanan booking guide atau rental. Pastikan saldo Anda selalu mencukupi (minimal Rp 100.000) sebelum melakukan pemesanan.
+                          </p>
+                          <div className="flex gap-2 pt-1.5">
+                            <Button
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs flex-1 font-semibold rounded-xl h-9"
+                              onClick={() => setTopUpModalOpen(true)}
+                            >
+                              Top Up Saldo
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-xs flex-1 border-gray-200 text-gray-700 hover:bg-gray-50 font-semibold rounded-xl h-9"
+                              onClick={() => setWithdrawModalOpen(true)}
+                            >
+                              Tarik Dana
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="p-4 rounded-2xl border border-red-100 bg-red-50/10 space-y-2.5">
+                          <h4 className="text-sm font-bold text-red-800 flex items-center gap-1">
+                            <AlertTriangle className="size-4 text-red-655 shrink-0" />
+                            Kebijakan Pelanggaran & Denda
+                          </h4>
+                          <ul className="text-[11px] text-gray-600 list-disc list-inside space-y-1 font-normal leading-relaxed">
+                            <li>Setiap transaksi menahan deposit jaminan sebesar <b>Rp 100.000</b>.</li>
+                            <li>Jika melanggar aturan gunung (sampah/flora) atau merusak alat, denda akan dilaporkan Mitra.</li>
+                            <li>Setelah <b>Super Admin menyetujui denda</b>, denda akan otomatis memotong deposit jaminan Anda.</li>
+                            <li>Sisa deposit (jika ada) otomatis dikembalikan penuh ke Saldo Dompet ini.</li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      {/* Transaction log */}
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-bold text-gray-800">Riwayat Mutasi Saldo & Pelanggaran</h4>
+                        <div className="border border-gray-150 rounded-2xl overflow-hidden bg-white">
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse text-left text-xs">
+                              <thead>
+                                <tr className="bg-gray-50/70 text-gray-500 font-bold border-b border-gray-100">
+                                  <th className="p-3 font-semibold">Tanggal / Waktu</th>
+                                  <th className="p-3 font-semibold">Tipe Mutasi</th>
+                                  <th className="p-3 font-semibold">Deskripsi / Detail Pelanggaran</th>
+                                  <th className="p-3 text-right font-semibold">Nominal</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {depositTransactions.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={4} className="p-8 text-center text-gray-400 italic font-normal">
+                                      Belum ada riwayat transaksi deposit.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  depositTransactions.map((tx) => (
+                                    <tr key={tx.id} className="hover:bg-gray-50/50 transition-colors">
+                                      <td className="p-3 text-gray-400 whitespace-nowrap font-normal">{tx.createdAt}</td>
+                                      <td className="p-3">
+                                        {tx.type === "topup" && (
+                                          <Badge className="bg-green-50 text-green-700 border-green-200 text-[10px] shadow-none py-0.5 rounded-md" variant="outline">
+                                            Top Up
+                                          </Badge>
+                                        )}
+                                        {tx.type === "withdraw" && (
+                                          <Badge className="bg-gray-50 text-gray-600 border-gray-200 text-[10px] shadow-none py-0.5 rounded-md" variant="outline">
+                                            Penarikan
+                                          </Badge>
+                                        )}
+                                        {tx.type === "refund" && (
+                                          <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] shadow-none py-0.5 rounded-md" variant="outline">
+                                            Refund Deposit
+                                          </Badge>
+                                        )}
+                                        {tx.type === "fine_deduction" && (
+                                          <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] shadow-none py-0.5 rounded-md" variant="outline">
+                                            Denda / Potongan
+                                          </Badge>
+                                        )}
+                                      </td>
+                                      <td className="p-3 text-gray-700 font-medium font-normal">{tx.description}</td>
+                                      <td className={`p-3 text-right font-bold font-mono whitespace-nowrap ${
+                                        ["topup", "refund"].includes(tx.type) ? "text-green-600" : "text-red-600"
+                                      }`}>
+                                        {["topup", "refund"].includes(tx.type) ? "+" : "-"}Rp {tx.amount.toLocaleString("id-ID")}
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </>
             )}
 
@@ -915,6 +1194,29 @@ export function DashboardPage() {
                       })}
                     </div>
                   </CardHeader>
+                  <CardContent className="py-3 bg-gray-50/30 flex items-center justify-between text-xs border-t border-gray-100">
+                    <div>
+                      <p className="font-bold text-gray-800">Diskon Rombongan Otomatis</p>
+                      <p className="text-gray-500 text-[10px]">Aktifkan potongan harga rombongan (2-3 pax: 10%, 4-5 pax: 20%, 5+ pax: 30%)</p>
+                    </div>
+                    {(() => {
+                      const guideObj = guides.find(g => g.id === currentUser.id);
+                      const isEnabled = guideObj?.groupDiscountEnabled;
+                      return (
+                        <Button 
+                          size="xs" 
+                          variant={isEnabled ? "default" : "outline"}
+                          className={`font-semibold ${isEnabled ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
+                          onClick={() => {
+                            toggleGroupDiscount("guide", currentUser.id);
+                            toast.success(`Diskon rombongan pemandu berhasil ${!isEnabled ? "diaktifkan" : "dinonaktifkan"}`);
+                          }}
+                        >
+                          {isEnabled ? "✓ Aktif" : "Nonaktif"}
+                        </Button>
+                      );
+                    })()}
+                  </CardContent>
                 </Card>
 
                 {/* 1. Tab Booking Masuk (dan Nego) */}
@@ -1037,6 +1339,38 @@ export function DashboardPage() {
                                     </button>
                                   );
                                 })}
+                              </div>
+                            </div>
+
+                            <div className="flex justify-between items-center text-xs border-t border-gray-100 pt-3">
+                              <div className="text-gray-500 text-[11px] font-semibold">
+                                <span>Persetujuan Cair Escrow:</span>
+                                <Badge variant="outline" className={`ml-1.5 text-[9px] ${b.partnerConfirmed ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-500"}`}>
+                                  {b.partnerConfirmed ? "Selesai Dikonfirmasi" : "Menunggu Konfirmasi Anda"}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="xs"
+                                  variant={b.partnerConfirmed ? "outline" : "default"}
+                                  className={b.partnerConfirmed ? "text-gray-400 border-gray-200 bg-white" : "bg-emerald-600 text-white font-semibold"}
+                                  disabled={b.partnerConfirmed}
+                                  onClick={() => {
+                                    confirmEscrow("booking", b.id, "guide");
+                                    toast.success("Trip dikonfirmasi selesai. Menunggu persetujuan Pendaki & Admin.");
+                                  }}
+                                >
+                                  {b.partnerConfirmed ? "✓ Selesai Terkonfirmasi" : "Konfirmasi Selesai"}
+                                </Button>
+                                
+                                <Button 
+                                  size="xs" 
+                                  variant="outline" 
+                                  className="border-red-200 text-red-655 hover:bg-red-50 font-semibold"
+                                  onClick={() => handleOpenFineModal(b.id, "booking")}
+                                >
+                                  {b.fineAmount ? `Pelanggaran: Rp ${b.fineAmount.toLocaleString("id-ID")}` : "Laporkan Pelanggaran"}
+                                </Button>
                               </div>
                             </div>
                           </div>
@@ -1320,8 +1654,6 @@ export function DashboardPage() {
                                 value={catalogForm.price}
                                 onChange={(e) => setCatalogForm({ ...catalogForm, price: e.target.value })}
                               />
-                            </div>
-                            <div className="space-y-1">
                               <label className="text-[11px] font-semibold text-gray-700">Stok Unit Tersedia</label>
                               <Input
                                 type="number"
@@ -1341,10 +1673,32 @@ export function DashboardPage() {
                               onChange={(e) => setCatalogForm({ ...catalogForm, description: e.target.value })}
                             />
                           </div>
+
+                          <div className="grid grid-cols-1 gap-3 border-t border-gray-100 pt-3">
+                            <label className="flex items-center gap-2 text-xs font-semibold text-gray-750 cursor-pointer">
+                              <input 
+                                type="checkbox"
+                                className="accent-emerald-600 size-4 rounded"
+                                checked={catalogForm.groupDiscountEnabled}
+                                onChange={(e) => setCatalogForm({ ...catalogForm, groupDiscountEnabled: e.target.checked })}
+                              />
+                              <span>Aktifkan Diskon Kuantitas Rombongan (2-3 unit: 10%, 4-5 unit: 20%, 5+ unit: 30%)</span>
+                            </label>
+                            
+                            <div className="space-y-1">
+                              <label className="text-[11px] font-semibold text-gray-700">Syarat & Ketentuan Denda (Kerusakan/Kehilangan)</label>
+                              <Input
+                                placeholder="Contoh: Tenda robek denda Rp 75.000, pasak hilang denda Rp 15.000 per unit."
+                                className="bg-white border-gray-250 text-xs text-red-800"
+                                value={catalogForm.damageTerms}
+                                onChange={(e) => setCatalogForm({ ...catalogForm, damageTerms: e.target.value })}
+                              />
+                            </div>
+                          </div>
                           
                           <div className="flex gap-2 justify-end pt-1">
                             <Button type="button" variant="outline" size="sm" className="text-xs" onClick={() => setItemFormOpen(false)}>Batal</Button>
-                            <Button type="submit" size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs text-white">Simpan Barang</Button>
+                            <Button type="submit" size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs text-white font-semibold">Simpan Barang</Button>
                           </div>
                         </form>
                       )}
@@ -1442,14 +1796,34 @@ export function DashboardPage() {
                                       </>
                                     ) : (
                                       r.status === "Telah Dibayar" ? (
-                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => updateRentalStatus(r.id, "Sedang Disewa")}>
+                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-semibold" onClick={() => updateRentalStatus(r.id, "Sedang Disewa")}>
                                           Tandai Diambil Penyewa
                                         </Button>
                                       ) : (
                                         r.status === "Sedang Disewa" && (
-                                          <Button size="sm" className="bg-gray-750 hover:bg-gray-800 text-xs px-4 text-white" onClick={() => updateRentalStatus(r.id, "Selesai")}>
-                                            Tandai Dikembalikan
-                                          </Button>
+                                          <div className="flex gap-2 flex-wrap justify-end">
+                                            <Button 
+                                              size="sm" 
+                                              variant={r.partnerConfirmed ? "outline" : "default"}
+                                              className={r.partnerConfirmed ? "text-gray-400 border-gray-250 bg-white" : "bg-emerald-600 text-white font-semibold"}
+                                              disabled={r.partnerConfirmed}
+                                              onClick={() => {
+                                                confirmEscrow("rental", r.id, "vendor");
+                                                toast.success("Konfirmasi pengembalian alat selesai terkirim. Menunggu Pendaki & Admin.");
+                                              }}
+                                            >
+                                              {r.partnerConfirmed ? "✓ Pengembalian Dikonfirmasi" : "Konfirmasi Pengembalian Selesai"}
+                                            </Button>
+                                            
+                                            <Button 
+                                              size="sm" 
+                                              variant="outline" 
+                                              className="border-red-200 text-red-655 hover:bg-red-50 font-semibold"
+                                              onClick={() => handleOpenFineModal(r.id, "rental")}
+                                            >
+                                              {r.fineAmount ? `Denda: Rp ${r.fineAmount.toLocaleString("id-ID")}` : "Laporkan Kerusakan (Denda)"}
+                                            </Button>
+                                          </div>
                                         )
                                       )
                                     )
@@ -1595,30 +1969,207 @@ export function DashboardPage() {
 
                       <div className="space-y-3">
                         <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Rincian Transaksi</p>
-                        {bookings.map((b) => (
-                          <div key={`trans_b_${b.id}`} className="p-3 border border-gray-100 rounded-lg text-xs flex justify-between items-center">
-                            <div>
-                              <p className="font-bold text-gray-700">Simaksi/Trip {b.mountainName} &middot; {b.pendakiName}</p>
-                              <p className="text-gray-400">Penerima Payout: {b.guideName || "Pihak Pengelola Gunung (Official)"}</p>
+                        {bookings.map((b) => {
+                          const isPaid = ["Telah Dibayar", "Start", "Muncak", "Selesai"].includes(b.status);
+                          const bothConfirmed = b.pendakiConfirmed && b.partnerConfirmed;
+                          const hasFine = b.fineAmount && b.fineAmount > 0;
+                          
+                          return (
+                            <div key={`trans_b_${b.id}`} className="p-4 border border-gray-150 rounded-xl text-xs space-y-3 bg-white hover:shadow-xs transition-shadow">
+                              <div className="flex justify-between items-start flex-wrap gap-2">
+                                <div>
+                                  <p className="font-bold text-gray-800 text-sm">Simaksi/Trip {b.mountainName} &middot; {b.pendakiName}</p>
+                                  <p className="text-gray-500">Penerima Payout: {b.guideName || "Pihak Pengelola Gunung (Official)"}</p>
+                                  <p className="text-[10px] text-gray-400">ID: {b.id} &middot; Tanggal: {b.bookingDate}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-bold text-emerald-600 text-sm">Rp {b.price.toLocaleString("id-ID")}</p>
+                                  <div className="mt-1">{getStatusBadge(b.status)}</div>
+                                </div>
+                              </div>
+
+                              {isPaid && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-gray-100 pt-3 text-[11px]">
+                                  {/* Deposit status */}
+                                  <div className="bg-gray-50 p-2 rounded-lg border border-gray-155">
+                                    <span className="text-gray-400">Deposit Jaminan:</span>
+                                    <div className="font-bold text-gray-750 flex items-center gap-1 mt-0.5">
+                                      <span>Rp {b.depositAmount?.toLocaleString()}</span>
+                                      <span className="text-[9px] text-emerald-600 uppercase font-semibold capitalize font-mono">({b.depositStatus})</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Consent statuses */}
+                                  <div className="bg-gray-50 p-2 rounded-lg border border-gray-155 flex flex-col justify-center">
+                                    <span className="text-gray-400">Consent Penyelesaian (Pihak):</span>
+                                    <div className="flex gap-2 items-center mt-1 font-bold">
+                                      <span className="flex items-center gap-0.5">
+                                        👤 Pendaki: {b.pendakiConfirmed ? "✓" : "✗"}
+                                      </span>
+                                      <span className="flex items-center gap-0.5">
+                                        ⛺ Mitra: {b.partnerConfirmed ? "✓" : "✗"}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Fine info or Action */}
+                                  <div className="flex flex-col justify-center">
+                                    {b.status !== "Selesai" && b.status !== "Dibatalkan" ? (
+                                      <div className="flex gap-1.5 justify-end">
+                                        {hasFine ? (
+                                          <>
+                                            <Button 
+                                              size="xs" 
+                                              className="bg-red-600 hover:bg-red-700 text-white text-[10px] h-7"
+                                              onClick={() => {
+                                                resolveEscrowWithDeposit("booking", b.id, true);
+                                                toast.success("Super Admin menyetujui denda. Deposit dipotong & dana dicairkan!");
+                                              }}
+                                            >
+                                              Setujui Denda ({Math.round((b.fineAmount || 0) / 1000)}k)
+                                            </Button>
+                                            <Button 
+                                              size="xs" 
+                                              variant="outline" 
+                                              className="text-[10px] h-7"
+                                              onClick={() => {
+                                                resolveEscrowWithDeposit("booking", b.id, false);
+                                                toast.success("Super Admin menolak denda. Escrow dicairkan penuh!");
+                                              }}
+                                            >
+                                              Abaikan Denda
+                                            </Button>
+                                          </>
+                                        ) : (
+                                          <Button 
+                                            size="xs" 
+                                            className={`h-7 text-[10px] ${bothConfirmed ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-400 hover:bg-gray-500"} text-white font-semibold`}
+                                            onClick={() => {
+                                              resolveEscrowWithDeposit("booking", b.id, false);
+                                              toast.success("Escrow & Deposit dicairkan penuh ke masing-masing pihak.");
+                                            }}
+                                          >
+                                            {!bothConfirmed && "⚠️ Payout Paksa "}
+                                            Cairkan Dana
+                                          </Button>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-450 text-right italic text-[10px]">Transaksi Selesai & Ditutup</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {hasFine && b.status !== "Selesai" && (
+                                <div className="p-2 bg-red-50 border border-red-150 rounded-lg text-[10px] text-red-800 font-semibold flex items-center gap-1.5">
+                                  <span>⚠️ Klaim Denda: Rp {b.fineAmount?.toLocaleString()} &middot; Alasan: "{b.fineNotes}"</span>
+                                </div>
+                              )}
                             </div>
-                            <div className="text-right">
-                              <p className="font-bold text-emerald-600">Rp {b.price.toLocaleString("id-ID")}</p>
-                              <p className="text-gray-400 capitalize">{b.status}</p>
+                          );
+                        })}
+
+                        {rentalOrders.map((r) => {
+                          const isPaid = ["Telah Dibayar", "Siap Diambil", "Sedang Disewa", "Selesai"].includes(r.status);
+                          const bothConfirmed = r.pendakiConfirmed && r.partnerConfirmed;
+                          const hasFine = r.fineAmount && r.fineAmount > 0;
+
+                          return (
+                            <div key={`trans_r_${r.id}`} className="p-4 border border-gray-150 rounded-xl text-xs space-y-3 bg-white hover:shadow-xs transition-shadow">
+                              <div className="flex justify-between items-start flex-wrap gap-2">
+                                <div>
+                                  <p className="font-bold text-gray-800 text-sm">Rental {r.itemName} &middot; {r.pendakiName}</p>
+                                  <p className="text-gray-500">Penerima Payout: {r.vendorName}</p>
+                                  <p className="text-[10px] text-gray-400">ID: {r.id} &middot; Qty: {r.qty} unit &middot; Tanggal: {r.startDate} s/d {r.endDate}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-bold text-emerald-600 text-sm">Rp {r.totalPrice.toLocaleString("id-ID")}</p>
+                                  <div className="mt-1">{getStatusBadge(r.status)}</div>
+                                </div>
+                              </div>
+
+                              {isPaid && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 border-t border-gray-100 pt-3 text-[11px]">
+                                  {/* Deposit status */}
+                                  <div className="bg-gray-50 p-2 rounded-lg border border-gray-155">
+                                    <span className="text-gray-400">Deposit Jaminan:</span>
+                                    <div className="font-bold text-gray-750 flex items-center gap-1 mt-0.5">
+                                      <span>Rp {r.depositAmount?.toLocaleString()}</span>
+                                      <span className="text-[9px] text-emerald-600 uppercase font-semibold capitalize font-mono">({r.depositStatus})</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Consent statuses */}
+                                  <div className="bg-gray-50 p-2 rounded-lg border border-gray-155 flex flex-col justify-center">
+                                    <span className="text-gray-400">Consent Penyelesaian (Pihak):</span>
+                                    <div className="flex gap-2 items-center mt-1 font-bold">
+                                      <span className="flex items-center gap-0.5">
+                                        👤 Pendaki: {r.pendakiConfirmed ? "✓" : "✗"}
+                                      </span>
+                                      <span className="flex items-center gap-0.5">
+                                        ⛺ Mitra: {r.partnerConfirmed ? "✓" : "✗"}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Fine info or Action */}
+                                  <div className="flex flex-col justify-center">
+                                    {r.status !== "Selesai" && r.status !== "Dibatalkan" ? (
+                                      <div className="flex gap-1.5 justify-end">
+                                        {hasFine ? (
+                                          <>
+                                            <Button 
+                                              size="xs" 
+                                              className="bg-red-600 hover:bg-red-700 text-white text-[10px] h-7"
+                                              onClick={() => {
+                                                resolveEscrowWithDeposit("rental", r.id, true);
+                                                toast.success("Super Admin menyetujui denda kerusakan. Deposit dipotong & dana sewa + denda cair ke Vendor!");
+                                              }}
+                                            >
+                                              Setujui Denda ({Math.round((r.fineAmount || 0) / 1000)}k)
+                                            </Button>
+                                            <Button 
+                                              size="xs" 
+                                              variant="outline" 
+                                              className="text-[10px] h-7"
+                                              onClick={() => {
+                                                resolveEscrowWithDeposit("rental", r.id, false);
+                                                toast.success("Super Admin menolak denda. Escrow dicairkan penuh!");
+                                              }}
+                                            >
+                                              Abaikan Denda
+                                            </Button>
+                                          </>
+                                        ) : (
+                                          <Button 
+                                            size="xs" 
+                                            className={`h-7 text-[10px] ${bothConfirmed ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-400 hover:bg-gray-500"} text-white font-semibold`}
+                                            onClick={() => {
+                                              resolveEscrowWithDeposit("rental", r.id, false);
+                                              toast.success("Escrow & Deposit dicairkan penuh ke masing-masing pihak.");
+                                            }}
+                                          >
+                                            {!bothConfirmed && "⚠️ Payout Paksa "}
+                                            Cairkan Dana
+                                          </Button>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-gray-450 text-right italic text-[10px]">Transaksi Selesai & Ditutup</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {hasFine && r.status !== "Selesai" && (
+                                <div className="p-2 bg-red-50 border border-red-150 rounded-lg text-[10px] text-red-800 font-semibold flex items-center gap-1.5">
+                                  <span>⚠️ Klaim Denda Kerusakan: Rp {r.fineAmount?.toLocaleString()} &middot; Alasan: "{r.fineNotes}"</span>
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        ))}
-                        {rentalOrders.map((r) => (
-                          <div key={`trans_r_${r.id}`} className="p-3 border border-gray-100 rounded-lg text-xs flex justify-between items-center">
-                            <div>
-                              <p className="font-bold text-gray-700">Rental {r.itemName} &middot; {r.pendakiName}</p>
-                              <p className="text-gray-400">Penerima Payout: {r.vendorName}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-bold text-emerald-600">Rp {r.totalPrice.toLocaleString("id-ID")}</p>
-                              <p className="text-gray-400 capitalize">{r.status}</p>
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </CardContent>
                   </Card>
@@ -2226,6 +2777,134 @@ export function DashboardPage() {
               <div className="flex gap-2.5 pt-2">
                 <Button type="button" variant="outline" className="flex-1 text-xs" onClick={() => setEditingMountain(null)}>Batal</Button>
                 <Button type="submit" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Simpan Perubahan</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Vendor Fine / Penalty Submission Modal */}
+      {fineModalOpen && fineTargetId && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200">
+            <button onClick={() => setFineModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400">
+              <X className="size-5" />
+            </button>
+            <div className="flex items-center gap-2 text-red-800 font-bold mb-3">
+              <AlertTriangle className="size-6 text-red-655 shrink-0" />
+              <h3 className="text-lg">Laporkan Kerusakan & Klaim Deposit</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed font-normal">
+              Laporkan kerusakan atau unit hilang untuk pesanan sewa **{fineTargetId}**. Klaim ini akan diverifikasi oleh Super Admin dan otomatis dipotong dari dana deposit Pendaki.
+            </p>
+            <form onSubmit={handleSaveFine} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Nominal Denda Kerusakan (Rp)</label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-red-600 font-bold" />
+                  <Input
+                    type="number"
+                    className="pl-9 text-xs font-bold text-red-700 bg-gray-50"
+                    value={fineAmountInput}
+                    onChange={(e) => setFineAmountInput(e.target.value)}
+                    placeholder="Contoh: 75000"
+                    min={1}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Alasan Denda / Pelanggaran</label>
+                <textarea
+                  className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-red-500 h-20 resize-none"
+                  placeholder="Contoh: Tenda robek di bagian cover layer luar karena bara api."
+                  value={fineNotesInput}
+                  onChange={(e) => setFineNotesInput(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <Button type="button" variant="outline" className="flex-1 text-xs" onClick={() => setFineModalOpen(false)}>Batal</Button>
+                <Button type="submit" className="flex-1 text-xs bg-red-600 hover:bg-red-750 text-white font-semibold">Kirim Klaim Denda</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 8. Top Up Deposit Modal */}
+      {topUpModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200">
+            <button onClick={() => setTopUpModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400">
+              <X className="size-5" />
+            </button>
+            <div className="flex items-center gap-2 text-emerald-800 font-bold mb-3">
+              <Wallet className="size-6 text-emerald-600 shrink-0" />
+              <h3 className="text-lg">Top Up Saldo Deposit</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed font-normal">
+              Top up saldo deposit jaminan Anda. Saldo ini akan digunakan untuk menjamin pesanan booking/sewa Anda.
+            </p>
+            <form onSubmit={handleTopUpSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Nominal Top Up (Rp)</label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-emerald-600 font-bold" />
+                  <Input
+                    type="number"
+                    className="pl-9 text-xs font-bold text-emerald-700 bg-gray-50 rounded-xl"
+                    value={depositAmountInput}
+                    onChange={(e) => setDepositAmountInput(e.target.value)}
+                    placeholder="Contoh: 100000"
+                    min={10000}
+                    step={10000}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2.5 pt-2">
+                <Button type="button" variant="outline" className="flex-1 text-xs rounded-xl" onClick={() => setTopUpModalOpen(false)}>Batal</Button>
+                <Button type="submit" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl">Konfirmasi Top Up</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 9. Withdraw Deposit Modal */}
+      {withdrawModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200">
+            <button onClick={() => setWithdrawModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400">
+              <X className="size-5" />
+            </button>
+            <div className="flex items-center gap-2 text-emerald-800 font-bold mb-3">
+              <Wallet className="size-6 text-emerald-600 shrink-0" />
+              <h3 className="text-lg">Tarik Dana Deposit</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed font-normal">
+              Tarik dana deposit jaminan Anda kembali ke rekening/e-wallet Anda. Maksimal penarikan: <b>Rp {climberDeposit.toLocaleString("id-ID")}</b>.
+            </p>
+            <form onSubmit={handleWithdrawSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Nominal Penarikan (Rp)</label>
+                <div className="relative">
+                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-emerald-600 font-bold" />
+                  <Input
+                    type="number"
+                    className="pl-9 text-xs font-bold text-emerald-700 bg-gray-50 rounded-xl"
+                    value={depositAmountInput}
+                    onChange={(e) => setDepositAmountInput(e.target.value)}
+                    placeholder="Contoh: 50000"
+                    min={10000}
+                    max={climberDeposit}
+                    step={10000}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2.5 pt-2">
+                <Button type="button" variant="outline" className="flex-1 text-xs rounded-xl" onClick={() => setWithdrawModalOpen(false)}>Batal</Button>
+                <Button type="submit" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl">Konfirmasi Penarikan</Button>
               </div>
             </form>
           </div>

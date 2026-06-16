@@ -46,6 +46,7 @@ export interface Guide {
   verified: boolean;
   specialtyMountains: string[];
   busyDates: string[];
+  groupDiscountEnabled?: boolean;
 }
 
 export interface Vendor {
@@ -69,6 +70,8 @@ export interface EquipmentItem {
   rating: number;
   available: number;
   category: "tent" | "carrier" | "other";
+  groupDiscountEnabled?: boolean;
+  damageTerms?: string;
 }
 
 export interface TripPackage {
@@ -106,6 +109,13 @@ export interface Booking {
   preTripMeetingDate?: string;
   preTripMeetingTime?: string;
   preTripMeetingLink?: string;
+  climbersCount?: number;
+  depositAmount?: number;
+  depositStatus?: "held" | "refunded" | "forfeited" | "partially_refunded";
+  fineAmount?: number;
+  fineNotes?: string;
+  pendakiConfirmed?: boolean;
+  partnerConfirmed?: boolean;
 }
 
 export interface RentalOrder {
@@ -122,6 +132,12 @@ export interface RentalOrder {
   totalPrice: number;
   status: "Menunggu Konfirmasi" | "Menunggu Pembayaran" | "Telah Dibayar" | "Siap Diambil" | "Sedang Disewa" | "Selesai" | "Dibatalkan" | "Dispute";
   disputeNotes?: string;
+  depositAmount?: number;
+  depositStatus?: "held" | "refunded" | "forfeited" | "partially_refunded";
+  fineAmount?: number;
+  fineNotes?: string;
+  pendakiConfirmed?: boolean;
+  partnerConfirmed?: boolean;
 }
 
 export interface Negotiation {
@@ -160,6 +176,14 @@ export interface VerificationRequest {
   createdAt: string;
 }
 
+export interface DepositTransaction {
+  id: string;
+  type: "topup" | "withdraw" | "refund" | "fine_deduction";
+  amount: number;
+  description: string;
+  createdAt: string;
+}
+
 interface AppContextType {
   currentUser: User | null;
   setCurrentUser: (user: User | null) => void;
@@ -192,6 +216,14 @@ interface AppContextType {
   deleteEquipmentItem: (id: string) => void;
   submitDispute: (type: "booking" | "rental", id: string, notes: string) => void;
   resolveDispute: (type: "booking" | "rental", id: string, refund: boolean) => void;
+  toggleGroupDiscount: (role: "guide" | "vendor", id: string) => void;
+  confirmEscrow: (type: "booking" | "rental", id: string, role: "pendaki" | "guide" | "vendor") => void;
+  reportDamage: (type: "booking" | "rental", id: string, fineAmount: number, fineNotes: string) => void;
+  resolveEscrowWithDeposit: (type: "booking" | "rental", id: string, approveFine: boolean) => void;
+  climberDeposit: number;
+  depositTransactions: DepositTransaction[];
+  topUpDeposit: (amount: number) => void;
+  withdrawDeposit: (amount: number) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -272,6 +304,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [guides, setGuides] = useState<Guide[]>(INITIAL_GUIDES);
   const [equipment, setEquipment] = useState<EquipmentItem[]>(INITIAL_EQUIPMENT);
 
+  const [climberDeposit, setClimberDeposit] = useState<number>(() => {
+    const saved = localStorage.getItem("ayok_climber_deposit");
+    return saved ? parseInt(saved) : 500000;
+  });
+
+  const [depositTransactions, setDepositTransactions] = useState<DepositTransaction[]>(() => {
+    const saved = localStorage.getItem("ayok_deposit_transactions");
+    return saved ? JSON.parse(saved) : [
+      { id: "tx_mock1", type: "topup", amount: 500000, description: "Saldo awal deposit jaminan", createdAt: "2026-06-15 10:00" }
+    ];
+  });
+
   // Load dynamically created data from LocalStorage or use defaults
   const [tripPackages, setTripPackages] = useState<TripPackage[]>(() => {
     const saved = localStorage.getItem("ayok_packages");
@@ -281,15 +325,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [bookings, setBookings] = useState<Booking[]>(() => {
     const saved = localStorage.getItem("ayok_bookings");
     return saved ? JSON.parse(saved) : [
-      { id: "book_mock1", mountainName: "Gunung Semeru", guideId: "guide1", guideName: "Ahmad Hidayat", pendakiName: "Zaki Firdaus", pendakiId: "pendaki1", bookingDate: "2026-07-10", createdAt: "2026-06-15", price: 500000, status: "Telah Dibayar", bookingType: "mandiri", preTripMeetingDate: "2026-07-09", preTripMeetingTime: "19:00 - 19:30", preTripMeetingLink: "https://meet.google.com/abc-defg-hij" },
-      { id: "book_mock2", mountainName: "Gunung Semeru", pendakiName: "Zaki Firdaus", pendakiId: "pendaki1", bookingDate: "2026-07-10", createdAt: "2026-06-15", price: 35000, status: "Telah Dibayar", officialTicketBooking: true, bookingType: "mandiri" }
+      { id: "book_mock1", mountainName: "Gunung Semeru", guideId: "guide1", guideName: "Ahmad Hidayat", pendakiName: "Zaki Firdaus", pendakiId: "pendaki1", bookingDate: "2026-07-10", createdAt: "2026-06-15", price: 500000, status: "Telah Dibayar", bookingType: "mandiri", preTripMeetingDate: "2026-07-09", preTripMeetingTime: "19:00 - 19:30", preTripMeetingLink: "https://meet.google.com/abc-defg-hij", depositAmount: 100000, depositStatus: "held", climbersCount: 1 },
+      { id: "book_mock2", mountainName: "Gunung Semeru", pendakiName: "Zaki Firdaus", pendakiId: "pendaki1", bookingDate: "2026-07-10", createdAt: "2026-06-15", price: 35000, status: "Telah Dibayar", officialTicketBooking: true, bookingType: "mandiri", depositAmount: 100000, depositStatus: "held" }
     ];
   });
 
   const [rentalOrders, setRentalOrders] = useState<RentalOrder[]>(() => {
     const saved = localStorage.getItem("ayok_rentals");
     return saved ? JSON.parse(saved) : [
-      { id: "rent_mock1", itemId: "eq1", itemName: "Tenda Dome 4 Orang", vendorId: "vendor1", vendorName: "Outdoor Adventure Store", pendakiId: "pendaki1", pendakiName: "Zaki Firdaus", qty: 2, startDate: "2026-07-09", endDate: "2026-07-12", totalPrice: 450000, status: "Menunggu Konfirmasi" }
+      { id: "rent_mock1", itemId: "eq1", itemName: "Tenda Dome 4 Orang", vendorId: "vendor1", vendorName: "Outdoor Adventure Store", pendakiId: "pendaki1", pendakiName: "Zaki Firdaus", qty: 2, startDate: "2026-07-09", endDate: "2026-07-12", totalPrice: 450000, status: "Menunggu Konfirmasi", depositAmount: 100000, depositStatus: "held" }
     ];
   });
 
@@ -322,6 +366,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { localStorage.setItem("ayok_negos", JSON.stringify(negotiations)); }, [negotiations]);
   useEffect(() => { localStorage.setItem("ayok_chats", JSON.stringify(chatMessages)); }, [chatMessages]);
   useEffect(() => { localStorage.setItem("ayok_verifications", JSON.stringify(verificationRequests)); }, [verificationRequests]);
+  useEffect(() => { localStorage.setItem("ayok_climber_deposit", climberDeposit.toString()); }, [climberDeposit]);
+  useEffect(() => { localStorage.setItem("ayok_deposit_transactions", JSON.stringify(depositTransactions)); }, [depositTransactions]);
 
   // ─── Booking Actions ────────────────────────────────────────────────────────
   const addBooking = (bookingData: Omit<Booking, "id" | "createdAt" | "status">) => {
@@ -339,6 +385,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       preTripLink = "https://meet.google.com/yok-mend-meet";
     }
 
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+    // Deduct deposit from climber wallet
+    setClimberDeposit((prev) => Math.max(0, prev - 100000));
+    setDepositTransactions((prev) => [
+      {
+        id: "tx_" + Math.random().toString(36).substring(2, 9),
+        type: "withdraw",
+        amount: 100000,
+        description: `Deposit jaminan dikunci untuk booking ${bookingData.mountainName}`,
+        createdAt: dateStr
+      },
+      ...prev
+    ]);
+
     const newBooking: Booking = {
       ...bookingData,
       id,
@@ -346,7 +408,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: bookingData.guideId && bookingData.bookingType === "mandiri" ? "Menunggu Konfirmasi" : "Menunggu Pembayaran",
       preTripMeetingDate: preTripDate || undefined,
       preTripMeetingTime: preTripTime || undefined,
-      preTripMeetingLink: preTripLink || undefined
+      preTripMeetingLink: preTripLink || undefined,
+      depositAmount: 100000,
+      depositStatus: "held"
     };
     setBookings((prev) => [newBooking, ...prev]);
     return id;
@@ -361,10 +425,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ─── Rental Actions ─────────────────────────────────────────────────────────
   const addRentalOrder = (orderData: Omit<RentalOrder, "id" | "status">) => {
     const id = "rent_" + Math.random().toString(36).substring(2, 9);
+    
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+    // Deduct deposit from climber wallet
+    setClimberDeposit((prev) => Math.max(0, prev - 100000));
+    setDepositTransactions((prev) => [
+      {
+        id: "tx_" + Math.random().toString(36).substring(2, 9),
+        type: "withdraw",
+        amount: 100000,
+        description: `Deposit jaminan dikunci untuk rental ${orderData.itemName}`,
+        createdAt: dateStr
+      },
+      ...prev
+    ]);
+
     const newOrder: RentalOrder = {
       ...orderData,
       id,
       status: "Menunggu Konfirmasi",
+      depositAmount: 100000,
+      depositStatus: "held"
     };
     setRentalOrders((prev) => [newOrder, ...prev]);
     return id;
@@ -544,13 +627,250 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const resolveDispute = (type: "booking" | "rental", id: string, refund: boolean) => {
     if (type === "booking") {
       setBookings((prev) =>
-        prev.map((b) => (b.id === id ? { ...b, status: refund ? "Dibatalkan" : "Selesai" } : b))
+        prev.map((b) => (b.id === id ? { ...b, status: refund ? "Dibatalkan" : "Selesai", depositStatus: refund ? "refunded" : "held" } : b))
       );
     } else {
       setRentalOrders((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status: refund ? "Dibatalkan" : "Selesai" } : r))
+        prev.map((r) => (r.id === id ? { ...r, status: refund ? "Dibatalkan" : "Selesai", depositStatus: refund ? "refunded" : "held" } : r))
       );
     }
+  };
+
+  const toggleGroupDiscount = (role: "guide" | "vendor", id: string) => {
+    if (role === "guide") {
+      setGuides((prev) =>
+        prev.map((g) => (g.id === id ? { ...g, groupDiscountEnabled: !g.groupDiscountEnabled } : g))
+      );
+    } else {
+      setEquipment((prev) =>
+        prev.map((eq) => (eq.id === id ? { ...eq, groupDiscountEnabled: !eq.groupDiscountEnabled } : eq))
+      );
+    }
+  };
+
+  const confirmEscrow = (type: "booking" | "rental", id: string, role: "pendaki" | "guide" | "vendor") => {
+    if (type === "booking") {
+      setBookings((prev) =>
+        prev.map((b) => {
+          if (b.id !== id) return b;
+          const updated = { ...b };
+          if (role === "pendaki") updated.pendakiConfirmed = true;
+          else updated.partnerConfirmed = true;
+          return updated;
+        })
+      );
+    } else {
+      setRentalOrders((prev) =>
+        prev.map((r) => {
+          if (r.id !== id) return r;
+          const updated = { ...r };
+          if (role === "pendaki") updated.pendakiConfirmed = true;
+          else updated.partnerConfirmed = true;
+          return updated;
+        })
+      );
+    }
+  };
+
+  const reportDamage = (type: "booking" | "rental", id: string, fineAmount: number, fineNotes: string) => {
+    if (type === "booking") {
+      setBookings((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, fineAmount, fineNotes } : b))
+      );
+    } else {
+      setRentalOrders((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, fineAmount, fineNotes } : r))
+      );
+    }
+  };
+
+  const resolveEscrowWithDeposit = (type: "booking" | "rental", id: string, approveFine: boolean) => {
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+    if (type === "booking") {
+      setBookings((prev) =>
+        prev.map((b) => {
+          if (b.id !== id) return b;
+          const fine = b.fineAmount || 0;
+          const dep = b.depositAmount || 0;
+          let depStatus: Booking["depositStatus"] = "refunded";
+          
+          if (approveFine && fine > 0) {
+            if (fine >= dep) {
+              depStatus = "forfeited";
+              const excess = fine - dep;
+              if (excess > 0) {
+                setClimberDeposit((prevDep) => Math.max(0, prevDep - excess));
+                setDepositTransactions((prevTx) => [
+                  {
+                    id: "tx_" + Math.random().toString(36).substring(2, 9),
+                    type: "fine_deduction",
+                    amount: excess,
+                    description: `Kekurangan denda pelanggaran booking ${b.mountainName}: ${b.fineNotes || ""}`,
+                    createdAt: dateStr
+                  },
+                  ...prevTx
+                ]);
+              }
+            } else {
+              depStatus = "partially_refunded";
+              const refundAmount = dep - fine;
+              setClimberDeposit((prevDep) => prevDep + refundAmount);
+              setDepositTransactions((prevTx) => [
+                {
+                  id: "tx_" + Math.random().toString(36).substring(2, 9),
+                  type: "refund",
+                  amount: refundAmount,
+                  description: `Sisa pengembalian deposit jaminan booking ${b.mountainName}`,
+                  createdAt: dateStr
+                },
+                ...prevTx
+              ]);
+            }
+            // Log the main fine deduction
+            setDepositTransactions((prevTx) => [
+              {
+                id: "tx_" + Math.random().toString(36).substring(2, 9),
+                type: "fine_deduction",
+                amount: Math.min(fine, dep),
+                description: `Denda pelanggaran booking ${b.mountainName}: ${b.fineNotes || ""}`,
+                createdAt: dateStr
+              },
+              ...prevTx
+            ]);
+          } else {
+            // Refund full deposit
+            setClimberDeposit((prevDep) => prevDep + dep);
+            setDepositTransactions((prevTx) => [
+              {
+                id: "tx_" + Math.random().toString(36).substring(2, 9),
+                type: "refund",
+                amount: dep,
+                description: `Pengembalian penuh deposit jaminan booking ${b.mountainName}`,
+                createdAt: dateStr
+              },
+              ...prevTx
+            ]);
+          }
+          
+          return {
+            ...b,
+            status: "Selesai",
+            depositStatus: depStatus,
+            fineAmount: approveFine ? fine : 0
+          };
+        })
+      );
+    } else {
+      setRentalOrders((prev) =>
+        prev.map((r) => {
+          if (r.id !== id) return r;
+          const fine = r.fineAmount || 0;
+          const dep = r.depositAmount || 0;
+          let depStatus: RentalOrder["depositStatus"] = "refunded";
+          
+          if (approveFine && fine > 0) {
+            if (fine >= dep) {
+              depStatus = "forfeited";
+              const excess = fine - dep;
+              if (excess > 0) {
+                setClimberDeposit((prevDep) => Math.max(0, prevDep - excess));
+                setDepositTransactions((prevTx) => [
+                  {
+                    id: "tx_" + Math.random().toString(36).substring(2, 9),
+                    type: "fine_deduction",
+                    amount: excess,
+                    description: `Kekurangan denda kerusakan rental ${r.itemName}: ${r.fineNotes || ""}`,
+                    createdAt: dateStr
+                  },
+                  ...prevTx
+                ]);
+              }
+            } else {
+              depStatus = "partially_refunded";
+              const refundAmount = dep - fine;
+              setClimberDeposit((prevDep) => prevDep + refundAmount);
+              setDepositTransactions((prevTx) => [
+                {
+                  id: "tx_" + Math.random().toString(36).substring(2, 9),
+                  type: "refund",
+                  amount: refundAmount,
+                  description: `Sisa pengembalian deposit jaminan rental ${r.itemName}`,
+                  createdAt: dateStr
+                },
+                ...prevTx
+              ]);
+            }
+            // Log the main fine deduction
+            setDepositTransactions((prevTx) => [
+              {
+                id: "tx_" + Math.random().toString(36).substring(2, 9),
+                type: "fine_deduction",
+                amount: Math.min(fine, dep),
+                description: `Denda kerusakan rental ${r.itemName}: ${r.fineNotes || ""}`,
+                createdAt: dateStr
+              },
+              ...prevTx
+            ]);
+          } else {
+            // Refund full deposit
+            setClimberDeposit((prevDep) => prevDep + dep);
+            setDepositTransactions((prevTx) => [
+              {
+                id: "tx_" + Math.random().toString(36).substring(2, 9),
+                type: "refund",
+                amount: dep,
+                description: `Pengembalian penuh deposit jaminan rental ${r.itemName}`,
+                createdAt: dateStr
+              },
+              ...prevTx
+            ]);
+          }
+          
+          return {
+            ...r,
+            status: "Selesai",
+            depositStatus: depStatus,
+            fineAmount: approveFine ? fine : 0
+          };
+        })
+      );
+    }
+  };
+
+  const topUpDeposit = (amount: number) => {
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    setClimberDeposit((prev) => prev + amount);
+    setDepositTransactions((prev) => [
+      {
+        id: "tx_" + Math.random().toString(36).substring(2, 9),
+        type: "topup",
+        amount,
+        description: "Top Up Saldo Deposit",
+        createdAt: dateStr
+      },
+      ...prev
+    ]);
+  };
+
+  const withdrawDeposit = (amount: number) => {
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    setClimberDeposit((prev) => Math.max(0, prev - amount));
+    setDepositTransactions((prev) => [
+      {
+        id: "tx_" + Math.random().toString(36).substring(2, 9),
+        type: "withdraw",
+        amount,
+        description: "Penarikan Saldo Deposit",
+        createdAt: dateStr
+      },
+      ...prev
+    ]);
   };
 
   return (
@@ -587,6 +907,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteEquipmentItem,
         submitDispute,
         resolveDispute,
+        toggleGroupDiscount,
+        confirmEscrow,
+        reportDamage,
+        resolveEscrowWithDeposit,
+        climberDeposit,
+        depositTransactions,
+        topUpDeposit,
+        withdrawDeposit,
       }}
     >
       {children}
