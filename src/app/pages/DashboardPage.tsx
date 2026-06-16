@@ -87,8 +87,13 @@ export function DashboardPage() {
     resolveEscrowWithDeposit,
     climberDeposit,
     depositTransactions,
-    topUpDeposit,
-    withdrawDeposit
+    topUpWallet,
+    withdrawWallet,
+    userWarnings,
+    addWarning,
+    removeWarning,
+    guideWallet,
+    vendorWallet
   } = useApp();
 
   const location = useLocation();
@@ -96,6 +101,7 @@ export function DashboardPage() {
 
   // Navigation tabs in dashboard
   const [activeTab, setActiveTab] = useState("bookings");
+  const [reportsSubTab, setReportsSubTab] = useState("analytics");
 
   // Handle redirect states (from Chat button on guide/rental page)
   useEffect(() => {
@@ -208,6 +214,154 @@ export function DashboardPage() {
     });
     return Array.from(partnersMap.entries()).map(([id, name]) => ({ id, name }));
   }, [chatMessages, currentUser]);
+
+  const ledgerEntries = useMemo(() => {
+    const entries: Array<{
+      id: string;
+      date: string;
+      description: string;
+      details: Array<{ account: string; type: "debit" | "credit"; amount: number }>;
+    }> = [];
+
+    // Platform expenses
+    entries.push({
+      id: "exp_server",
+      date: "2026-06-01 00:00",
+      description: "Beban Sewa Cloud Server Bulanan",
+      details: [
+        { account: "Beban Server", type: "debit", amount: 50000 },
+        { account: "Kas & Bank Platform", type: "credit", amount: 50000 }
+      ]
+    });
+
+    entries.push({
+      id: "exp_admin",
+      date: "2026-06-01 00:00",
+      description: "Beban Operasional & Administrasi Platform",
+      details: [
+        { account: "Beban Operasional & Admin", type: "debit", amount: 30000 },
+        { account: "Kas & Bank Platform", type: "credit", amount: 30000 }
+      ]
+    });
+
+    // 1. Process depositTransactions (topups, withdraws, etc.)
+    depositTransactions.forEach((tx) => {
+      if (tx.type === "topup") {
+        entries.push({
+          id: tx.id,
+          date: tx.createdAt,
+          description: tx.description,
+          details: [
+            { account: "Kas & Bank Platform", type: "debit", amount: tx.amount },
+            { account: "Utang Deposit Pendaki", type: "credit", amount: tx.amount }
+          ]
+        });
+      } else if (tx.type === "withdraw") {
+        entries.push({
+          id: tx.id,
+          date: tx.createdAt,
+          description: tx.description,
+          details: [
+            { account: "Utang Deposit Pendaki", type: "debit", amount: tx.amount },
+            { account: "Kas & Bank Platform", type: "credit", amount: tx.amount }
+          ]
+        });
+      } else if (tx.type === "refund" || tx.type === "fine_deduction") {
+        if (tx.description.includes("Penarikan Dana Dompet")) {
+          const accountName = tx.description.includes("GUIDE") ? "Utang Dompet Guide" : "Utang Dompet Vendor";
+          entries.push({
+            id: tx.id,
+            date: tx.createdAt,
+            description: tx.description,
+            details: [
+              { account: accountName, type: "debit", amount: tx.amount },
+              { account: "Kas & Bank Platform", type: "credit", amount: tx.amount }
+            ]
+          });
+        } else if (tx.description.includes("Top Up Saldo Dompet")) {
+          const accountName = tx.description.includes("GUIDE") ? "Utang Dompet Guide" : "Utang Dompet Vendor";
+          entries.push({
+            id: tx.id,
+            date: tx.createdAt,
+            description: tx.description,
+            details: [
+              { account: "Kas & Bank Platform", type: "debit", amount: tx.amount },
+              { account: accountName, type: "credit", amount: tx.amount }
+            ]
+          });
+        }
+      }
+    });
+
+    // 2. Bookings (trip bookings)
+    bookings.forEach((b) => {
+      const isPaid = !["Menunggu Pembayaran", "Menunggu Konfirmasi"].includes(b.status);
+      if (isPaid) {
+        entries.push({
+          id: `book_escrow_${b.id}`,
+          date: b.bookingDate,
+          description: `Penerimaan Pembayaran Escrow Trip ${b.mountainName} - ${b.pendakiName}`,
+          details: [
+            { account: "Dana Escrow Platform", type: "debit", amount: b.price },
+            { account: "Utang Escrow Titipan", type: "credit", amount: b.price }
+          ]
+        });
+      }
+
+      if (b.status === "Selesai") {
+        const platformFee = Math.round(b.price * 0.1);
+        const payout = b.price - platformFee;
+        entries.push({
+          id: `book_resolve_${b.id}`,
+          date: b.bookingDate,
+          description: `Penyelesaian Escrow & Distribusi Jasa Trip ${b.mountainName} (${b.guideName})`,
+          details: [
+            { account: "Utang Escrow Titipan", type: "debit", amount: b.price },
+            { account: "Kas & Bank Platform", type: "debit", amount: b.price },
+            { account: "Dana Escrow Platform", type: "credit", amount: b.price },
+            { account: "Utang Dompet Guide", type: "credit", amount: payout },
+            { account: "Pendapatan Komisi Platform", type: "credit", amount: platformFee }
+          ]
+        });
+      }
+    });
+
+    // 3. Rental Orders
+    rentalOrders.forEach((r) => {
+      const isPaid = !["Menunggu Pembayaran", "Menunggu Konfirmasi"].includes(r.status);
+      if (isPaid) {
+        entries.push({
+          id: `rent_escrow_${r.id}`,
+          date: r.startDate,
+          description: `Penerimaan Pembayaran Escrow Rental ${r.itemName} - ${r.pendakiName}`,
+          details: [
+            { account: "Dana Escrow Platform", type: "debit", amount: r.totalPrice },
+            { account: "Utang Escrow Titipan", type: "credit", amount: r.totalPrice }
+          ]
+        });
+      }
+
+      if (r.status === "Selesai") {
+        const platformFee = Math.round(r.totalPrice * 0.1);
+        const payout = r.totalPrice - platformFee;
+        entries.push({
+          id: `rent_resolve_${r.id}`,
+          date: r.startDate,
+          description: `Penyelesaian Escrow & Distribusi Sewa Alat ${r.itemName} (${r.vendorName})`,
+          details: [
+            { account: "Utang Escrow Titipan", type: "debit", amount: r.totalPrice },
+            { account: "Kas & Bank Platform", type: "debit", amount: r.totalPrice },
+            { account: "Dana Escrow Platform", type: "credit", amount: r.totalPrice },
+            { account: "Utang Dompet Vendor", type: "credit", amount: payout },
+            { account: "Pendapatan Komisi Platform", type: "credit", amount: platformFee }
+          ]
+        });
+      }
+    });
+
+    return entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [depositTransactions, bookings, rentalOrders]);
+
 
   // Initialize first chat partner if not set
   useEffect(() => {
@@ -438,10 +592,10 @@ export function DashboardPage() {
       toast.error("Masukkan nominal yang valid!");
       return;
     }
-    topUpDeposit(amount);
+    topUpWallet(currentUser?.role as any, amount);
     setTopUpModalOpen(false);
     setDepositAmountInput("");
-    toast.success(`Berhasil melakukan top up deposit sebesar Rp ${amount.toLocaleString("id-ID")}!`);
+    toast.success(`Berhasil melakukan top up sebesar Rp ${amount.toLocaleString("id-ID")}!`);
   };
 
   const handleWithdrawSubmit = (e: React.FormEvent) => {
@@ -451,14 +605,18 @@ export function DashboardPage() {
       toast.error("Masukkan nominal yang valid!");
       return;
     }
-    if (amount > climberDeposit) {
-      toast.error("Saldo deposit tidak mencukupi!");
+    const currentBalance = 
+      currentUser?.role === "pendaki" ? climberDeposit :
+      currentUser?.role === "guide" ? guideWallet : vendorWallet;
+
+    if (amount > currentBalance) {
+      toast.error("Saldo tidak mencukupi!");
       return;
     }
-    withdrawDeposit(amount);
+    withdrawWallet(currentUser?.role as any, amount);
     setWithdrawModalOpen(false);
     setDepositAmountInput("");
-    toast.success(`Berhasil menarik deposit sebesar Rp ${amount.toLocaleString("id-ID")}!`);
+    toast.success(`Berhasil menarik dana sebesar Rp ${amount.toLocaleString("id-ID")}!`);
   };
 
   // Submit Partnership Verification Document
@@ -642,6 +800,7 @@ export function DashboardPage() {
                   { id: "bookings", label: "Booking Masuk", icon: <FileText className="size-4" /> },
                   { id: "trips", label: "Trip Lapangan", icon: <Activity className="size-4" /> },
                   { id: "packages", label: "Iklan Paket (Ads)", icon: <Award className="size-4" /> },
+                  { id: "deposit_wallet", label: "Dompet Penghasilan", icon: <Wallet className="size-4" /> },
                   { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> }
                 ].map(t => (
                   <button
@@ -677,6 +836,7 @@ export function DashboardPage() {
                   { id: "catalog", label: "Kelola Katalog", icon: <Plus className="size-4" /> },
                   { id: "bookings", label: "Penyewaan Masuk", icon: <FileText className="size-4" /> },
                   { id: "collaborations", label: "Kolaborasi Guide", icon: <Users className="size-4" /> },
+                  { id: "deposit_wallet", label: "Dompet Penghasilan", icon: <Wallet className="size-4" /> },
                   { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> }
                 ].map(t => (
                   <button
@@ -712,6 +872,7 @@ export function DashboardPage() {
                   { id: "escrow", label: "Monitoring Transaksi", icon: <DollarSign className="size-4" /> },
                   { id: "disputes", label: "Penyelesaian Dispute", icon: <ShieldAlert className="size-4" /> },
                   { id: "manage_mountains", label: "Kontak Tiket Gunung", icon: <MountainIcon className="size-4" /> },
+                  { id: "warnings", label: "Sanksi & Warning", icon: <AlertTriangle className="size-4" /> },
                   { id: "reports", label: "Laporan Keuangan", icon: <TrendingUp className="size-4" /> }
                 ].map(t => (
                   <button
@@ -736,6 +897,18 @@ export function DashboardPage() {
 
           {/* Dashboard Main Workspace */}
           <div className="lg:col-span-3 space-y-6">
+            
+            {/* Warnings Banner for Current User */}
+            {currentUser && userWarnings.filter((w) => w.userId === currentUser.id).map((w) => (
+              <div key={w.id} className="p-4 rounded-xl border border-red-200 bg-red-50 text-red-800 flex items-start gap-3 animate-in fade-in slide-in-from-top-4 duration-300 shadow-sm font-sans">
+                <AlertTriangle className="size-5 shrink-0 text-red-655 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-extrabold text-xs text-red-950 uppercase tracking-wide">⚠️ Peringatan Pelanggaran dari Super Admin</p>
+                  <p className="text-xs font-semibold mt-1 text-red-800">{w.text}</p>
+                  <p className="text-[10px] text-gray-400 mt-1.5">Sanksi aktif sejak: {w.date}</p>
+                </div>
+              </div>
+            ))}
             
             {/* ════════════════════ PENDAKI VIEW ════════════════════ */}
             {currentUser.role === "pendaki" && (
@@ -1013,7 +1186,6 @@ export function DashboardPage() {
                               }`}>
                                 {n.status.toUpperCase()}
                               </span>
-                              
                               {n.status === "countered" && (
                                 <div className="flex gap-1.5 w-full sm:w-auto">
                                   <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-3 text-white h-7 py-1" onClick={() => respondToNegotiation(n.id, "accepted")}>
@@ -1032,123 +1204,86 @@ export function DashboardPage() {
                   </Card>
                 )}
 
+                {/* 4. Tab Wallet/Deposit */}
                 {activeTab === "deposit_wallet" && (
                   <Card className="border border-gray-150 shadow-sm overflow-hidden font-sans">
                     <CardHeader className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border-b border-gray-100 py-5">
                       <div className="flex justify-between items-center flex-wrap gap-3">
                         <div>
-                          <CardTitle className="text-lg font-bold text-gray-800">Dompet & Saldo Deposit Jaminan</CardTitle>
+                          <CardTitle className="text-lg font-bold">
+                            {currentUser.role === "pendaki" ? "Dompet & Saldo Deposit Jaminan" : "Dompet Penghasilan & Saldo"}
+                          </CardTitle>
                           <CardDescription className="text-xs text-gray-500">
-                            Kelola saldo jaminan pendakian Anda untuk otomatisasi denda pelanggaran atau klaim kerusakan.
+                            {currentUser.role === "pendaki" && "Kelola saldo jaminan pendakian Anda untuk otomatisasi denda pelanggaran atau klaim kerusakan."}
+                            {currentUser.role === "guide" && "Pantau pendapatan jasa trip pendakian Anda. Dana escrow dilepas otomatis setelah trip selesai."}
+                            {currentUser.role === "vendor" && "Pantau pendapatan rental peralatan kemping Anda. Dana dilepas otomatis setelah barang dikembalikan."}
                           </CardDescription>
                         </div>
                         <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono px-3 py-1 font-extrabold text-sm shadow-sm flex items-center gap-1.5 rounded-xl">
                           <Wallet className="size-4 shrink-0" />
-                          Rp {climberDeposit.toLocaleString("id-ID")}
+                          Rp {(currentUser.role === "pendaki" ? climberDeposit : currentUser.role === "guide" ? guideWallet : vendorWallet).toLocaleString("id-ID")}
                         </Badge>
                       </div>
                     </CardHeader>
                     <CardContent className="p-6 space-y-6">
-                      {/* Action buttons with wallet details */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="p-4 rounded-2xl border border-gray-100 bg-white shadow-xs space-y-3">
-                          <h4 className="text-sm font-bold text-gray-700">Manajemen Saldo Deposit</h4>
-                          <p className="text-xs text-gray-400 leading-relaxed font-normal">
-                            Saldo deposit digunakan untuk menjamin setiap pesanan booking guide atau rental. Pastikan saldo Anda selalu mencukupi (minimal Rp 100.000) sebelum melakukan pemesanan.
-                          </p>
-                          <div className="flex gap-2 pt-1.5">
-                            <Button
-                              size="sm"
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs flex-1 font-semibold rounded-xl h-9"
-                              onClick={() => setTopUpModalOpen(true)}
-                            >
-                              Top Up Saldo
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs flex-1 border-gray-200 text-gray-700 hover:bg-gray-50 font-semibold rounded-xl h-9"
-                              onClick={() => setWithdrawModalOpen(true)}
-                            >
-                              Tarik Dana
-                            </Button>
-                          </div>
+                           <h4 className="text-sm font-bold text-gray-700">
+                             {currentUser.role === "pendaki" ? "Manajemen Saldo Deposit" : "Penarikan Dana Penghasilan"}
+                           </h4>
+                           <p className="text-xs text-gray-400 leading-relaxed font-normal">
+                             {currentUser.role === "pendaki" && "Saldo deposit digunakan untuk menjamin setiap pesanan booking guide atau rental. Pastikan saldo Anda selalu mencukupi (minimal Rp 100.000) sebelum melakukan pemesanan."}
+                             {currentUser.role === "guide" && "Anda dapat menarik dana hasil memandu pendakian secara langsung ke rekening bank terdaftar Anda."}
+                             {currentUser.role === "vendor" && "Anda dapat menarik dana hasil persewaan alat kemping secara langsung ke rekening bank terdaftar Anda."}
+                           </p>
+                           <div className="flex gap-2 pt-1.5">
+                             {currentUser.role === "pendaki" && (
+                               <Button
+                                 size="sm"
+                                 className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs flex-1 font-semibold rounded-xl h-9"
+                                 onClick={() => setTopUpModalOpen(true)}
+                               >
+                                 Top Up Saldo
+                               </Button>
+                             )}
+                             <Button
+                               size="sm"
+                               variant={currentUser.role === "pendaki" ? "outline" : "default"}
+                               className={`text-xs flex-1 ${currentUser.role !== "pendaki" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "border-gray-200 text-gray-700 hover:bg-gray-50"} font-semibold rounded-xl h-9`}
+                               onClick={() => setWithdrawModalOpen(true)}
+                             >
+                               Tarik Dana
+                             </Button>
+                           </div>
                         </div>
 
-                        <div className="p-4 rounded-2xl border border-red-100 bg-red-50/10 space-y-2.5">
-                          <h4 className="text-sm font-bold text-red-800 flex items-center gap-1">
-                            <AlertTriangle className="size-4 text-red-655 shrink-0" />
-                            Kebijakan Pelanggaran & Denda
-                          </h4>
-                          <ul className="text-[11px] text-gray-600 list-disc list-inside space-y-1 font-normal leading-relaxed">
-                            <li>Setiap transaksi menahan deposit jaminan sebesar <b>Rp 100.000</b>.</li>
-                            <li>Jika melanggar aturan gunung (sampah/flora) atau merusak alat, denda akan dilaporkan Mitra.</li>
-                            <li>Setelah <b>Super Admin menyetujui denda</b>, denda akan otomatis memotong deposit jaminan Anda.</li>
-                            <li>Sisa deposit (jika ada) otomatis dikembalikan penuh ke Saldo Dompet ini.</li>
-                          </ul>
-                        </div>
-                      </div>
-
-                      {/* Transaction log */}
-                      <div className="space-y-3">
-                        <h4 className="text-sm font-bold text-gray-800">Riwayat Mutasi Saldo & Pelanggaran</h4>
-                        <div className="border border-gray-150 rounded-2xl overflow-hidden bg-white">
-                          <div className="overflow-x-auto">
-                            <table className="w-full border-collapse text-left text-xs">
-                              <thead>
-                                <tr className="bg-gray-50/70 text-gray-500 font-bold border-b border-gray-100">
-                                  <th className="p-3 font-semibold">Tanggal / Waktu</th>
-                                  <th className="p-3 font-semibold">Tipe Mutasi</th>
-                                  <th className="p-3 font-semibold">Deskripsi / Detail Pelanggaran</th>
-                                  <th className="p-3 text-right font-semibold">Nominal</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-100">
-                                {depositTransactions.length === 0 ? (
-                                  <tr>
-                                    <td colSpan={4} className="p-8 text-center text-gray-400 italic font-normal">
-                                      Belum ada riwayat transaksi deposit.
-                                    </td>
-                                  </tr>
-                                ) : (
-                                  depositTransactions.map((tx) => (
-                                    <tr key={tx.id} className="hover:bg-gray-50/50 transition-colors">
-                                      <td className="p-3 text-gray-400 whitespace-nowrap font-normal">{tx.createdAt}</td>
-                                      <td className="p-3">
-                                        {tx.type === "topup" && (
-                                          <Badge className="bg-green-50 text-green-700 border-green-200 text-[10px] shadow-none py-0.5 rounded-md" variant="outline">
-                                            Top Up
-                                          </Badge>
-                                        )}
-                                        {tx.type === "withdraw" && (
-                                          <Badge className="bg-gray-50 text-gray-600 border-gray-200 text-[10px] shadow-none py-0.5 rounded-md" variant="outline">
-                                            Penarikan
-                                          </Badge>
-                                        )}
-                                        {tx.type === "refund" && (
-                                          <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] shadow-none py-0.5 rounded-md" variant="outline">
-                                            Refund Deposit
-                                          </Badge>
-                                        )}
-                                        {tx.type === "fine_deduction" && (
-                                          <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] shadow-none py-0.5 rounded-md" variant="outline">
-                                            Denda / Potongan
-                                          </Badge>
-                                        )}
-                                      </td>
-                                      <td className="p-3 text-gray-700 font-medium font-normal">{tx.description}</td>
-                                      <td className={`p-3 text-right font-bold font-mono whitespace-nowrap ${
-                                        ["topup", "refund"].includes(tx.type) ? "text-green-600" : "text-red-600"
-                                      }`}>
-                                        {["topup", "refund"].includes(tx.type) ? "+" : "-"}Rp {tx.amount.toLocaleString("id-ID")}
-                                      </td>
-                                    </tr>
-                                  ))
-                                )}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                        {currentUser.role === "pendaki" ? (
+                           <div className="p-4 rounded-2xl border border-red-100 bg-red-50/10 space-y-2.5">
+                             <h4 className="text-sm font-bold text-red-800 flex items-center gap-1">
+                               <AlertTriangle className="size-4 text-red-655 shrink-0" />
+                               Kebijakan Pelanggaran & Denda
+                             </h4>
+                             <ul className="text-[11px] text-gray-600 list-disc list-inside space-y-1 font-normal leading-relaxed">
+                               <li>Setiap transaksi menahan deposit jaminan sebesar <b>Rp 100.000</b>.</li>
+                               <li>Jika melanggar aturan gunung (sampah/flora) atau merusak alat, denda akan dilaporkan Mitra.</li>
+                               <li>Setelah <b>Super Admin menyetujui denda</b>, denda akan otomatis memotong deposit jaminan Anda.</li>
+                               <li>Sisa deposit (jika ada) otomatis dikembalikan penuh ke Saldo Dompet ini.</li>
+                             </ul>
+                           </div>
+                         ) : (
+                           <div className="p-4 rounded-2xl border border-emerald-100 bg-emerald-50/10 space-y-2.5">
+                             <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-1">
+                               <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                               Ketentuan & Penarikan Dana
+                             </h4>
+                             <ul className="text-[11px] text-gray-600 list-disc list-inside space-y-1 font-normal leading-relaxed">
+                               <li>Penarikan dana diproses fiktif secara instan ke rekening Anda.</li>
+                               <li>Batas minimal penarikan adalah <b>Rp 50.000</b>.</li>
+                               <li>Pendapatan dipotong fee administrasi bank Rp 0 (Gratis).</li>
+                               <li>Pastikan status rekening bank Anda sudah diverifikasi oleh Super Admin.</li>
+                             </ul>
+                           </div>
+                         )}
                       </div>
                     </CardContent>
                   </Card>
@@ -2251,95 +2386,500 @@ export function DashboardPage() {
                   </Card>
                 )}
 
-                {/* 4. Tab Reports & Analytical Charts (Recharts) */}
-                {activeTab === "reports" && (
+                {/* Tab Sanksi & Warning (Super Admin) */}
+                {activeTab === "warnings" && (
                   <Card className="border border-gray-150 shadow-sm">
                     <CardHeader>
-                      <CardTitle className="text-lg">Analitik Keuangan Platform</CardTitle>
-                      <CardDescription className="text-xs">Distribusi perolehan transaksi escrow bulanan dan data demografis trip fiktif.</CardDescription>
+                      <CardTitle className="text-lg">Kirim Peringatan Sanksi & Pelanggaran</CardTitle>
+                      <CardDescription className="text-xs">Kirim surat peringatan resmi secara personal ke pengguna (Pendaki, Guide, Vendor). Peringatan akan tampil persisten di dashboard mereka.</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-8 pt-6">
-                      
-                      {/* Metrics cards grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        {[
-                          { label: "Total Transaksi", val: `Rp ${(bookings.reduce((a,c)=>a+c.price, 0) + rentalOrders.reduce((a,c)=>a+c.totalPrice, 0)).toLocaleString("id-ID")}`, color: "border-gray-200 text-gray-800" },
-                          { label: "Transaksi Selesai", val: `Rp ${(bookings.filter(b=>b.status==="Selesai").reduce((a,c)=>a+c.price, 0) + rentalOrders.filter(r=>r.status==="Selesai").reduce((a,c)=>a+c.totalPrice, 0)).toLocaleString("id-ID")}`, color: "border-emerald-100 text-emerald-700 bg-emerald-50/20" },
-                          { label: "Escrow Pending", val: `Rp ${(bookings.filter(b=>["Telah Dibayar","Berangkat","Basecamp","Summit","Dispute"].includes(b.status)).reduce((a,c)=>a+c.price, 0) + rentalOrders.filter(r=>["Telah Dibayar","Sedang Disewa","Dispute"].includes(r.status)).reduce((a,c)=>a+c.totalPrice, 0)).toLocaleString("id-ID")}`, color: "border-amber-100 text-amber-700 bg-amber-50/20" },
-                          { label: "Fee Platform (10%)", val: `Rp ${((bookings.filter(b=>b.status==="Selesai").reduce((a,c)=>a+c.price, 0) + rentalOrders.filter(r=>r.status==="Selesai").reduce((a,c)=>a+c.totalPrice, 0)) * 0.1).toLocaleString("id-ID")}`, color: "border-blue-100 text-blue-700 bg-blue-50/20" }
-                        ].map((m, idx) => (
-                          <div key={idx} className={`p-4 border rounded-xl shadow-xs text-center ${m.color}`}>
-                            <p className="text-[10px] uppercase font-bold tracking-wider opacity-75">{m.label}</p>
-                            <p className="text-base font-bold mt-1">{m.val}</p>
+                    <CardContent className="space-y-6">
+                      <form onSubmit={(e) => {
+                        e.preventDefault();
+                        const fd = new FormData(e.currentTarget);
+                        const targetUser = fd.get("targetUser") as string;
+                        const warnText = fd.get("warnText") as string;
+                        if (!targetUser || !warnText.trim()) {
+                          toast.error("Wajib mengisi target pengguna dan alasan peringatan.");
+                          return;
+                        }
+                        addWarning(targetUser, warnText);
+                        toast.success("Surat peringatan berhasil dikirim!");
+                        e.currentTarget.reset();
+                      }} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-xs font-semibold text-gray-700 block mb-1">Target Pengguna</label>
+                            <select name="targetUser" className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 font-medium">
+                              <option value="">-- Pilih Pengguna --</option>
+                              <optgroup label="Pendaki">
+                                <option value="pendaki1">Zaki Firdaus (Pendaki)</option>
+                              </optgroup>
+                              <optgroup label="Guides">
+                                {guides.map(g => (
+                                  <option key={g.id} value={g.id}>{g.name} (Guide)</option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="Vendors">
+                                {vendors.map(v => (
+                                  <option key={v.id} value={v.id}>{v.name} (Vendor)</option>
+                                ))}
+                              </optgroup>
+                            </select>
                           </div>
-                        ))}
-                      </div>
-
-                      {/* Visual charts using Recharts */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* Bar chart - Revenue breakdown */}
-                        <div className="space-y-2">
-                          <p className="text-xs font-bold text-gray-650 uppercase tracking-wider text-center">Komparasi Jasa Guide vs Rental Alat</p>
-                          <div className="h-64 bg-white rounded-xl p-3 border border-gray-150">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart
-                                data={[
-                                  { name: "Total Transaksi", Guide: bookings.reduce((a,c)=>a+c.price, 0), Rental: rentalOrders.reduce((a,c)=>a+c.totalPrice, 0) },
-                                  { name: "Lunas / Selesai", Guide: bookings.filter(b=>b.status==="Selesai").reduce((a,c)=>a+c.price, 0), Rental: rentalOrders.filter(r=>r.status==="Selesai").reduce((a,c)=>a+c.totalPrice, 0) }
-                                ]}
-                                margin={{ top: 10, right: 10, left: -20, bottom: 5 }}
-                              >
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                                <YAxis tick={{ fontSize: 10 }} />
-                                <Tooltip />
-                                <Legend wrapperStyle={{ fontSize: 11 }} />
-                                <Bar dataKey="Guide" fill="#059669" radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="Rental" fill="#0284c7" radius={[4, 4, 0, 0]} />
-                              </BarChart>
-                            </ResponsiveContainer>
+                          <div>
+                            <label className="text-xs font-semibold text-gray-700 block mb-1">Pesan Sanksi / Pelanggaran</label>
+                            <Input name="warnText" placeholder="Masukkan alasan pelanggaran (contoh: Membuang sampah di Ranupani, merusak tenda dome)" className="text-xs h-10" />
                           </div>
                         </div>
+                        <Button type="submit" className="bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-xl">
+                          <AlertTriangle className="size-4 mr-1.5" /> Kirim Peringatan Resmi
+                        </Button>
+                      </form>
 
-                        {/* Pie Chart - Status distribution */}
-                        <div className="space-y-2">
-                          <p className="text-xs font-bold text-gray-650 uppercase tracking-wider text-center">Distribusi Transaksi Berdasarkan Status</p>
-                          <div className="h-64 bg-white rounded-xl p-3 border border-gray-150 flex items-center justify-center">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                <Pie
-                                  data={[
-                                    { name: "Selesai", value: bookings.filter(b=>b.status==="Selesai").length + rentalOrders.filter(r=>r.status==="Selesai").length },
-                                    { name: "Sedang Berjalan", value: bookings.filter(b=>["Telah Dibayar","Berangkat","Basecamp","Summit"].includes(b.status)).length + rentalOrders.filter(r=>["Telah Dibayar","Sedang Disewa"].includes(r.status)).length },
-                                    { name: "Pending / Baru", value: bookings.filter(b=>["Menunggu Konfirmasi","Menunggu Pembayaran"].includes(b.status)).length + rentalOrders.filter(r=>["Menunggu Konfirmasi","Menunggu Pembayaran"].includes(r.status)).length },
-                                    { name: "Sengketa / Dispute", value: bookings.filter(b=>b.status==="Dispute").length + rentalOrders.filter(r=>r.status==="Dispute").length }
-                                  ].filter(d => d.value > 0)}
-                                  cx="50%"
-                                  cy="50%"
-                                  innerRadius={50}
-                                  outerRadius={75}
-                                  paddingAngle={4}
-                                  dataKey="value"
-                                >
-                                  {[
-                                    { name: "Selesai", color: "#10b981" },
-                                    { name: "Sedang Berjalan", color: "#0ea5e9" },
-                                    { name: "Pending / Baru", color: "#f59e0b" },
-                                    { name: "Sengketa / Dispute", color: "#ef4444" }
-                                  ].map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                  ))}
-                                </Pie>
-                                <Tooltip />
-                                <Legend wrapperStyle={{ fontSize: 10 }} />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
+                      <div className="space-y-3 pt-4 border-t border-gray-100">
+                        <h4 className="text-sm font-bold text-gray-805">Daftar Sanksi Aktif</h4>
+                        <div className="border border-gray-150 rounded-2xl overflow-hidden bg-white">
+                          <table className="w-full text-xs text-left text-gray-500">
+                            <thead className="bg-gray-50 text-[10px] text-gray-400 uppercase">
+                              <tr>
+                                <th scope="col" className="px-4 py-3">Nama Pengguna</th>
+                                <th scope="col" className="px-4 py-3">Detail Pelanggaran</th>
+                                <th scope="col" className="px-4 py-3">Tanggal Pelanggaran</th>
+                                <th scope="col" className="px-4 py-3 text-right">Aksi</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {userWarnings.length === 0 ? (
+                                <tr>
+                                  <td colSpan={4} className="px-4 py-8 text-center text-gray-400 italic">Tidak ada sanksi aktif di platform saat ini.</td>
+                                </tr>
+                              ) : (
+                                userWarnings.map((w) => (
+                                  <tr key={w.id} className="hover:bg-gray-50/50">
+                                    <td className="px-4 py-3 font-bold text-gray-800">{w.userName}</td>
+                                    <td className="px-4 py-3 text-red-700 font-semibold">{w.text}</td>
+                                    <td className="px-4 py-3 text-gray-500">{w.date}</td>
+                                    <td className="px-4 py-3 text-right">
+                                      <Button size="xs" variant="outline" className="text-green-700 border-green-200 hover:bg-green-50 h-7" onClick={() => {
+                                        removeWarning(w.id);
+                                        toast.success("Sanksi berhasil dicabut!");
+                                      }}>
+                                        Cabut Sanksi
+                                      </Button>
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                 )}
+
+                {/* 4. Tab Reports & Analytical Charts (Recharts) */}
+                {activeTab === "reports" && (() => {
+                  const completedBookingsPrice = bookings.filter((b) => b.status === "Selesai").reduce((a, c) => a + c.price, 0);
+                  const completedRentalsPrice = rentalOrders.filter((r) => r.status === "Selesai").reduce((a, c) => a + c.totalPrice, 0);
+                  const totalRevenueCommission = Math.round((completedBookingsPrice + completedRentalsPrice) * 0.1);
+
+                  const serverExpense = 50000;
+                  const adminExpense = 30000;
+                  const totalExpenses = serverExpense + adminExpense;
+                  const netIncome = totalRevenueCommission - totalExpenses;
+
+                  const escrowPending = bookings.filter(b=>["Telah Dibayar","Berangkat","Basecamp","Summit","Dispute"].includes(b.status)).reduce((a,c)=>a+c.price, 0) +
+                                         rentalOrders.filter(r=>["Telah Dibayar","Sedang Disewa","Dispute"].includes(r.status)).reduce((a,c)=>a+c.totalPrice, 0);
+
+                  return (
+                    <Card className="border border-gray-150 shadow-sm">
+                      <CardHeader className="pb-3 border-b border-gray-100">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                          <div>
+                            <CardTitle className="text-lg font-bold text-gray-800">ERP Laporan Keuangan Platform</CardTitle>
+                            <CardDescription className="text-xs">Sistem akuntansi terpadu double-entry untuk pengelolaan keuangan AyokMendaki.</CardDescription>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {[
+                              { id: "analytics", label: "Analitik", icon: <TrendingUp className="size-3.5" /> },
+                              { id: "general_ledger", label: "Jurnal Umum", icon: <FileText className="size-3.5" /> },
+                              { id: "profit_loss", label: "Laba Rugi", icon: <DollarSign className="size-3.5" /> },
+                              { id: "balance_sheet", label: "Neraca", icon: <Building className="size-3.5" /> },
+                              { id: "cash_flow", label: "Arus Kas", icon: <Activity className="size-3.5" /> }
+                            ].map((t) => (
+                              <Button
+                                key={t.id}
+                                variant={reportsSubTab === t.id ? "default" : "outline"}
+                                size="sm"
+                                className={`text-xs gap-1.5 h-8 font-semibold transition-all ${
+                                  reportsSubTab === t.id
+                                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    : "text-gray-650 hover:bg-gray-100 border-gray-200"
+                                }`}
+                                onClick={() => setReportsSubTab(t.id)}
+                              >
+                                {t.icon}
+                                {t.label}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pt-6 space-y-6">
+                        
+                        {/* 1. ANALYTICS SUBTAB */}
+                        {reportsSubTab === "analytics" && (
+                          <div className="space-y-8 animate-in fade-in duration-200">
+                            {/* Metrics cards grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                              {[
+                                { label: "Total Transaksi", val: `Rp ${(bookings.reduce((a,c)=>a+c.price, 0) + rentalOrders.reduce((a,c)=>a+c.totalPrice, 0)).toLocaleString("id-ID")}`, color: "border-gray-200 text-gray-800" },
+                                { label: "Transaksi Selesai", val: `Rp ${(bookings.filter(b=>b.status==="Selesai").reduce((a,c)=>a+c.price, 0) + rentalOrders.filter(r=>r.status==="Selesai").reduce((a,c)=>a+c.totalPrice, 0)).toLocaleString("id-ID")}`, color: "border-emerald-100 text-emerald-700 bg-emerald-50/20" },
+                                { label: "Escrow Pending", val: `Rp ${escrowPending.toLocaleString("id-ID")}`, color: "border-amber-100 text-amber-700 bg-amber-50/20" },
+                                { label: "Fee Platform (10%)", val: `Rp ${totalRevenueCommission.toLocaleString("id-ID")}`, color: "border-blue-100 text-blue-700 bg-blue-50/20" }
+                              ].map((m, idx) => (
+                                <div key={idx} className={`p-4 border rounded-xl shadow-xs text-center ${m.color}`}>
+                                  <p className="text-[10px] uppercase font-bold tracking-wider opacity-75">{m.label}</p>
+                                  <p className="text-base font-bold mt-1">{m.val}</p>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* Visual charts using Recharts */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                              {/* Bar chart - Revenue breakdown */}
+                              <div className="space-y-2">
+                                <p className="text-xs font-bold text-gray-650 uppercase tracking-wider text-center">Komparasi Jasa Guide vs Rental Alat</p>
+                                <div className="h-64 bg-white rounded-xl p-3 border border-gray-150">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart
+                                      data={[
+                                        { name: "Total Transaksi", Guide: bookings.reduce((a,c)=>a+c.price, 0), Rental: rentalOrders.reduce((a,c)=>a+c.totalPrice, 0) },
+                                        { name: "Lunas / Selesai", Guide: bookings.filter(b=>b.status==="Selesai").reduce((a,c)=>a+c.price, 0), Rental: rentalOrders.filter(r=>r.status==="Selesai").reduce((a,c)=>a+c.totalPrice, 0) }
+                                      ]}
+                                      margin={{ top: 10, right: 10, left: -20, bottom: 5 }}
+                                    >
+                                      <CartesianGrid strokeDasharray="3 3" />
+                                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                                      <YAxis tick={{ fontSize: 10 }} />
+                                      <Tooltip />
+                                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                                      <Bar dataKey="Guide" fill="#059669" radius={[4, 4, 0, 0]} />
+                                      <Bar dataKey="Rental" fill="#0284c7" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              </div>
+
+                              {/* Pie Chart - Status distribution */}
+                              <div className="space-y-2">
+                                <p className="text-xs font-bold text-gray-650 uppercase tracking-wider text-center">Distribusi Transaksi Berdasarkan Status</p>
+                                <div className="h-64 bg-white rounded-xl p-3 border border-gray-150 flex items-center justify-center">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                      <Pie
+                                        data={[
+                                          { name: "Selesai", value: bookings.filter(b=>b.status==="Selesai").length + rentalOrders.filter(r=>r.status==="Selesai").length },
+                                          { name: "Sedang Berjalan", value: bookings.filter(b=>["Telah Dibayar","Berangkat","Basecamp","Summit"].includes(b.status)).length + rentalOrders.filter(r=>["Telah Dibayar","Sedang Disewa"].includes(r.status)).length },
+                                          { name: "Pending / Baru", value: bookings.filter(b=>["Menunggu Konfirmasi","Menunggu Pembayaran"].includes(b.status)).length + rentalOrders.filter(r=>["Menunggu Konfirmasi","Menunggu Pembayaran"].includes(r.status)).length },
+                                          { name: "Sengketa / Dispute", value: bookings.filter(b=>b.status==="Dispute").length + rentalOrders.filter(r=>r.status==="Dispute").length }
+                                        ].filter(d => d.value > 0)}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={50}
+                                        outerRadius={75}
+                                        paddingAngle={4}
+                                        dataKey="value"
+                                      >
+                                        {[
+                                          { name: "Selesai", color: "#10b981" },
+                                          { name: "Sedang Berjalan", color: "#0ea5e9" },
+                                          { name: "Pending / Baru", color: "#f59e0b" },
+                                          { name: "Sengketa / Dispute", color: "#ef4444" }
+                                        ].map((entry, index) => (
+                                          <Cell key={`cell-${index}`} fill={entry.color} />
+                                        ))}
+                                      </Pie>
+                                      <Tooltip />
+                                      <Legend wrapperStyle={{ fontSize: 10 }} />
+                                    </PieChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 2. GENERAL LEDGER SUBTAB */}
+                        {reportsSubTab === "general_ledger" && (
+                          <div className="space-y-4 animate-in fade-in duration-200">
+                            <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+                              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Daftar Jurnal Umum (Double-Entry Ledger)</h4>
+                              <Badge className="bg-emerald-100 text-emerald-800 font-bold">Total Transaksi Jurnal: {ledgerEntries.length}</Badge>
+                            </div>
+                            <div className="overflow-x-auto border border-gray-150 rounded-xl">
+                              <table className="w-full text-xs text-left text-gray-500">
+                                <thead className="text-[10px] text-gray-400 uppercase bg-gray-55/50 border-b border-gray-150">
+                                  <tr>
+                                    <th scope="col" className="px-4 py-3 w-32">Tanggal & ID</th>
+                                    <th scope="col" className="px-4 py-3">Uraian / Keterangan</th>
+                                    <th scope="col" className="px-4 py-3">Akun Debet / Kredit</th>
+                                    <th scope="col" className="px-4 py-3 text-right">Debet (Rp)</th>
+                                    <th scope="col" className="px-4 py-3 text-right">Kredit (Rp)</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 bg-white">
+                                  {ledgerEntries.map((entry) => (
+                                    <tr key={entry.id} className="hover:bg-gray-50/30">
+                                      <td className="px-4 py-3 align-top font-medium text-gray-500 whitespace-nowrap">
+                                        <p className="font-bold text-gray-750">{entry.date}</p>
+                                        <p className="text-[9px] font-mono text-gray-400 mt-0.5">{entry.id.substring(0, 16)}</p>
+                                      </td>
+                                      <td className="px-4 py-3 align-top text-gray-750 font-semibold max-w-[200px] leading-relaxed">
+                                        {entry.description}
+                                      </td>
+                                      <td className="px-4 py-3 align-top" colSpan={3}>
+                                        <table className="w-full text-[11px]">
+                                          <tbody>
+                                            {entry.details.map((detail, dIdx) => (
+                                              <tr key={dIdx} className="border-none">
+                                                <td className={`py-1 ${detail.type === "credit" ? "pl-6 text-gray-500 italic" : "font-bold text-emerald-800"}`}>
+                                                  {detail.account}
+                                                </td>
+                                                <td className="text-right py-1 w-28 font-mono font-bold text-gray-700">
+                                                  {detail.type === "debit" ? `Rp ${detail.amount.toLocaleString("id-ID")}` : "-"}
+                                                </td>
+                                                <td className="text-right py-1 w-28 font-mono font-bold text-gray-750">
+                                                  {detail.type === "credit" ? `Rp ${detail.amount.toLocaleString("id-ID")}` : "-"}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 3. PROFIT & LOSS SUBTAB */}
+                        {reportsSubTab === "profit_loss" && (
+                          <div className="space-y-6 max-w-xl mx-auto p-6 border border-gray-150 rounded-2xl bg-gray-55/10 animate-in fade-in duration-200">
+                            <div className="text-center border-b border-gray-200 pb-4">
+                              <h4 className="text-sm font-bold text-gray-800">Laporan Laba Rugi</h4>
+                              <p className="text-[10px] text-gray-400 mt-1">Periode Juni 2026 &middot; Platform AyokMendaki</p>
+                            </div>
+                            
+                            <div className="space-y-4 text-xs font-semibold text-gray-750 font-sans">
+                              {/* Pendapatan */}
+                              <div className="border-b border-gray-150 pb-2">
+                                <p className="text-emerald-700 font-bold uppercase tracking-wider text-[10px]">I. Pendapatan Operasional</p>
+                                <div className="flex justify-between mt-2 font-medium">
+                                  <span>Komisi Jasa Guide Platform (10% Selesai)</span>
+                                  <span>Rp {Math.round(completedBookingsPrice * 0.1).toLocaleString("id-ID")}</span>
+                                </div>
+                                <div className="flex justify-between mt-1 font-medium">
+                                  <span>Komisi Rental Peralatan Platform (10% Selesai)</span>
+                                  <span>Rp {Math.round(completedRentalsPrice * 0.1).toLocaleString("id-ID")}</span>
+                                </div>
+                                <div className="flex justify-between mt-2 pt-2 border-t border-dashed border-gray-200 font-bold text-gray-800">
+                                  <span>Total Pendapatan Bersih</span>
+                                  <span>Rp {totalRevenueCommission.toLocaleString("id-ID")}</span>
+                                </div>
+                              </div>
+
+                              {/* Beban */}
+                              <div className="border-b border-gray-150 pb-2">
+                                <p className="text-red-700 font-bold uppercase tracking-wider text-[10px]">II. Beban Operasional</p>
+                                <div className="flex justify-between mt-2 font-medium">
+                                  <span>Beban Sewa Cloud Server Hosting</span>
+                                  <span>(Rp {serverExpense.toLocaleString("id-ID")})</span>
+                                </div>
+                                <div className="flex justify-between mt-1 font-medium">
+                                  <span>Beban Operasional & Administrasi Kantor</span>
+                                  <span>(Rp {adminExpense.toLocaleString("id-ID")})</span>
+                                </div>
+                                <div className="flex justify-between mt-2 pt-2 border-t border-dashed border-gray-200 font-bold text-gray-850">
+                                  <span>Total Beban Operasional</span>
+                                  <span>(Rp {totalExpenses.toLocaleString("id-ID")})</span>
+                                </div>
+                              </div>
+
+                              {/* Laba / Rugi Bersih */}
+                              <div className="flex justify-between p-3.5 bg-emerald-600 rounded-xl text-white font-bold text-sm">
+                                <span>LABA BERSIH (NET INCOME)</span>
+                                <span>Rp {netIncome.toLocaleString("id-ID")}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 4. BALANCE SHEET SUBTAB */}
+                        {reportsSubTab === "balance_sheet" && (
+                          <div className="space-y-6 animate-in fade-in duration-200">
+                            <div className="text-center border-b border-gray-100 pb-2">
+                              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Neraca Keuangan (Balance Sheet)</h4>
+                              <p className="text-[10px] text-gray-400">Posisi Keuangan Per Tanggal Hari Ini &middot; Platform AyokMendaki</p>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                              {/* Aset */}
+                              <div className="border border-gray-150 rounded-2xl p-4 bg-white space-y-3 shadow-xs">
+                                <p className="text-emerald-700 font-bold text-[10px] uppercase tracking-wider border-b border-gray-100 pb-2">ASET (ASSETS)</p>
+                                
+                                <div className="space-y-2 text-xs font-semibold text-gray-700">
+                                  <div className="flex justify-between font-medium">
+                                    <span>Kas & Bank Platform</span>
+                                    <span className="font-mono">Rp {(climberDeposit + guideWallet + vendorWallet + netIncome).toLocaleString("id-ID")}</span>
+                                  </div>
+                                  <div className="flex justify-between font-medium text-gray-500 pl-4 text-[11px] border-l-2 border-emerald-100">
+                                    <span>- Saldo Deposit Pendaki</span>
+                                    <span className="font-mono">Rp {climberDeposit.toLocaleString("id-ID")}</span>
+                                  </div>
+                                  <div className="flex justify-between font-medium text-gray-500 pl-4 text-[11px] border-l-2 border-emerald-100">
+                                    <span>- Saldo Dompet Mitra (Guide & Vendor)</span>
+                                    <span className="font-mono font-bold">Rp {(guideWallet + vendorWallet).toLocaleString("id-ID")}</span>
+                                  </div>
+                                  <div className="flex justify-between font-medium text-gray-500 pl-4 text-[11px] border-l-2 border-emerald-100">
+                                    <span>- Modal / Kas Laba Platform</span>
+                                    <span className="font-mono">Rp {netIncome.toLocaleString("id-ID")}</span>
+                                  </div>
+
+                                  <div className="flex justify-between font-medium pt-2 border-t border-dashed border-gray-100">
+                                    <span>Dana Escrow Platform (Rekening Bersama)</span>
+                                    <span className="font-mono">Rp {escrowPending.toLocaleString("id-ID")}</span>
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-between p-2.5 bg-emerald-50 text-emerald-800 font-bold text-xs rounded-xl border border-emerald-100 pt-2.5">
+                                  <span>TOTAL ASET (TOTAL ASSETS)</span>
+                                  <span className="font-mono">Rp {((climberDeposit + guideWallet + vendorWallet + netIncome) + escrowPending).toLocaleString("id-ID")}</span>
+                                </div>
+                              </div>
+
+                              {/* Liabilitas & Ekuitas */}
+                              <div className="border border-gray-150 rounded-2xl p-4 bg-white space-y-3 shadow-xs">
+                                <p className="text-amber-700 font-bold text-[10px] uppercase tracking-wider border-b border-gray-100 pb-2">KEWAJIBAN & EKUITAS (LIABILITIES & EQUITY)</p>
+                                
+                                <div className="space-y-2 text-xs font-semibold text-gray-700">
+                                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Liabilitas Jangka Pendek</div>
+                                  <div className="flex justify-between font-medium">
+                                    <span>Utang Deposit Pendaki (Kewajiban)</span>
+                                    <span className="font-mono">Rp {climberDeposit.toLocaleString("id-ID")}</span>
+                                  </div>
+                                  <div className="flex justify-between font-medium">
+                                    <span>Utang Dompet Guide & Vendor (Kewajiban)</span>
+                                    <span className="font-mono font-bold">Rp {(guideWallet + vendorWallet).toLocaleString("id-ID")}</span>
+                                  </div>
+                                  <div className="flex justify-between font-medium">
+                                    <span>Utang Escrow Titipan (Kewajiban)</span>
+                                    <span className="font-mono font-bold">Rp {escrowPending.toLocaleString("id-ID")}</span>
+                                  </div>
+
+                                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider pt-2 border-t border-dashed border-gray-100">Ekuitas</div>
+                                  <div className="flex justify-between font-medium">
+                                    <span>Laba Ditahan / Ekuitas Platform</span>
+                                    <span className="font-mono font-bold font-sans text-emerald-700">Rp {netIncome.toLocaleString("id-ID")}</span>
+                                  </div>
+                                </div>
+
+                                <div className="flex justify-between p-2.5 bg-amber-50 text-amber-800 font-bold text-xs rounded-xl border border-amber-100 pt-2.5">
+                                  <span>TOTAL LIABILITAS & EKUITAS</span>
+                                  <span className="font-mono">Rp {(climberDeposit + (guideWallet + vendorWallet) + escrowPending + netIncome).toLocaleString("id-ID")}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 p-3 bg-emerald-50/20 text-emerald-800 text-[10px] font-bold rounded-xl border border-emerald-100/50 justify-center">
+                              <Check className="size-4 shrink-0" />
+                              <span>Status Neraca: SEIMBANG (BALANCED) &middot; Persamaan Dasar Akuntansi (Aset = Kewajiban + Ekuitas) Terpenuhi.</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 5. CASH FLOW SUBTAB */}
+                        {reportsSubTab === "cash_flow" && (
+                          <div className="space-y-6 max-w-xl mx-auto p-6 border border-gray-150 rounded-2xl bg-gray-55/10 animate-in fade-in duration-200">
+                            <div className="text-center border-b border-gray-200 pb-4">
+                              <h4 className="text-sm font-bold text-gray-800">Laporan Arus Kas (Cash Flow Statement)</h4>
+                              <p className="text-[10px] text-gray-400 mt-1">Periode Juni 2026 &middot; Metode Langsung (Direct Method)</p>
+                            </div>
+                            
+                            <div className="space-y-4 text-xs font-semibold text-gray-750">
+                              {/* Arus Kas dari Aktivitas Operasional */}
+                              <div className="border-b border-gray-150 pb-2">
+                                <p className="text-emerald-700 font-bold uppercase tracking-wider text-[10px]">1. Arus Kas dari Aktivitas Operasional</p>
+                                <div className="flex justify-between mt-2 font-medium">
+                                  <span>Penerimaan Komisi Transaksi Selesai (10%)</span>
+                                  <span>Rp {totalRevenueCommission.toLocaleString("id-ID")}</span>
+                                </div>
+                                <div className="flex justify-between mt-1 font-medium">
+                                  <span>Pembayaran Beban Hosting & Server Cloud</span>
+                                  <span>(Rp {serverExpense.toLocaleString("id-ID")})</span>
+                                </div>
+                                <div className="flex justify-between mt-1 font-medium">
+                                  <span>Pembayaran Beban Operasional Kantor & Admin</span>
+                                  <span>(Rp {adminExpense.toLocaleString("id-ID")})</span>
+                                </div>
+                                <div className="flex justify-between mt-2 pt-2 border-t border-dashed border-gray-200 font-bold text-gray-800">
+                                  <span>Kas Bersih dari Aktivitas Operasional</span>
+                                  <span>Rp {(totalRevenueCommission - totalExpenses).toLocaleString("id-ID")}</span>
+                                </div>
+                              </div>
+
+                              {/* Arus Kas dari Aktivitas Pendanaan */}
+                              <div className="border-b border-gray-150 pb-2">
+                                <p className="text-amber-700 font-bold uppercase tracking-wider text-[10px]">2. Arus Kas dari Aktivitas Pendanaan (Mutasi Dompet)</p>
+                                <div className="flex justify-between mt-2 font-medium">
+                                  <span>Perubahan Bersih Deposit Pendaki (Top-Up vs Withdraw)</span>
+                                  <span>{climberDeposit - 500000 >= 0 ? "+" : ""} Rp {(climberDeposit - 500000).toLocaleString("id-ID")}</span>
+                                </div>
+                                <div className="flex justify-between mt-1 font-medium">
+                                  <span>Perubahan Bersih Dompet Guide (Payout vs Withdraw)</span>
+                                  <span>{guideWallet - 1500000 >= 0 ? "+" : ""} Rp {(guideWallet - 1500000).toLocaleString("id-ID")}</span>
+                                </div>
+                                <div className="flex justify-between mt-1 font-medium">
+                                  <span>Perubahan Bersih Dompet Vendor (Payout vs Withdraw)</span>
+                                  <span>{vendorWallet - 2000000 >= 0 ? "+" : ""} Rp {(vendorWallet - 2000000).toLocaleString("id-ID")}</span>
+                                </div>
+                                <div className="flex justify-between mt-2 pt-2 border-t border-dashed border-gray-200 font-bold text-gray-850">
+                                  <span>Kas Bersih dari Aktivitas Pendanaan</span>
+                                  <span>
+                                    {((climberDeposit - 500000) + (guideWallet - 1500000) + (vendorWallet - 2000000)) >= 0 ? "+" : ""} Rp {((climberDeposit - 500000) + (guideWallet - 1500000) + (vendorWallet - 2000000)).toLocaleString("id-ID")}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Rekonsiliasi Kas */}
+                              <div className="space-y-1.5 pt-2 border-b border-gray-150 pb-3">
+                                <div className="flex justify-between font-bold text-gray-800">
+                                  <span>Kenaikan (Penurunan) Kas Bersih</span>
+                                  <span>
+                                    {((totalRevenueCommission - totalExpenses) + ((climberDeposit - 500000) + (guideWallet - 1500000) + (vendorWallet - 2000000))) >= 0 ? "+" : ""} Rp {((totalRevenueCommission - totalExpenses) + ((climberDeposit - 500000) + (guideWallet - 1500000) + (vendorWallet - 2000000))).toLocaleString("id-ID")}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between font-medium">
+                                  <span>Kas & Setara Kas pada Awal Periode</span>
+                                  <span>Rp {(4000000).toLocaleString("id-ID")}</span>
+                                </div>
+                              </div>
+
+                              <div className="flex justify-between p-3.5 bg-emerald-600 rounded-xl text-white font-bold text-sm">
+                                <span>KAS & SETARA KAS AKHIR PERIODE</span>
+                                <span>Rp {(climberDeposit + guideWallet + vendorWallet + netIncome).toLocaleString("id-ID")}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
 
                 {/* 5. Tab Pengelolaan Kontak Tiket Gunung */}
                 {activeTab === "manage_mountains" && (
@@ -2389,6 +2929,91 @@ export function DashboardPage() {
                   </Card>
                 )}
               </>
+            )}
+
+            {/* ════════════════════ COMMON WALLET TAB ════════════════════ */}
+            {activeTab === "deposit_wallet" && (
+              <Card className="border border-gray-150 shadow-sm overflow-hidden font-sans bg-white">
+                <CardHeader className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border-b border-gray-100 py-5">
+                  <div className="flex justify-between items-center flex-wrap gap-3">
+                    <div>
+                      <CardTitle className="text-lg font-bold">
+                        {currentUser.role === "pendaki" ? "Dompet & Saldo Deposit Jaminan" : "Dompet Penghasilan & Saldo"}
+                      </CardTitle>
+                      <CardDescription className="text-xs text-gray-500">
+                        {currentUser.role === "pendaki" && "Kelola saldo jaminan pendakian Anda untuk otomatisasi denda pelanggaran atau klaim kerusakan."}
+                        {currentUser.role === "guide" && "Pantau pendapatan jasa trip pendakian Anda. Dana escrow dilepas otomatis setelah trip selesai."}
+                        {currentUser.role === "vendor" && "Pantau pendapatan rental peralatan kemping Anda. Dana dilepas otomatis setelah barang dikembalikan."}
+                      </CardDescription>
+                    </div>
+                    <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono px-3 py-1 font-extrabold text-sm shadow-sm flex items-center gap-1.5 rounded-xl">
+                      <Wallet className="size-4 shrink-0" />
+                      Rp {(currentUser.role === "pendaki" ? climberDeposit : currentUser.role === "guide" ? guideWallet : vendorWallet).toLocaleString("id-ID")}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-2xl border border-gray-100 bg-white shadow-xs space-y-3">
+                       <h4 className="text-sm font-bold text-gray-700">
+                         {currentUser.role === "pendaki" ? "Manajemen Saldo Deposit" : "Penarikan Dana Penghasilan"}
+                       </h4>
+                       <p className="text-xs text-gray-400 leading-relaxed font-normal">
+                         {currentUser.role === "pendaki" && "Saldo deposit digunakan untuk menjamin setiap pesanan booking guide atau rental. Pastikan saldo Anda selalu mencukupi (minimal Rp 100.000) sebelum melakukan pemesanan."}
+                         {currentUser.role === "guide" && "Anda dapat menarik dana hasil memandu pendakian secara langsung ke rekening bank terdaftar Anda."}
+                         {currentUser.role === "vendor" && "Anda dapat menarik dana hasil persewaan alat kemping secara langsung ke rekening bank terdaftar Anda."}
+                       </p>
+                       <div className="flex gap-2 pt-1.5">
+                         {currentUser.role === "pendaki" && (
+                           <Button
+                             size="sm"
+                             className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs flex-1 font-semibold rounded-xl h-9"
+                             onClick={() => setTopUpModalOpen(true)}
+                           >
+                             Top Up Saldo
+                           </Button>
+                         )}
+                         <Button
+                           size="sm"
+                           variant={currentUser.role === "pendaki" ? "outline" : "default"}
+                           className={`text-xs flex-1 ${currentUser.role !== "pendaki" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "border-gray-200 text-gray-700 hover:bg-gray-50"} font-semibold rounded-xl h-9`}
+                           onClick={() => setWithdrawModalOpen(true)}
+                         >
+                           Tarik Dana
+                         </Button>
+                       </div>
+                    </div>
+
+                    {currentUser.role === "pendaki" ? (
+                       <div className="p-4 rounded-2xl border border-red-100 bg-red-50/10 space-y-2.5">
+                         <h4 className="text-sm font-bold text-red-800 flex items-center gap-1">
+                           <AlertTriangle className="size-4 text-red-655 shrink-0" />
+                           Kebijakan Pelanggaran & Denda
+                         </h4>
+                         <ul className="text-[11px] text-gray-600 list-disc list-inside space-y-1 font-normal leading-relaxed">
+                           <li>Setiap transaksi menahan deposit jaminan sebesar <b>Rp 100.000</b>.</li>
+                           <li>Jika melanggar aturan gunung (sampah/flora) atau merusak alat, denda akan dilaporkan Mitra.</li>
+                           <li>Setelah <b>Super Admin menyetujui denda</b>, denda akan otomatis memotong deposit jaminan Anda.</li>
+                           <li>Sisa deposit (jika ada) otomatis dikembalikan penuh ke Saldo Dompet ini.</li>
+                         </ul>
+                       </div>
+                     ) : (
+                       <div className="p-4 rounded-2xl border border-emerald-100 bg-emerald-50/10 space-y-2.5">
+                         <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-1">
+                           <CheckCircle2 className="size-4 text-emerald-600 shrink-0" />
+                           Ketentuan & Penarikan Dana
+                         </h4>
+                         <ul className="text-[11px] text-gray-600 list-disc list-inside space-y-1 font-normal leading-relaxed">
+                           <li>Penarikan dana diproses fiktif secara instan ke rekening Anda.</li>
+                           <li>Batas minimal penarikan adalah <b>Rp 50.000</b>.</li>
+                           <li>Pendapatan dipotong fee administrasi bank Rp 0 (Gratis).</li>
+                           <li>Pastikan status rekening bank Anda sudah diverifikasi oleh Super Admin.</li>
+                         </ul>
+                       </div>
+                     )}
+                  </div>
+                </CardContent>
+              </Card>
             )}
 
             {/* ════════════════════ IN-APP CHAT WORKSPACE (COMMON TAB) ════════════════════ */}

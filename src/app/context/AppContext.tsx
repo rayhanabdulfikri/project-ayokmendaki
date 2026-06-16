@@ -29,6 +29,7 @@ export interface Mountain {
   ticketPrice: number;
   adminContactMethod: "Instagram" | "Website Resmi" | "WhatsApp";
   adminContactValue: string;
+  basecamps: string[];
 }
 
 export interface Guide {
@@ -94,6 +95,7 @@ export interface TripPackage {
 export interface Booking {
   id: string;
   mountainName: string;
+  basecamp?: string;
   guideId?: string;
   guideName?: string;
   pendakiName: string;
@@ -116,6 +118,14 @@ export interface Booking {
   fineNotes?: string;
   pendakiConfirmed?: boolean;
   partnerConfirmed?: boolean;
+}
+
+export interface UserWarning {
+  id: string;
+  userId: string;
+  userName: string;
+  text: string;
+  date: string;
 }
 
 export interface RentalOrder {
@@ -221,21 +231,32 @@ interface AppContextType {
   reportDamage: (type: "booking" | "rental", id: string, fineAmount: number, fineNotes: string) => void;
   resolveEscrowWithDeposit: (type: "booking" | "rental", id: string, approveFine: boolean) => void;
   climberDeposit: number;
+  guideWallet: number;
+  vendorWallet: number;
   depositTransactions: DepositTransaction[];
-  topUpDeposit: (amount: number) => void;
-  withdrawDeposit: (amount: number) => void;
+  userWarnings: UserWarning[];
+  topUpWallet: (role: "pendaki" | "guide" | "vendor", amount: number) => void;
+  withdrawWallet: (role: "pendaki" | "guide" | "vendor", amount: number) => void;
+  addWarning: (userId: string, text: string) => void;
+  removeWarning: (id: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 // ─── Initial Mock Data ────────────────────────────────────────────────────────
 const INITIAL_MOUNTAINS: Mountain[] = [
-  { name: "Gunung Semeru", location: "Jawa Timur", province: "Jawa Timur", elevation: "3.676 mdpl", elevationM: 3676, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1605860632725-fa88d0ce7a07?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.8, reviews: 2341, lat: -8.1077, lng: 112.9224, status: "Buka", ticketPrice: 35000, adminContactMethod: "Instagram", adminContactValue: "@semeru_official" },
-  { name: "Gunung Rinjani", location: "Lombok, NTB", province: "NTB", elevation: "3.726 mdpl", elevationM: 3726, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1589309736404-2e142a2acdf0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.9, reviews: 1876, lat: -8.4119, lng: 116.4675, status: "Buka", ticketPrice: 150000, adminContactMethod: "Website Resmi", adminContactValue: "https://bookingrinjani.id" },
-  { name: "Gunung Bromo", location: "Jawa Timur", province: "Jawa Timur", elevation: "2.329 mdpl", elevationM: 2329, difficulty: "Mudah", image: "https://images.unsplash.com/photo-1587651687979-77cf05d1b841?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.7, reviews: 3210, lat: -7.9425, lng: 112.9530, status: "Tutup", ticketPrice: 29000, adminContactMethod: "Website Resmi", adminContactValue: "https://bookingbromo.id" },
-  { name: "Gunung Prau", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "2.565 mdpl", elevationM: 2565, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1568516475772-498b4379829c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.6, reviews: 1543, lat: -7.1884, lng: 109.9219, status: "Buka", ticketPrice: 20000, adminContactMethod: "WhatsApp", adminContactValue: "+628123456789" },
-  { name: "Gunung Merbabu", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "3.145 mdpl", elevationM: 3145, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1562157778-81d81be57eec?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.7, reviews: 1987, lat: -7.4549, lng: 110.4332, status: "Buka", ticketPrice: 25000, adminContactMethod: "Website Resmi", adminContactValue: "https://tngmerbabu.id" },
-  { name: "Gunung Gede Pangrango", location: "Jawa Barat", province: "Jawa Barat", elevation: "2.958 mdpl", elevationM: 2958, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1510797215324-95aa89f43c33?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.5, reviews: 2156, lat: -6.7893, lng: 106.9852, status: "Buka", ticketPrice: 29000, adminContactMethod: "Instagram", adminContactValue: "@gedepangrango_official" },
+  { name: "Gunung Semeru", location: "Jawa Timur", province: "Jawa Timur", elevation: "3.676 mdpl", elevationM: 3676, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1605860632725-fa88d0ce7a07?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.8, reviews: 2341, lat: -8.1077, lng: 112.9224, status: "Buka", ticketPrice: 35000, adminContactMethod: "Instagram", adminContactValue: "@semeru_official", basecamps: ["Ranupani"] },
+  { name: "Gunung Rinjani", location: "Lombok, NTB", province: "NTB", elevation: "3.726 mdpl", elevationM: 3726, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1589309736404-2e142a2acdf0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.9, reviews: 1876, lat: -8.4119, lng: 116.4675, status: "Buka", ticketPrice: 150000, adminContactMethod: "Website Resmi", adminContactValue: "https://bookingrinjani.id", basecamps: ["Sembalun", "Senaru", "Timbanuh", "Aik Berik"] },
+  { name: "Gunung Bromo", location: "Jawa Timur", province: "Jawa Timur", elevation: "2.329 mdpl", elevationM: 2329, difficulty: "Mudah", image: "https://images.unsplash.com/photo-1587651687979-77cf05d1b841?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.7, reviews: 3210, lat: -7.9425, lng: 112.9530, status: "Tutup", ticketPrice: 29000, adminContactMethod: "Website Resmi", adminContactValue: "https://bookingbromo.id", basecamps: ["Cemoro Lawang", "Tosari", "Ngadas", "Tumpang"] },
+  { name: "Gunung Prau", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "2.565 mdpl", elevationM: 2565, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1568516475772-498b4379829c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.6, reviews: 1543, lat: -7.1884, lng: 109.9219, status: "Buka", ticketPrice: 20000, adminContactMethod: "WhatsApp", adminContactValue: "+628123456789", basecamps: ["Patakbanteng", "Dieng", "Kalilembu", "Wates", "Igirmranak"] },
+  { name: "Gunung Merbabu", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "3.145 mdpl", elevationM: 3145, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1562157778-81d81be57eec?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.7, reviews: 1987, lat: -7.4549, lng: 110.4332, status: "Buka", ticketPrice: 25000, adminContactMethod: "Website Resmi", adminContactValue: "https://tngmerbabu.id", basecamps: ["Selo", "Suwanting", "Wekas", "Cuntel", "Thekelan"] },
+  { name: "Gunung Gede Pangrango", location: "Jawa Barat", province: "Jawa Barat", elevation: "2.958 mdpl", elevationM: 2958, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1510797215324-95aa89f43c33?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.5, reviews: 2156, lat: -6.7893, lng: 106.9852, status: "Buka", ticketPrice: 29000, adminContactMethod: "Instagram", adminContactValue: "@gedepangrango_official", basecamps: ["Cibodas", "Gunung Putri", "Selabintana"] },
+  { name: "Gunung Slamet", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "3.428 mdpl", elevationM: 3428, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1629814249584-bd4d53cf0ee3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.6, reviews: 1421, lat: -7.2424, lng: 109.2248, status: "Buka", ticketPrice: 30000, adminContactMethod: "Instagram", adminContactValue: "@slamet_official", basecamps: ["Bambangan", "Guci", "Kaliwadas", "Baturraden", "Dipajaya"] },
+  { name: "Gunung Sindoro", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "3.136 mdpl", elevationM: 3136, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1600100397608-f010e9723049?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.7, reviews: 1120, lat: -7.3016, lng: 109.9972, status: "Buka", ticketPrice: 25000, adminContactMethod: "Website Resmi", adminContactValue: "https://bookingsindoro.id", basecamps: ["Kledung", "Alang-alang Sewu", "Bansari", "Sigedang"] },
+  { name: "Gunung Sumbing", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "3.371 mdpl", elevationM: 3371, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1620921008688-6f6eb3df2d59?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.8, reviews: 980, lat: -7.3838, lng: 110.0728, status: "Buka", ticketPrice: 25000, adminContactMethod: "Instagram", adminContactValue: "@sumbing_official", basecamps: ["Garung", "Bowongso", "Sipetung", "Mangli", "Adipuro"] },
+  { name: "Gunung Lawu", location: "Jawa Tengah/Timur", province: "Jawa Tengah", elevation: "3.265 mdpl", elevationM: 3265, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.8, reviews: 1860, lat: -7.6258, lng: 111.1947, status: "Buka", ticketPrice: 20000, adminContactMethod: "Website Resmi", adminContactValue: "https://bookinglawu.id", basecamps: ["Cemoro Sewu", "Cemoro Kandang", "Candi Cetho", "Singolangu"] },
+  { name: "Gunung Papandayan", location: "Garut, Jawa Barat", province: "Jawa Barat", elevation: "2.665 mdpl", elevationM: 2665, difficulty: "Mudah", image: "https://images.unsplash.com/photo-1596464716127-f2a82984de30?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.6, reviews: 2210, lat: -7.3197, lng: 107.7288, status: "Buka", ticketPrice: 35000, adminContactMethod: "WhatsApp", adminContactValue: "+628765432100", basecamps: ["Camp David"] },
+  { name: "Gunung Merapi", location: "Sleman, Yogyakarta", province: "Yogyakarta", elevation: "2.910 mdpl", elevationM: 2910, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1580137189272-c9379f8864fd?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.5, reviews: 1980, lat: -7.5407, lng: 110.4458, status: "Tutup", ticketPrice: 20000, adminContactMethod: "Website Resmi", adminContactValue: "https://tngmerapi.id", basecamps: ["Selo", "Plunyon"] }
 ];
 
 const INITIAL_GUIDES: Guide[] = [
@@ -243,13 +264,17 @@ const INITIAL_GUIDES: Guide[] = [
   { id: "guide2", name: "Budi Santoso", specialty: "Gunung Rinjani", location: "Lombok, NTB", experience: "10 Tahun", trips: 312, rating: 5.0, verified: true, price: 650000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Budi", certifications: ["APIGI", "HPI"], status: "Libur", specialtyMountains: ["Gunung Rinjani"], busyDates: ["2026-07-18"] },
   { id: "guide3", name: "Candra Wijaya", specialty: "Pendakian Jawa Tengah", location: "Magelang, Jawa Tengah", experience: "6 Tahun", trips: 178, rating: 4.8, verified: true, price: 450000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Candra", certifications: ["APIGI"], status: "Non-Aktif", specialtyMountains: ["Gunung Prau", "Gunung Merbabu"], busyDates: [] },
   { id: "guide4", name: "Doni Prasetyo", specialty: "Semua Gunung di Indonesia", location: "Bogor, Jawa Barat", experience: "7 Tahun", trips: 198, rating: 4.7, verified: false, price: 400000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Doni", certifications: ["APIGI", "SAR"], status: "Aktif", specialtyMountains: ["Semua Gunung"], busyDates: ["2026-07-10"] },
+  { id: "guide5", name: "Eko Wahyudi", specialty: "Gunung Slamet & Sindoro", location: "Wonosobo, Jawa Tengah", experience: "5 Tahun", trips: 112, rating: 4.8, verified: true, price: 450000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Eko", certifications: ["APIGI"], status: "Aktif", specialtyMountains: ["Gunung Slamet", "Gunung Sindoro"], busyDates: [] },
+  { id: "guide6", name: "Fajar Pratama", specialty: "Gunung Lawu & Sumbing", location: "Solo, Jawa Tengah", experience: "9 Tahun", trips: 220, rating: 4.9, verified: true, price: 500000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Fajar", certifications: ["APIGI", "HPI"], status: "Aktif", specialtyMountains: ["Gunung Lawu", "Gunung Sumbing"], busyDates: [] },
+  { id: "guide7", name: "Gilang Ramadhan", specialty: "Gunung Papandayan & Gede", location: "Bandung, Jawa Barat", experience: "4 Tahun", trips: 88, rating: 4.7, verified: true, price: 400000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Gilang", certifications: ["APIGI"], status: "Aktif", specialtyMountains: ["Gunung Papandayan", "Gunung Gede Pangrango"], busyDates: [] },
+  { id: "guide8", name: "Hendra Wijaya", specialty: "Gunung Rinjani & Semeru", location: "Surabaya, Jawa Timur", experience: "12 Tahun", trips: 410, rating: 5.0, verified: true, price: 700000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Hendra", certifications: ["APIGI", "SAR", "HPI"], status: "Aktif", specialtyMountains: ["Gunung Rinjani", "Gunung Semeru"], busyDates: [] }
 ];
 
 const INITIAL_VENDORS: Vendor[] = [
-  { id: "vendor1", name: "Outdoor Adventure Store", location: "Malang, Jawa Timur", rating: 4.8, verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=outdoor", distances: { "Gunung Semeru": 3.5, "Gunung Bromo": 8.0, "Gunung Rinjani": 380, "Gunung Prau": 350, "Gunung Merbabu": 320, "Gunung Gede Pangrango": 710 } },
-  { id: "vendor2", name: "Summit Gear Rental", location: "Lombok, NTB", rating: 4.9, verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=summit", distances: { "Gunung Rinjani": 2.1, "Gunung Semeru": 340, "Gunung Bromo": 330, "Gunung Prau": 420, "Gunung Merbabu": 410, "Gunung Gede Pangrango": 890 } },
-  { id: "vendor3", name: "Mountain Camp Store", location: "Wonosobo, Jawa Tengah", rating: 4.7, verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=mountain", distances: { "Gunung Prau": 9.2, "Gunung Merbabu": 28.0, "Gunung Semeru": 280, "Gunung Bromo": 270, "Gunung Rinjani": 520, "Gunung Gede Pangrango": 310 } },
-  { id: "vendor4", name: "Cianjur Lestari Rental", location: "Cianjur, Jawa Barat", rating: 4.5, verified: false, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=cianjur", distances: { "Gunung Gede Pangrango": 5.4, "Gunung Prau": 290, "Gunung Semeru": 690, "Gunung Bromo": 680, "Gunung Rinjani": 910, "Gunung Merbabu": 410 } },
+  { id: "vendor1", name: "Outdoor Adventure Store", location: "Malang, Jawa Timur", rating: 4.8, verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=outdoor", distances: { "Gunung Semeru": 3.5, "Gunung Bromo": 8.0, "Gunung Rinjani": 380, "Gunung Prau": 350, "Gunung Merbabu": 320, "Gunung Gede Pangrango": 710, "Gunung Slamet": 310, "Gunung Sindoro": 280, "Gunung Sumbing": 270, "Gunung Lawu": 180, "Gunung Papandayan": 610, "Gunung Merapi": 290 } },
+  { id: "vendor2", name: "Summit Gear Rental", location: "Lombok, NTB", rating: 4.9, verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=summit", distances: { "Gunung Rinjani": 2.1, "Gunung Semeru": 340, "Gunung Bromo": 330, "Gunung Prau": 420, "Gunung Merbabu": 410, "Gunung Gede Pangrango": 890, "Gunung Slamet": 480, "Gunung Sindoro": 450, "Gunung Sumbing": 440, "Gunung Lawu": 350, "Gunung Papandayan": 820, "Gunung Merapi": 400 } },
+  { id: "vendor3", name: "Mountain Camp Store", location: "Wonosobo, Jawa Tengah", rating: 4.7, verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=mountain", distances: { "Gunung Prau": 9.2, "Gunung Merbabu": 28.0, "Gunung Semeru": 280, "Gunung Bromo": 270, "Gunung Rinjani": 520, "Gunung Gede Pangrango": 310, "Gunung Slamet": 45, "Gunung Sindoro": 15, "Gunung Sumbing": 25, "Gunung Lawu": 120, "Gunung Papandayan": 240, "Gunung Merapi": 65 } },
+  { id: "vendor4", name: "Cianjur Lestari Rental", location: "Cianjur, Jawa Barat", rating: 4.5, verified: false, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=cianjur", distances: { "Gunung Gede Pangrango": 5.4, "Gunung Prau": 290, "Gunung Semeru": 690, "Gunung Bromo": 680, "Gunung Rinjani": 910, "Gunung Merbabu": 410, "Gunung Slamet": 240, "Gunung Sindoro": 270, "Gunung Sumbing": 280, "Gunung Lawu": 380, "Gunung Papandayan": 72, "Gunung Merapi": 300 } },
 ];
 
 const INITIAL_EQUIPMENT: EquipmentItem[] = [
@@ -261,6 +286,16 @@ const INITIAL_EQUIPMENT: EquipmentItem[] = [
   { id: "eq6", name: "Sleeping Bag -5°C", description: "Tahan suhu -5°C, ringan dan hangat", price: 30000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.8, available: 20, category: "other" },
   { id: "eq7", name: "Kompor Camping + Gas", description: "Kompor portable dengan tabung gas 230gr", price: 25000, vendorId: "vendor2", vendorName: "Summit Gear Rental", rating: 4.7, available: 18, category: "other" },
   { id: "eq8", name: "Trekking Pole Set", description: "Adjustable, anti-slip grip, aluminium", price: 25000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.5, available: 15, category: "other" },
+  { id: "eq9", name: "Cooking Set Nesting", description: "Panci camping anti lengket, 1 set isi 4 item", price: 20000, vendorId: "vendor1", vendorName: "Outdoor Adventure Store", rating: 4.8, available: 10, category: "other" },
+  { id: "eq10", name: "Headlamp LED Rechargeable", description: "Lampu kepala rechargeable, waterproof, 3 mode sinar", price: 15000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.7, available: 25, category: "other" },
+  { id: "eq11", name: "Jaket Windbreaker TNF", description: "Jaket windproof & waterproof untuk cuaca dingin", price: 35000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.6, available: 12, category: "other" },
+  { id: "eq12", name: "Matras Angin Eiger", description: "Kasur angin tiup manual, empuk & menahan dingin tanah", price: 20000, vendorId: "vendor2", vendorName: "Summit Gear Rental", rating: 4.9, available: 10, category: "other" },
+  { id: "eq13", name: "Flysheet 3x4 meter", description: "Tenda peneduh anti air pelindung tenda utama", price: 15000, vendorId: "vendor1", vendorName: "Outdoor Adventure Store", rating: 4.7, available: 8, category: "other" },
+  { id: "eq14", name: "Sleeping Pad Foam", description: "Matras busa lipat aluminium foil pemantul panas tubuh", price: 10000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.5, available: 30, category: "other" },
+  { id: "eq15", name: "Portable Gas Refill 230g", description: "Tabung gas butana portable untuk memasak", price: 10000, vendorId: "vendor2", vendorName: "Summit Gear Rental", rating: 4.8, available: 50, category: "other" },
+  { id: "eq16", name: "Peta Navigasi & Kompas", description: "Kompas bidik militer beserta peta topografi", price: 15000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.6, available: 5, category: "other" },
+  { id: "eq17", name: "First Aid Kit (P3K) Lengkap", description: "Kotak obat standar pendakian dengan perban & antiseptik", price: 10000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.9, available: 20, category: "other" },
+  { id: "eq18", name: "Sepatu Trekking Size 42", description: "Sepatu hiking grip kuat, anti selip & water resistant", price: 50000, vendorId: "vendor1", vendorName: "Outdoor Adventure Store", rating: 4.7, available: 4, category: "other" }
 ];
 
 const INITIAL_PACKAGES: TripPackage[] = [
@@ -307,6 +342,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [climberDeposit, setClimberDeposit] = useState<number>(() => {
     const saved = localStorage.getItem("ayok_climber_deposit");
     return saved ? parseInt(saved) : 500000;
+  });
+
+  const [guideWallet, setGuideWallet] = useState<number>(() => {
+    const saved = localStorage.getItem("ayok_guide_wallet");
+    return saved ? parseInt(saved) : 1500000;
+  });
+
+  const [vendorWallet, setVendorWallet] = useState<number>(() => {
+    const saved = localStorage.getItem("ayok_vendor_wallet");
+    return saved ? parseInt(saved) : 2000000;
+  });
+
+  const [userWarnings, setUserWarnings] = useState<UserWarning[]>(() => {
+    const saved = localStorage.getItem("ayok_user_warnings");
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [depositTransactions, setDepositTransactions] = useState<DepositTransaction[]>(() => {
@@ -367,6 +417,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => { localStorage.setItem("ayok_chats", JSON.stringify(chatMessages)); }, [chatMessages]);
   useEffect(() => { localStorage.setItem("ayok_verifications", JSON.stringify(verificationRequests)); }, [verificationRequests]);
   useEffect(() => { localStorage.setItem("ayok_climber_deposit", climberDeposit.toString()); }, [climberDeposit]);
+  useEffect(() => { localStorage.setItem("ayok_guide_wallet", guideWallet.toString()); }, [guideWallet]);
+  useEffect(() => { localStorage.setItem("ayok_vendor_wallet", vendorWallet.toString()); }, [vendorWallet]);
+  useEffect(() => { localStorage.setItem("ayok_user_warnings", JSON.stringify(userWarnings)); }, [userWarnings]);
   useEffect(() => { localStorage.setItem("ayok_deposit_transactions", JSON.stringify(depositTransactions)); }, [depositTransactions]);
 
   // ─── Booking Actions ────────────────────────────────────────────────────────
@@ -753,6 +806,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...prevTx
             ]);
           }
+
+          // Payout to Guide (90% + fine)
+          const platformFee = Math.round(b.price * 0.1);
+          const basePayout = b.price - platformFee;
+          const finalPayout = basePayout + (approveFine ? fine : 0);
+          setGuideWallet((prev) => prev + finalPayout);
+          setDepositTransactions((prevTx) => [
+            {
+              id: "tx_" + Math.random().toString(36).substring(2, 9),
+              type: "refund",
+              amount: finalPayout,
+              description: `Penerimaan sewa jasa trip ${b.mountainName} &middot; Pendaki: ${b.pendakiName} ${approveFine ? `(Termasuk denda Rp ${fine.toLocaleString("id-ID")})` : ""}`,
+              createdAt: dateStr
+            },
+            ...prevTx
+          ]);
           
           return {
             ...b,
@@ -827,6 +896,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...prevTx
             ]);
           }
+
+          // Payout to Vendor (90% + fine)
+          const platformFee = Math.round(r.totalPrice * 0.1);
+          const basePayout = r.totalPrice - platformFee;
+          const finalPayout = basePayout + (approveFine ? fine : 0);
+          setVendorWallet((prev) => prev + finalPayout);
+          setDepositTransactions((prevTx) => [
+            {
+              id: "tx_" + Math.random().toString(36).substring(2, 9),
+              type: "refund",
+              amount: finalPayout,
+              description: `Penerimaan sewa alat ${r.itemName} &middot; Pendaki: ${r.pendakiName} ${approveFine ? `(Termasuk denda Rp ${fine.toLocaleString("id-ID")})` : ""}`,
+              createdAt: dateStr
+            },
+            ...prevTx
+          ]);
           
           return {
             ...r,
@@ -839,38 +924,79 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const topUpDeposit = (amount: number) => {
+  const topUpWallet = (role: "pendaki" | "guide" | "vendor", amount: number) => {
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     
-    setClimberDeposit((prev) => prev + amount);
+    if (role === "pendaki") {
+      setClimberDeposit((prev) => prev + amount);
+    } else if (role === "guide") {
+      setGuideWallet((prev) => prev + amount);
+    } else {
+      setVendorWallet((prev) => prev + amount);
+    }
+
     setDepositTransactions((prev) => [
       {
         id: "tx_" + Math.random().toString(36).substring(2, 9),
         type: "topup",
         amount,
-        description: "Top Up Saldo Deposit",
+        description: `Top Up Saldo Dompet (${role.toUpperCase()})`,
         createdAt: dateStr
       },
       ...prev
     ]);
   };
 
-  const withdrawDeposit = (amount: number) => {
+  const withdrawWallet = (role: "pendaki" | "guide" | "vendor", amount: number) => {
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     
-    setClimberDeposit((prev) => Math.max(0, prev - amount));
+    if (role === "pendaki") {
+      setClimberDeposit((prev) => Math.max(0, prev - amount));
+    } else if (role === "guide") {
+      setGuideWallet((prev) => Math.max(0, prev - amount));
+    } else {
+      setVendorWallet((prev) => Math.max(0, prev - amount));
+    }
+
     setDepositTransactions((prev) => [
       {
         id: "tx_" + Math.random().toString(36).substring(2, 9),
         type: "withdraw",
         amount,
-        description: "Penarikan Saldo Deposit",
+        description: `Penarikan Dana Dompet (${role.toUpperCase()})`,
         createdAt: dateStr
       },
       ...prev
     ]);
+  };
+
+  const addWarning = (userId: string, text: string) => {
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    let uName = "Pengguna";
+    if (userId === "pendaki1") uName = "Zaki Firdaus";
+    else if (userId === "guide1") uName = "Ahmad Hidayat";
+    else if (userId === "vendor1") uName = "Outdoor Adventure Store";
+    else {
+      const g = guides.find((x) => x.id === userId);
+      if (g) uName = g.name;
+    }
+
+    const newWarning: UserWarning = {
+      id: "warn_" + Math.random().toString(36).substring(2, 9),
+      userId,
+      userName: uName,
+      text,
+      date: dateStr
+    };
+    setUserWarnings((prev) => [newWarning, ...prev]);
+  };
+
+  const removeWarning = (id: string) => {
+    setUserWarnings((prev) => prev.filter((w) => w.id !== id));
   };
 
   return (
@@ -912,9 +1038,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reportDamage,
         resolveEscrowWithDeposit,
         climberDeposit,
+        guideWallet,
+        vendorWallet,
         depositTransactions,
-        topUpDeposit,
-        withdrawDeposit,
+        userWarnings,
+        topUpWallet,
+        withdrawWallet,
+        addWarning,
+        removeWarning,
       }}
     >
       {children}

@@ -137,6 +137,7 @@ export function GunungPage() {
   const [bookingMountain, setBookingMountain] = useState<any>(null);
   const [bookingDate, setBookingDate] = useState("");
   const [climbersCount, setClimbersCount] = useState(1);
+  const [selectedBasecamp, setSelectedBasecamp] = useState("");
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const leafletMapRef   = useRef<any>(null);
@@ -154,6 +155,7 @@ export function GunungPage() {
     setBookingMountain(mountain);
     setBookingDate("");
     setClimbersCount(1);
+    setSelectedBasecamp("");
     setBookingModalOpen(true);
   };
 
@@ -166,11 +168,16 @@ export function GunungPage() {
       toast.error("Jumlah pendaki minimal 1 orang.");
       return;
     }
+    if (bookingMountain.basecamps && bookingMountain.basecamps.length > 0 && !selectedBasecamp) {
+      toast.error("Silakan pilih basecamp keberangkatan.");
+      return;
+    }
 
     const price = bookingMountain.ticketPrice * climbersCount;
     
     addBooking({
       mountainName: bookingMountain.name,
+      basecamp: selectedBasecamp || undefined,
       pendakiId: currentUser?.id || "guest",
       pendakiName: currentUser?.name || "Pendaki Demo",
       bookingDate,
@@ -873,6 +880,22 @@ export function GunungPage() {
                   />
                 </div>
               </div>
+
+              {bookingMountain.basecamps && bookingMountain.basecamps.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-1">Pilih Jalur / Basecamp Pendakian</label>
+                  <select
+                    className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 font-medium"
+                    value={selectedBasecamp}
+                    onChange={(e) => setSelectedBasecamp(e.target.value)}
+                  >
+                    <option value="">-- Pilih Basecamp --</option>
+                    {bookingMountain.basecamps.map((bc: string) => (
+                      <option key={bc} value={bc}>{bc}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               
               <div className="border-t border-gray-150 pt-3 flex justify-between items-center">
                 <div>

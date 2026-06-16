@@ -17,7 +17,8 @@ import {
   Calendar,
   DollarSign,
   Mountain as MountainIcon,
-  X
+  X,
+  Award
 } from "lucide-react";
 import { useApp } from "../context/AppContext";
 import { useNavigate } from "react-router";
@@ -40,6 +41,7 @@ export function GuidePage() {
   const [proposedPrice, setProposedPrice] = useState("");
   const [negoNotes, setNegoNotes] = useState("");
   const [climbersCount, setClimbersCount] = useState(1);
+  const [selectedBasecamp, setSelectedBasecamp] = useState("");
 
   const filterOptions = ["Semua", "Rating Tertinggi", "Harga Terendah", "Paling Berpengalaman", "Jawa Timur", "Jawa Tengah"];
 
@@ -97,6 +99,7 @@ export function GuidePage() {
     setProposedPrice(guide.price.toString());
     setNegoNotes("");
     setClimbersCount(1);
+    setSelectedBasecamp("");
     setBookingModalOpen(true);
   };
 
@@ -114,6 +117,12 @@ export function GuidePage() {
       return;
     }
 
+    const selectedMtnObj = mountains.find((m) => m.name === targetMountain);
+    if (selectedMtnObj && selectedMtnObj.basecamps && selectedMtnObj.basecamps.length > 0 && !selectedBasecamp) {
+      toast.error("Silakan pilih basecamp keberangkatan.");
+      return;
+    }
+
     if (currentUser && currentUser.role === "pendaki" && (climberDeposit || 0) < 100000) {
       toast.error("Saldo deposit Anda kurang dari Rp 100.000. Silakan lakukan Top Up di Dashboard terlebih dahulu.");
       return;
@@ -127,6 +136,7 @@ export function GuidePage() {
     // 1. Create Booking in Pending status
     const bookingId = addBooking({
       mountainName: targetMountain,
+      basecamp: selectedBasecamp || undefined,
       guideId: bookingGuide.id,
       guideName: bookingGuide.name,
       pendakiId: currentUser?.id || "guest",
@@ -138,13 +148,13 @@ export function GuidePage() {
     });
 
     // 2. If price is different, create negotiation entry
-    if (priceProposed !== bookingGuide.price) {
+    if (basePriceProposed !== bookingGuide.price) {
       createNegotiation({
         type: "guide",
         orderId: bookingId,
         itemName: `Jasa Guide ${bookingGuide.name} (${targetMountain})`,
         originalPrice: bookingGuide.price,
-        proposedPrice: priceProposed,
+        proposedPrice: basePriceProposed,
         senderName: currentUser?.name || "Pendaki Demo",
         recipientId: bookingGuide.id,
         recipientName: bookingGuide.name,
@@ -540,6 +550,26 @@ export function GuidePage() {
                   />
                 </div>
               </div>
+
+              {(() => {
+                const selectedMtn = mountains.find((m) => m.name === targetMountain);
+                if (!selectedMtn || !selectedMtn.basecamps || selectedMtn.basecamps.length === 0) return null;
+                return (
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 block mb-1">Pilih Jalur / Basecamp Pendakian</label>
+                    <select
+                      className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 font-medium"
+                      value={selectedBasecamp}
+                      onChange={(e) => setSelectedBasecamp(e.target.value)}
+                    >
+                      <option value="">-- Pilih Basecamp --</option>
+                      {selectedMtn.basecamps.map((bc: string) => (
+                        <option key={bc} value={bc}>{bc}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="text-xs font-semibold text-gray-700 block mb-1">Harga Awal Guide (Per Orang / Hari)</label>
