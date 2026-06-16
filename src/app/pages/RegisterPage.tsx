@@ -4,7 +4,7 @@ import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Mountain, Eye, EyeOff, Lock, Mail, User, Phone, AlertCircle, CheckCircle2, Shield, Award, MapPin } from "lucide-react";
 import { Link, useNavigate } from "react-router";
-import { useApp, UserRole, User } from "../context/AppContext";
+import { useApp, UserRole } from "../context/AppContext";
 import { toast } from "sonner";
 
 interface PasswordStrength {
