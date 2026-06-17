@@ -6,6 +6,8 @@ import { Mountain, Eye, EyeOff, Lock, Mail, AlertCircle, Sparkles } from "lucide
 import { Link, useNavigate } from "react-router";
 import { useApp, User } from "../context/AppContext";
 import { toast } from "sonner";
+import { supabase } from "../../supabase";
+
 
 const DEMO_ACCOUNTS: User[] = [
   { id: "pendaki1", name: "Zaki Firdaus", email: "zaki@ayokmendaki.com", role: "pendaki", phone: "08123456789", verified: true, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Zaki" },
@@ -44,29 +46,77 @@ export function LoginPage() {
 
     setLoading(true);
     
-    // Simulate auth & match demo accounts
-    setTimeout(() => {
-      setLoading(false);
-      const matchedUser = DEMO_ACCOUNTS.find(u => u.email.toLowerCase() === email.toLowerCase());
-      
-      if (matchedUser) {
-        setCurrentUser(matchedUser);
-        toast.success(`Selamat datang kembali, ${matchedUser.name}!`);
-        navigate("/dashboard");
-      } else {
-        // Mock login successful for any custom credentials as a Pendaki
-        const customUser: User = {
-          id: "custom_" + Math.random().toString(36).substring(2, 9),
-          name: email.split("@")[0],
-          email: email,
-          role: "pendaki",
-          phone: "08120000000",
-          verified: true,
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`
-        };
-        setCurrentUser(customUser);
-        toast.success(`Akun baru dibuat secara fiktif untuk demo! Selamat datang, ${customUser.name}`);
-        navigate("/dashboard");
+    setTimeout(async () => {
+      try {
+        // 1. Query Supabase users table
+        const { data: matchedUser, error: queryErr } = await supabase
+          .from("users")
+          .select("*")
+          .eq("email", email.toLowerCase())
+          .single();
+
+        if (queryErr && queryErr.code !== "PGRST116") {
+          throw queryErr;
+        }
+
+        if (matchedUser) {
+          if (matchedUser.status === "suspended") {
+            setError("Akun Anda ditangguhkan. Silakan hubungi admin.");
+            setLoading(false);
+            return;
+          }
+          setCurrentUser({
+            id: matchedUser.id,
+            name: matchedUser.name,
+            email: matchedUser.email,
+            role: matchedUser.role,
+            phone: matchedUser.phone,
+            verified: matchedUser.verified,
+            avatar: matchedUser.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${matchedUser.name}`,
+            status: matchedUser.status
+          });
+          setLoading(false);
+          toast.success(`Selamat datang kembali, ${matchedUser.name}!`);
+          navigate("/dashboard");
+        } else {
+          // If user doesn't exist, create user profile dynamically in Supabase as a Pendaki
+          const newId = "custom_" + Math.random().toString(36).substring(2, 9);
+          const customUser: User = {
+            id: newId,
+            name: email.split("@")[0],
+            email: email,
+            role: "pendaki",
+            phone: "08120000000",
+            verified: true,
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
+            status: "active"
+          };
+
+          await supabase.from("users").insert({
+            id: customUser.id,
+            name: customUser.name,
+            email: customUser.email,
+            role: customUser.role,
+            phone: customUser.phone,
+            verified: customUser.verified,
+            avatar: customUser.avatar,
+            status: customUser.status
+          });
+
+          await supabase.from("wallets").insert({
+            user_id: customUser.id,
+            balance: 500000
+          });
+
+          setCurrentUser(customUser);
+          setLoading(false);
+          toast.success(`Akun baru dibuat secara otomatis! Selamat datang, ${customUser.name}`);
+          navigate("/dashboard");
+        }
+      } catch (err: any) {
+        setLoading(false);
+        console.error("Error logging in:", err);
+        setError("Gagal masuk: " + err.message);
       }
     }, 1200);
   };

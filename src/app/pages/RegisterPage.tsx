@@ -6,6 +6,8 @@ import { Mountain, Eye, EyeOff, Lock, Mail, User, Phone, AlertCircle, CheckCircl
 import { Link, useNavigate } from "react-router";
 import { useApp, UserRole } from "../context/AppContext";
 import { toast } from "sonner";
+import { supabase } from "../../supabase";
+
 
 interface PasswordStrength {
   score: number;
@@ -116,50 +118,102 @@ export function RegisterPage() {
     if (!validate()) return;
     setLoading(true);
 
-    setTimeout(() => {
-      setLoading(false);
-      
+    setTimeout(async () => {
       const newUserId = "user_" + Math.random().toString(36).substring(2, 9);
       
-      if (selectedRole === "guide") {
-        // Add guide as unverified in the state
-        const newGuideObj = {
+      try {
+        // 1. Create User in Supabase
+        const { error: userErr } = await supabase.from("users").insert({
           id: newUserId,
-          name: form.name,
-          specialty: form.specialty,
-          location: "Kota Malang, Jawa Timur",
-          experience: form.experience + " Tahun",
-          trips: 0,
-          rating: 5.0,
-          price: parseInt(form.price) || 450000,
+          name: selectedRole === "vendor" ? form.storeName : form.name,
+          email: form.email,
+          role: selectedRole,
+          phone: form.phone,
+          verified: selectedRole === "pendaki",
           avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${form.name}`,
-          certifications: form.certifications,
-          status: "Non-Aktif" as const,
-          verified: false
-        };
-        setGuides((prev) => [newGuideObj, ...prev]);
+          status: "active"
+        });
 
-        // Submit verification request to admin
-        addVerificationRequest({
-          userId: newUserId,
-          userName: form.name,
-          role: "guide",
-          documentName: `Sertifikasi ${form.certifications.join(" & ")}`,
-          documentImage: form.docImage,
+        if (userErr) throw userErr;
+
+        // 2. Initialize Wallet
+        await supabase.from("wallets").insert({
+          user_id: newUserId,
+          balance: 0
         });
-      } else if (selectedRole === "vendor") {
-        // Submit verification request for vendor
-        addVerificationRequest({
-          userId: newUserId,
-          userName: form.storeName,
-          role: "vendor",
-          documentName: `NIB / Izin Usaha UKM: ${form.nib}`,
-          documentImage: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400",
-        });
+
+        if (selectedRole === "guide") {
+          // Add Guide profile
+          const { error: guideErr } = await supabase.from("guides").insert({
+            id: newUserId,
+            specialty: form.specialty,
+            location: "Kota Malang, Jawa Timur",
+            experience: form.experience + " Tahun",
+            trips: 0,
+            rating: 5.0,
+            price: parseInt(form.price) || 450000,
+            certifications: form.certifications,
+            status: "Non-Aktif",
+            specialty_mountains: [form.specialty],
+            busy_dates: [],
+            group_discount_enabled: false
+          });
+
+          if (guideErr) throw guideErr;
+
+          // Add to local state (optimistic)
+          const newGuideObj = {
+            id: newUserId,
+            name: form.name,
+            specialty: form.specialty,
+            location: "Kota Malang, Jawa Timur",
+            experience: form.experience + " Tahun",
+            trips: 0,
+            rating: 5.0,
+            price: parseInt(form.price) || 450000,
+            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${form.name}`,
+            certifications: form.certifications,
+            status: "Non-Aktif" as const,
+            verified: false
+          };
+          setGuides((prev) => [newGuideObj, ...prev]);
+
+          // Submit verification request
+          addVerificationRequest({
+            userId: newUserId,
+            userName: form.name,
+            role: "guide",
+            documentName: `Sertifikasi ${form.certifications.join(" & ")}`,
+            documentImage: form.docImage,
+          });
+        } else if (selectedRole === "vendor") {
+          // Add Vendor profile
+          const { error: vendorErr } = await supabase.from("vendors").insert({
+            id: newUserId,
+            location: form.address,
+            distances: {}
+          });
+
+          if (vendorErr) throw vendorErr;
+
+          // Submit verification request for vendor
+          addVerificationRequest({
+            userId: newUserId,
+            userName: form.storeName,
+            role: "vendor",
+            documentName: `NIB / Izin Usaha UKM: ${form.nib}`,
+            documentImage: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400",
+          });
+        }
+
+        setLoading(false);
+        setSuccess(true);
+        toast.success("Registrasi berhasil diajukan!");
+      } catch (err: any) {
+        setLoading(false);
+        console.error("Error registering user:", err);
+        toast.error("Gagal mendaftarkan akun: " + err.message);
       }
-
-      setSuccess(true);
-      toast.success("Registrasi berhasil diajukan!");
     }, 1500);
   };
 
