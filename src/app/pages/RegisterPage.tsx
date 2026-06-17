@@ -361,7 +361,7 @@ export function RegisterPage() {
           <p className="mt-2 text-gray-500 text-sm">Bergabung dan mulai petualanganmu!</p>
         </div>
 
-        <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+        <Card className="shadow-xl border-0 bg-white">
           <CardHeader className="pb-4">
             <CardTitle className="text-xl text-center">Buat Akun Baru</CardTitle>
             <CardDescription className="text-center">

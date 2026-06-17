@@ -161,7 +161,7 @@ export function LoginPage() {
         </div>
 
         {/* Demo Fast Login Panel */}
-        <Card className="shadow-lg border border-emerald-100 mb-6 bg-white/95 backdrop-blur-sm">
+        <Card className="shadow-lg border border-emerald-100 mb-6 bg-white">
           <CardHeader className="py-3 px-4 flex flex-row items-center gap-2 border-b border-gray-50">
             <Sparkles className="size-4 text-emerald-600 animate-pulse" />
             <CardTitle className="text-xs font-bold text-gray-700">Demo Quick Login (Pilih Peran)</CardTitle>
@@ -183,7 +183,7 @@ export function LoginPage() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
+        <Card className="shadow-xl border-0 bg-white">
           <CardHeader className="pb-4">
             <CardTitle className="text-xl text-center">Masuk ke Akun</CardTitle>
             <CardDescription className="text-center">

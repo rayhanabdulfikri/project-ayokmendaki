@@ -48,7 +48,7 @@ export function DemoWidget() {
       <Toaster position="top-right" richColors />
       
       {open && (
-        <div className="bg-white/90 backdrop-blur-md border border-emerald-100 rounded-2xl p-4 shadow-2xl w-72 mb-2 animate-in fade-in slide-in-from-bottom-5 duration-300">
+        <div className="bg-white border border-emerald-100 rounded-2xl p-4 shadow-2xl w-72 mb-2 animate-in fade-in slide-in-from-bottom-5 duration-300">
           <div className="flex items-center gap-2 mb-3 border-b border-gray-100 pb-2">
             <Sparkles className="size-5 text-emerald-600 animate-pulse" />
             <h3 className="font-bold text-sm text-gray-800">Demo Role Switcher</h3>
