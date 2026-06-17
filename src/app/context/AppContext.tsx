@@ -284,7 +284,14 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUserState] = useState<User | null>(null);
+  
+  const setCurrentUser = (user: User | null) => {
+    setCurrentUserState(user);
+    if (user === null) {
+      supabase.auth.signOut();
+    }
+  };
   const [mountains, setMountains] = useState<Mountain[]>([]);
   const [guides, setGuides] = useState<Guide[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -305,12 +312,131 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [guideWallet, setGuideWallet] = useState<number>(1500000);
   const [vendorWallet, setVendorWallet] = useState<number>(2000000);
 
-  // ─── Fetching Data From Supabase ──────────────────────────────────────────────
+  // ─── Fetching Data From Supabase & User Session ─────────────────────────────────
   useEffect(() => {
     const loadData = async () => {
       try {
         const { data: usersData } = await supabase.from("users").select("*");
+        let currentUsersList = usersData || [];
         if (usersData) setUsers(usersData);
+
+        // Check active Supabase Auth session
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user) {
+          const email = session.user.email?.toLowerCase();
+          const userId = session.user.id;
+
+          // Find user in public.users
+          let matchedUser = currentUsersList.find((u: any) => u.id === userId || u.email?.toLowerCase() === email);
+
+          if (!matchedUser) {
+            // Check if there is a pending registration in localStorage
+            const pendingRegStr = localStorage.getItem("pending_oauth_register");
+            if (pendingRegStr) {
+              const pendingReg = JSON.parse(pendingRegStr);
+
+              // 1. Create user profile in public.users
+              const newUserObj = {
+                id: userId,
+                name: pendingReg.role === "vendor" ? pendingReg.storeName : pendingReg.name,
+                email: pendingReg.email,
+                role: pendingReg.role,
+                phone: pendingReg.phone,
+                verified: false,
+                avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${pendingReg.name}`,
+                status: "active",
+                ktp_number: pendingReg.ktpNumber,
+                ktp_image: pendingReg.ktpPhotoUrl,
+                selfie_image: pendingReg.selfiePhotoUrl
+              };
+
+              await supabase.from("users").insert(newUserObj);
+
+              // 2. Initialize wallet balance
+              await supabase.from("wallets").insert({
+                user_id: userId,
+                balance: 0
+              });
+
+              // 3. Create role-specific records
+              if (pendingReg.role === "guide") {
+                await supabase.from("guides").insert({
+                  id: userId,
+                  specialty: pendingReg.specialty,
+                  location: "Kota Malang, Jawa Timur",
+                  experience: pendingReg.experience + " Tahun",
+                  trips: 0,
+                  rating: 5.0,
+                  price: parseInt(pendingReg.price) || 450000,
+                  certifications: pendingReg.certifications,
+                  status: "Non-Aktif",
+                  specialty_mountains: [pendingReg.specialty],
+                  busy_dates: [],
+                  group_discount_enabled: false
+                });
+              } else if (pendingReg.role === "vendor") {
+                await supabase.from("vendors").insert({
+                  id: userId,
+                  location: pendingReg.address,
+                  distances: {}
+                });
+              }
+
+              // 4. Submit verification request (triggers automated KYC)
+              await supabase.from("verification_requests").insert({
+                user_id: userId,
+                user_name: pendingReg.role === "vendor" ? pendingReg.storeName : pendingReg.name,
+                role: pendingReg.role,
+                document_name: pendingReg.role === "vendor" ? `NIB: ${pendingReg.nib}` : `KYC: KTP ${pendingReg.ktpNumber}`,
+                document_image: pendingReg.role === "guide" ? pendingReg.docImage : pendingReg.ktpPhotoUrl,
+                ktp_number: pendingReg.ktpNumber,
+                ktp_photo: pendingReg.ktpPhotoUrl,
+                selfie_photo: pendingReg.selfiePhotoUrl,
+                status: "pending"
+              });
+
+              matchedUser = {
+                id: newUserObj.id,
+                name: newUserObj.name,
+                email: newUserObj.email,
+                role: newUserObj.role,
+                phone: newUserObj.phone,
+                verified: newUserObj.verified,
+                avatar: newUserObj.avatar,
+                status: newUserObj.status
+              };
+
+              setUsers(prev => [newUserObj, ...prev]);
+              localStorage.removeItem("pending_oauth_register");
+            } else {
+              // Create a default climber profile if logged in via OAuth without registering
+              const defaultName = session.user.user_metadata?.full_name || email?.split("@")[0] || "User Google";
+              const newUserObj = {
+                id: userId,
+                name: defaultName,
+                email: email,
+                role: "pendaki",
+                phone: "08120000000",
+                verified: true,
+                avatar: session.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${defaultName}`,
+                status: "active"
+              };
+
+              await supabase.from("users").insert(newUserObj);
+              await supabase.from("wallets").insert({
+                user_id: userId,
+                balance: 500000
+              });
+
+              matchedUser = newUserObj;
+              setUsers(prev => [newUserObj, ...prev]);
+            }
+          }
+
+          if (matchedUser) {
+            setCurrentUserState(matchedUser);
+          }
+        }
 
         const { data: mtnData } = await supabase.from("mountains").select("*");
         if (mtnData) {
