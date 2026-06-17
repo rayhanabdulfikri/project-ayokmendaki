@@ -190,11 +190,14 @@ export interface VerificationRequest {
   id: string;
   userId: string;
   userName: string;
-  role: "guide" | "vendor";
+  role: "pendaki" | "guide" | "vendor";
   documentName: string; // e.g., APIGI License, UKM Permit
   documentImage: string;
   status: "pending" | "approved" | "rejected";
   createdAt: string;
+  ktpNumber?: string;
+  ktpPhoto?: string;
+  selfiePhoto?: string;
 }
 
 export interface DepositTransaction {
@@ -539,7 +542,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               documentName: v.document_name,
               documentImage: v.document_image,
               status: v.status,
-              createdAt: v.created_at,
+              createdAt: v.created_at ? new Date(v.created_at).toISOString().split("T")[0] : "",
+              ktpNumber: v.ktp_number || undefined,
+              ktpPhoto: v.ktp_image || undefined,
+              selfiePhoto: v.selfie_image || undefined
             }))
           );
         }
@@ -959,6 +965,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
       supabase.from("guides").update({ status: approve ? "Aktif" : "Non-Aktif" }).eq("id", req.userId);
     }
+    setUsers((prev) =>
+      prev.map((u) => (u.id === req.userId ? { ...u, verified: approve } : u))
+    );
     supabase.from("users").update({ verified: approve }).eq("id", req.userId);
 
     supabase.from("verification_requests").update({ status: approve ? "approved" : "rejected" }).eq("id", id);
@@ -981,7 +990,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       role: reqData.role,
       document_name: reqData.documentName,
       document_image: reqData.documentImage,
-      status: "pending"
+      status: "pending",
+      ktp_number: reqData.ktpNumber || null,
+      ktp_image: reqData.ktpPhoto || null,
+      selfie_image: reqData.selfiePhoto || null
     });
   };
 

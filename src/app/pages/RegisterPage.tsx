@@ -50,6 +50,12 @@ export function RegisterPage() {
     password: "",
     confirmPassword: "",
     agreeTerms: false,
+    // KYC fields
+    ktpNumber: "",
+    ktpPhotoName: "ktp_identitas.jpg",
+    ktpPhotoUrl: "https://images.unsplash.com/photo-1554774853-aae0a22c8aa4?w=400&q=80",
+    selfiePhotoName: "selfie_wajah.jpg",
+    selfiePhotoUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80",
     // Guide specific
     specialty: "",
     experience: "",
@@ -105,6 +111,11 @@ export function RegisterPage() {
 
     if (!form.password) newErrors.password = "Kata sandi wajib diisi.";
     else if (form.password.length < 8) newErrors.password = "Kata sandi minimal 8 karakter.";
+    
+    // KYC validation
+    if (!form.ktpNumber.trim()) newErrors.ktpNumber = "Nomor NIK KTP wajib diisi.";
+    else if (!/^[0-9]{16}$/.test(form.ktpNumber.trim())) newErrors.ktpNumber = "Nomor NIK KTP harus 16 digit angka.";
+
     if (!form.confirmPassword) newErrors.confirmPassword = "Konfirmasi kata sandi wajib diisi.";
     else if (form.password !== form.confirmPassword)
       newErrors.confirmPassword = "Kata sandi tidak cocok.";
@@ -122,16 +133,19 @@ export function RegisterPage() {
       const newUserId = "user_" + Math.random().toString(36).substring(2, 9);
       
       try {
-        // 1. Create User in Supabase
+        // 1. Create User in Supabase with KYC columns
         const { error: userErr } = await supabase.from("users").insert({
           id: newUserId,
           name: selectedRole === "vendor" ? form.storeName : form.name,
           email: form.email,
           role: selectedRole,
           phone: form.phone,
-          verified: selectedRole === "pendaki",
+          verified: false, // All start as unverified until admin approves KYC
           avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${form.name}`,
-          status: "active"
+          status: "active",
+          ktp_number: form.ktpNumber,
+          ktp_image: form.ktpPhotoUrl,
+          selfie_image: form.selfiePhotoUrl
         });
 
         if (userErr) throw userErr;
@@ -142,7 +156,19 @@ export function RegisterPage() {
           balance: 0
         });
 
-        if (selectedRole === "guide") {
+        if (selectedRole === "pendaki") {
+          // Submit verification request for pendaki KYC
+          addVerificationRequest({
+            userId: newUserId,
+            userName: form.name,
+            role: "pendaki",
+            documentName: `KYC Pendaki: KTP ${form.ktpNumber}`,
+            documentImage: form.ktpPhotoUrl,
+            ktpNumber: form.ktpNumber,
+            ktpPhoto: form.ktpPhotoUrl,
+            selfiePhoto: form.selfiePhotoUrl
+          });
+        } else if (selectedRole === "guide") {
           // Add Guide profile
           const { error: guideErr } = await supabase.from("guides").insert({
             id: newUserId,
@@ -185,6 +211,9 @@ export function RegisterPage() {
             role: "guide",
             documentName: `Sertifikasi ${form.certifications.join(" & ")}`,
             documentImage: form.docImage,
+            ktpNumber: form.ktpNumber,
+            ktpPhoto: form.ktpPhotoUrl,
+            selfiePhoto: form.selfiePhotoUrl
           });
         } else if (selectedRole === "vendor") {
           // Add Vendor profile
@@ -203,6 +232,9 @@ export function RegisterPage() {
             role: "vendor",
             documentName: `NIB / Izin Usaha UKM: ${form.nib}`,
             documentImage: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400",
+            ktpNumber: form.ktpNumber,
+            ktpPhoto: form.ktpPhotoUrl,
+            selfiePhoto: form.selfiePhotoUrl
           });
         }
 
@@ -380,6 +412,52 @@ export function RegisterPage() {
                     />
                   </div>
                   {errors.phone && <p className="text-[10px] text-red-500">{errors.phone}</p>}
+                </div>
+              </div>
+
+              {/* KYC Verification Section (Required for all roles) */}
+              <div className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-100 space-y-3">
+                <div className="flex items-center gap-1.5 border-b border-emerald-100 pb-1.5">
+                  <Shield className="size-4 text-emerald-600" />
+                  <h4 className="text-xs font-bold text-emerald-800">Verifikasi Identitas (KYC)</h4>
+                </div>
+
+                <div className="space-y-1">
+                  <label htmlFor="ktpNumber" className="text-xs font-semibold text-gray-700">
+                    Nomor NIK KTP (16 Digit)
+                  </label>
+                  <Input
+                    id="ktpNumber"
+                    type="text"
+                    maxLength={16}
+                    placeholder="Masukkan 16 digit nomor NIK Anda"
+                    className={`bg-white border-gray-200 text-xs ${errors.ktpNumber ? "border-red-400 focus:border-red-400" : ""}`}
+                    value={form.ktpNumber}
+                    onChange={(e) => handleChange("ktpNumber", e.target.value.replace(/[^0-9]/g, ""))}
+                  />
+                  {errors.ktpNumber && <p className="text-[10px] text-red-500">{errors.ktpNumber}</p>}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {/* KTP Photo upload */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-gray-600">Foto KTP Asli</label>
+                    <div className="border border-dashed border-emerald-300 rounded-lg p-2.5 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors">
+                      <Award className="size-5 text-emerald-600 mx-auto mb-1" />
+                      <p className="text-[10px] text-emerald-700 font-semibold">{form.ktpPhotoName}</p>
+                      <p className="text-[8px] text-gray-400">File KTP terdeteksi otomatis</p>
+                    </div>
+                  </div>
+
+                  {/* Selfie photo upload */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-gray-600">Foto Selfie dengan KTP</label>
+                    <div className="border border-dashed border-emerald-300 rounded-lg p-2.5 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors">
+                      <Award className="size-5 text-emerald-600 mx-auto mb-1" />
+                      <p className="text-[10px] text-emerald-700 font-semibold">{form.selfiePhotoName}</p>
+                      <p className="text-[8px] text-gray-400">Foto wajah verified</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 

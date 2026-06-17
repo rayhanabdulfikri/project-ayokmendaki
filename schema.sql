@@ -31,6 +31,9 @@ CREATE TABLE users (
     verified BOOLEAN DEFAULT FALSE,
     avatar TEXT,
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'suspended')),
+    ktp_number TEXT,
+    ktp_image TEXT,
+    selfie_image TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -201,10 +204,13 @@ CREATE TABLE verification_requests (
     id TEXT PRIMARY KEY,
     user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
     user_name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('guide', 'vendor')),
+    role TEXT NOT NULL CHECK (role IN ('pendaki', 'guide', 'vendor')),
     document_name TEXT NOT NULL,
     document_image TEXT NOT NULL,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    ktp_number TEXT,
+    ktp_image TEXT,
+    selfie_image TEXT,
     created_at DATE NOT NULL DEFAULT CURRENT_DATE
 );
 

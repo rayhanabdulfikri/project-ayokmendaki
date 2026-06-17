@@ -2765,15 +2765,41 @@ export function DashboardPage() {
                       ) : (
                         verificationRequests.filter(r => r.status === "pending").map((req) => (
                           <div key={req.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <h4 className="font-bold text-gray-800">{req.userName}</h4>
-                                <Badge className="bg-blue-100 text-blue-800 uppercase text-[9px]">{req.role}</Badge>
+                            <div className="space-y-1.5 flex-1">
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-bold text-gray-800 text-sm">{req.userName}</h4>
+                                <Badge className="bg-blue-100 text-blue-800 uppercase text-[9px] font-bold">{req.role}</Badge>
                               </div>
                               <p className="text-xs text-gray-500 font-semibold">{req.documentName}</p>
-                              <a href={req.documentImage} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-600 underline font-semibold mt-1 inline-block">
-                                Lihat Scan Dokumen Lampiran
-                              </a>
+                              
+                              {req.ktpNumber && (
+                                <div className="mt-2 text-xs bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-1.5 max-w-md">
+                                  <p className="font-semibold text-gray-700">Nomor NIK KTP: <span className="font-mono font-bold text-gray-900 bg-gray-200/50 px-1.5 py-0.5 rounded">{req.ktpNumber}</span></p>
+                                  <div className="flex flex-wrap gap-3 mt-1 pt-1.5 border-t border-gray-200/50">
+                                    {req.ktpPhoto && (
+                                      <a href={req.ktpPhoto} target="_blank" rel="noopener noreferrer" className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg font-bold hover:bg-emerald-100/50 flex items-center gap-1 transition-all">
+                                        📄 Lihat Scan KTP
+                                      </a>
+                                    )}
+                                    {req.selfiePhoto && (
+                                      <a href={req.selfiePhoto} target="_blank" rel="noopener noreferrer" className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg font-bold hover:bg-emerald-100/50 flex items-center gap-1 transition-all">
+                                        📸 Lihat Foto Selfie
+                                      </a>
+                                    )}
+                                    {req.documentImage && req.role !== "pendaki" && (
+                                      <a href={req.documentImage} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-700 bg-blue-50 border border-blue-100 px-2 py-1 rounded-lg font-bold hover:bg-blue-100/50 flex items-center gap-1 transition-all">
+                                        📜 Lihat Lampiran Legalitas
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {!req.ktpNumber && req.documentImage && (
+                                <a href={req.documentImage} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-600 underline font-semibold mt-1 inline-block">
+                                  Lihat Scan Dokumen Lampiran
+                                </a>
+                              )}
                             </div>
                             
                             <div className="flex gap-2 shrink-0 w-full md:w-auto justify-end border-t md:border-t-0 pt-2.5 md:pt-0">
