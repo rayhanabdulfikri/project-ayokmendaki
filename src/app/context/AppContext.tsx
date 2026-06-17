@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { supabase } from "../../supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type UserRole = "pendaki" | "guide" | "vendor" | "admin";
@@ -11,6 +12,16 @@ export interface User {
   phone?: string;
   verified?: boolean;
   avatar?: string;
+  status?: "active" | "suspended";
+}
+
+export interface UserActivity {
+  id: string;
+  userId: string;
+  userName: string;
+  userRole: UserRole;
+  action: string;
+  timestamp: string;
 }
 
 export interface Mountain {
@@ -194,6 +205,24 @@ export interface DepositTransaction {
   createdAt: string;
 }
 
+export interface CollaborationProposal {
+  id: string;
+  title: string;
+  guideId: string;
+  guideName: string;
+  vendorId: string;
+  vendorName: string;
+  description: string;
+  duration: string;
+  price: number;
+  targetMountain: string;
+  rentalMechanism: string;
+  bundledEquipmentIds: string[];
+  status: "pending" | "accepted" | "rejected";
+  senderId: string;
+  createdAt: string;
+}
+
 interface AppContextType {
   currentUser: User | null;
   setCurrentUser: (user: User | null) => void;
@@ -236,203 +265,392 @@ interface AppContextType {
   depositTransactions: DepositTransaction[];
   userWarnings: UserWarning[];
   topUpWallet: (role: "pendaki" | "guide" | "vendor", amount: number) => void;
-  withdrawWallet: (role: "pendaki" | "guide" | "vendor", amount: number) => void;
+  withdrawWallet: (role: "pendaki" | "guide" | "vendor", amount: number, description?: string) => void;
   addWarning: (userId: string, text: string) => void;
   removeWarning: (id: string) => void;
+  collaborationProposals: CollaborationProposal[];
+  addCollaborationProposal: (proposal: Omit<CollaborationProposal, "id" | "status" | "createdAt">) => void;
+  respondToCollaborationProposal: (id: string, status: "accepted" | "rejected") => void;
+  users: User[];
+  updateUserStatus: (id: string, status: "active" | "suspended") => void;
+  toggleUserVerification: (id: string) => void;
+  userActivities: UserActivity[];
+  logUserActivity: (userId: string, userName: string, role: UserActivity["userRole"], action: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// ─── Initial Mock Data ────────────────────────────────────────────────────────
-const INITIAL_MOUNTAINS: Mountain[] = [
-  { name: "Gunung Semeru", location: "Jawa Timur", province: "Jawa Timur", elevation: "3.676 mdpl", elevationM: 3676, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1605860632725-fa88d0ce7a07?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.8, reviews: 2341, lat: -8.1077, lng: 112.9224, status: "Buka", ticketPrice: 35000, adminContactMethod: "Instagram", adminContactValue: "@semeru_official", basecamps: ["Ranupani"] },
-  { name: "Gunung Rinjani", location: "Lombok, NTB", province: "NTB", elevation: "3.726 mdpl", elevationM: 3726, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1589309736404-2e142a2acdf0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.9, reviews: 1876, lat: -8.4119, lng: 116.4675, status: "Buka", ticketPrice: 150000, adminContactMethod: "Website Resmi", adminContactValue: "https://bookingrinjani.id", basecamps: ["Sembalun", "Senaru", "Timbanuh", "Aik Berik"] },
-  { name: "Gunung Bromo", location: "Jawa Timur", province: "Jawa Timur", elevation: "2.329 mdpl", elevationM: 2329, difficulty: "Mudah", image: "https://images.unsplash.com/photo-1587651687979-77cf05d1b841?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.7, reviews: 3210, lat: -7.9425, lng: 112.9530, status: "Tutup", ticketPrice: 29000, adminContactMethod: "Website Resmi", adminContactValue: "https://bookingbromo.id", basecamps: ["Cemoro Lawang", "Tosari", "Ngadas", "Tumpang"] },
-  { name: "Gunung Prau", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "2.565 mdpl", elevationM: 2565, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1568516475772-498b4379829c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.6, reviews: 1543, lat: -7.1884, lng: 109.9219, status: "Buka", ticketPrice: 20000, adminContactMethod: "WhatsApp", adminContactValue: "+628123456789", basecamps: ["Patakbanteng", "Dieng", "Kalilembu", "Wates", "Igirmranak"] },
-  { name: "Gunung Merbabu", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "3.145 mdpl", elevationM: 3145, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1562157778-81d81be57eec?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.7, reviews: 1987, lat: -7.4549, lng: 110.4332, status: "Buka", ticketPrice: 25000, adminContactMethod: "Website Resmi", adminContactValue: "https://tngmerbabu.id", basecamps: ["Selo", "Suwanting", "Wekas", "Cuntel", "Thekelan"] },
-  { name: "Gunung Gede Pangrango", location: "Jawa Barat", province: "Jawa Barat", elevation: "2.958 mdpl", elevationM: 2958, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1510797215324-95aa89f43c33?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.5, reviews: 2156, lat: -6.7893, lng: 106.9852, status: "Buka", ticketPrice: 29000, adminContactMethod: "Instagram", adminContactValue: "@gedepangrango_official", basecamps: ["Cibodas", "Gunung Putri", "Selabintana"] },
-  { name: "Gunung Slamet", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "3.428 mdpl", elevationM: 3428, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1629814249584-bd4d53cf0ee3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.6, reviews: 1421, lat: -7.2424, lng: 109.2248, status: "Buka", ticketPrice: 30000, adminContactMethod: "Instagram", adminContactValue: "@slamet_official", basecamps: ["Bambangan", "Guci", "Kaliwadas", "Baturraden", "Dipajaya"] },
-  { name: "Gunung Sindoro", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "3.136 mdpl", elevationM: 3136, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1600100397608-f010e9723049?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.7, reviews: 1120, lat: -7.3016, lng: 109.9972, status: "Buka", ticketPrice: 25000, adminContactMethod: "Website Resmi", adminContactValue: "https://bookingsindoro.id", basecamps: ["Kledung", "Alang-alang Sewu", "Bansari", "Sigedang"] },
-  { name: "Gunung Sumbing", location: "Jawa Tengah", province: "Jawa Tengah", elevation: "3.371 mdpl", elevationM: 3371, difficulty: "Sulit", image: "https://images.unsplash.com/photo-1620921008688-6f6eb3df2d59?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.8, reviews: 980, lat: -7.3838, lng: 110.0728, status: "Buka", ticketPrice: 25000, adminContactMethod: "Instagram", adminContactValue: "@sumbing_official", basecamps: ["Garung", "Bowongso", "Sipetung", "Mangli", "Adipuro"] },
-  { name: "Gunung Lawu", location: "Jawa Tengah/Timur", province: "Jawa Tengah", elevation: "3.265 mdpl", elevationM: 3265, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.8, reviews: 1860, lat: -7.6258, lng: 111.1947, status: "Buka", ticketPrice: 20000, adminContactMethod: "Website Resmi", adminContactValue: "https://bookinglawu.id", basecamps: ["Cemoro Sewu", "Cemoro Kandang", "Candi Cetho", "Singolangu"] },
-  { name: "Gunung Papandayan", location: "Garut, Jawa Barat", province: "Jawa Barat", elevation: "2.665 mdpl", elevationM: 2665, difficulty: "Mudah", image: "https://images.unsplash.com/photo-1596464716127-f2a82984de30?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.6, reviews: 2210, lat: -7.3197, lng: 107.7288, status: "Buka", ticketPrice: 35000, adminContactMethod: "WhatsApp", adminContactValue: "+628765432100", basecamps: ["Camp David"] },
-  { name: "Gunung Merapi", location: "Sleman, Yogyakarta", province: "Yogyakarta", elevation: "2.910 mdpl", elevationM: 2910, difficulty: "Sedang", image: "https://images.unsplash.com/photo-1580137189272-c9379f8864fd?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600", rating: 4.5, reviews: 1980, lat: -7.5407, lng: 110.4458, status: "Tutup", ticketPrice: 20000, adminContactMethod: "Website Resmi", adminContactValue: "https://tngmerapi.id", basecamps: ["Selo", "Plunyon"] }
-];
-
-const INITIAL_GUIDES: Guide[] = [
-  { id: "guide1", name: "Ahmad Hidayat", specialty: "Gunung Semeru & Bromo", location: "Malang, Jawa Timur", experience: "8 Tahun", trips: 245, rating: 4.9, verified: true, price: 500000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmad", certifications: ["APIGI", "Pertolongan Pertama"], status: "Aktif", specialtyMountains: ["Gunung Semeru", "Gunung Bromo"], busyDates: ["2026-07-15", "2026-07-20"] },
-  { id: "guide2", name: "Budi Santoso", specialty: "Gunung Rinjani", location: "Lombok, NTB", experience: "10 Tahun", trips: 312, rating: 5.0, verified: true, price: 650000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Budi", certifications: ["APIGI", "HPI"], status: "Libur", specialtyMountains: ["Gunung Rinjani"], busyDates: ["2026-07-18"] },
-  { id: "guide3", name: "Candra Wijaya", specialty: "Pendakian Jawa Tengah", location: "Magelang, Jawa Tengah", experience: "6 Tahun", trips: 178, rating: 4.8, verified: true, price: 450000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Candra", certifications: ["APIGI"], status: "Non-Aktif", specialtyMountains: ["Gunung Prau", "Gunung Merbabu"], busyDates: [] },
-  { id: "guide4", name: "Doni Prasetyo", specialty: "Semua Gunung di Indonesia", location: "Bogor, Jawa Barat", experience: "7 Tahun", trips: 198, rating: 4.7, verified: false, price: 400000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Doni", certifications: ["APIGI", "SAR"], status: "Aktif", specialtyMountains: ["Semua Gunung"], busyDates: ["2026-07-10"] },
-  { id: "guide5", name: "Eko Wahyudi", specialty: "Gunung Slamet & Sindoro", location: "Wonosobo, Jawa Tengah", experience: "5 Tahun", trips: 112, rating: 4.8, verified: true, price: 450000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Eko", certifications: ["APIGI"], status: "Aktif", specialtyMountains: ["Gunung Slamet", "Gunung Sindoro"], busyDates: [] },
-  { id: "guide6", name: "Fajar Pratama", specialty: "Gunung Lawu & Sumbing", location: "Solo, Jawa Tengah", experience: "9 Tahun", trips: 220, rating: 4.9, verified: true, price: 500000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Fajar", certifications: ["APIGI", "HPI"], status: "Aktif", specialtyMountains: ["Gunung Lawu", "Gunung Sumbing"], busyDates: [] },
-  { id: "guide7", name: "Gilang Ramadhan", specialty: "Gunung Papandayan & Gede", location: "Bandung, Jawa Barat", experience: "4 Tahun", trips: 88, rating: 4.7, verified: true, price: 400000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Gilang", certifications: ["APIGI"], status: "Aktif", specialtyMountains: ["Gunung Papandayan", "Gunung Gede Pangrango"], busyDates: [] },
-  { id: "guide8", name: "Hendra Wijaya", specialty: "Gunung Rinjani & Semeru", location: "Surabaya, Jawa Timur", experience: "12 Tahun", trips: 410, rating: 5.0, verified: true, price: 700000, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Hendra", certifications: ["APIGI", "SAR", "HPI"], status: "Aktif", specialtyMountains: ["Gunung Rinjani", "Gunung Semeru"], busyDates: [] }
-];
-
-const INITIAL_VENDORS: Vendor[] = [
-  { id: "vendor1", name: "Outdoor Adventure Store", location: "Malang, Jawa Timur", rating: 4.8, verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=outdoor", distances: { "Gunung Semeru": 3.5, "Gunung Bromo": 8.0, "Gunung Rinjani": 380, "Gunung Prau": 350, "Gunung Merbabu": 320, "Gunung Gede Pangrango": 710, "Gunung Slamet": 310, "Gunung Sindoro": 280, "Gunung Sumbing": 270, "Gunung Lawu": 180, "Gunung Papandayan": 610, "Gunung Merapi": 290 } },
-  { id: "vendor2", name: "Summit Gear Rental", location: "Lombok, NTB", rating: 4.9, verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=summit", distances: { "Gunung Rinjani": 2.1, "Gunung Semeru": 340, "Gunung Bromo": 330, "Gunung Prau": 420, "Gunung Merbabu": 410, "Gunung Gede Pangrango": 890, "Gunung Slamet": 480, "Gunung Sindoro": 450, "Gunung Sumbing": 440, "Gunung Lawu": 350, "Gunung Papandayan": 820, "Gunung Merapi": 400 } },
-  { id: "vendor3", name: "Mountain Camp Store", location: "Wonosobo, Jawa Tengah", rating: 4.7, verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=mountain", distances: { "Gunung Prau": 9.2, "Gunung Merbabu": 28.0, "Gunung Semeru": 280, "Gunung Bromo": 270, "Gunung Rinjani": 520, "Gunung Gede Pangrango": 310, "Gunung Slamet": 45, "Gunung Sindoro": 15, "Gunung Sumbing": 25, "Gunung Lawu": 120, "Gunung Papandayan": 240, "Gunung Merapi": 65 } },
-  { id: "vendor4", name: "Cianjur Lestari Rental", location: "Cianjur, Jawa Barat", rating: 4.5, verified: false, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=cianjur", distances: { "Gunung Gede Pangrango": 5.4, "Gunung Prau": 290, "Gunung Semeru": 690, "Gunung Bromo": 680, "Gunung Rinjani": 910, "Gunung Merbabu": 410, "Gunung Slamet": 240, "Gunung Sindoro": 270, "Gunung Sumbing": 280, "Gunung Lawu": 380, "Gunung Papandayan": 72, "Gunung Merapi": 300 } },
-];
-
-const INITIAL_EQUIPMENT: EquipmentItem[] = [
-  { id: "eq1", name: "Tenda Dome 4 Orang", description: "Kapasitas 4 orang, waterproof, mudah dipasang", price: 75000, vendorId: "vendor1", vendorName: "Outdoor Adventure Store", rating: 4.8, available: 5, category: "tent" },
-  { id: "eq2", name: "Tenda Ultralight 2 Orang", description: "Ringan, compact, ideal untuk pendakian solo/duo", price: 50000, vendorId: "vendor2", vendorName: "Summit Gear Rental", rating: 4.9, available: 8, category: "tent" },
-  { id: "eq3", name: "Tenda Keluarga 6 Orang", description: "Kapasitas besar, double layer, ventilasi baik", price: 100000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.7, available: 3, category: "tent" },
-  { id: "eq4", name: "Carrier 60L", description: "Kapasitas besar, ergonomis, raincover included", price: 40000, vendorId: "vendor2", vendorName: "Summit Gear Rental", rating: 4.7, available: 12, category: "carrier" },
-  { id: "eq5", name: "Carrier 50L", description: "Medium size, cocok untuk 2-3 hari pendakian", price: 35000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.6, available: 15, category: "carrier" },
-  { id: "eq6", name: "Sleeping Bag -5°C", description: "Tahan suhu -5°C, ringan dan hangat", price: 30000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.8, available: 20, category: "other" },
-  { id: "eq7", name: "Kompor Camping + Gas", description: "Kompor portable dengan tabung gas 230gr", price: 25000, vendorId: "vendor2", vendorName: "Summit Gear Rental", rating: 4.7, available: 18, category: "other" },
-  { id: "eq8", name: "Trekking Pole Set", description: "Adjustable, anti-slip grip, aluminium", price: 25000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.5, available: 15, category: "other" },
-  { id: "eq9", name: "Cooking Set Nesting", description: "Panci camping anti lengket, 1 set isi 4 item", price: 20000, vendorId: "vendor1", vendorName: "Outdoor Adventure Store", rating: 4.8, available: 10, category: "other" },
-  { id: "eq10", name: "Headlamp LED Rechargeable", description: "Lampu kepala rechargeable, waterproof, 3 mode sinar", price: 15000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.7, available: 25, category: "other" },
-  { id: "eq11", name: "Jaket Windbreaker TNF", description: "Jaket windproof & waterproof untuk cuaca dingin", price: 35000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.6, available: 12, category: "other" },
-  { id: "eq12", name: "Matras Angin Eiger", description: "Kasur angin tiup manual, empuk & menahan dingin tanah", price: 20000, vendorId: "vendor2", vendorName: "Summit Gear Rental", rating: 4.9, available: 10, category: "other" },
-  { id: "eq13", name: "Flysheet 3x4 meter", description: "Tenda peneduh anti air pelindung tenda utama", price: 15000, vendorId: "vendor1", vendorName: "Outdoor Adventure Store", rating: 4.7, available: 8, category: "other" },
-  { id: "eq14", name: "Sleeping Pad Foam", description: "Matras busa lipat aluminium foil pemantul panas tubuh", price: 10000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.5, available: 30, category: "other" },
-  { id: "eq15", name: "Portable Gas Refill 230g", description: "Tabung gas butana portable untuk memasak", price: 10000, vendorId: "vendor2", vendorName: "Summit Gear Rental", rating: 4.8, available: 50, category: "other" },
-  { id: "eq16", name: "Peta Navigasi & Kompas", description: "Kompas bidik militer beserta peta topografi", price: 15000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.6, available: 5, category: "other" },
-  { id: "eq17", name: "First Aid Kit (P3K) Lengkap", description: "Kotak obat standar pendakian dengan perban & antiseptik", price: 10000, vendorId: "vendor3", vendorName: "Mountain Camp Store", rating: 4.9, available: 20, category: "other" },
-  { id: "eq18", name: "Sepatu Trekking Size 42", description: "Sepatu hiking grip kuat, anti selip & water resistant", price: 50000, vendorId: "vendor1", vendorName: "Outdoor Adventure Store", rating: 4.7, available: 4, category: "other" }
-];
-
-const INITIAL_PACKAGES: TripPackage[] = [
-  {
-    id: "pkg1",
-    title: "Paket Rinjani Summit Premium (All-In)",
-    guideId: "guide2",
-    guideName: "Budi Santoso",
-    vendorId: "vendor2",
-    vendorName: "Summit Gear Rental",
-    description: "Paket pendakian Rinjani premium lengkap dengan tenda ultralight, makanan mewah selama pendakian, porter tim, dan transportasi PP dari Bandara Lombok.",
-    duration: "3 Hari 2 Malam",
-    price: 1850000,
-    promoDeadline: "2026-07-01",
-    services: ["Simaksi & Asuransi Rinjani", "Tenda Ultralight Double Layer", "Menu Makan Premium 3x sehari", "Transport Bandara PP Lombok", "Sleeping Bag & Matras Angin"],
-    rundown: ["Hari 1: Penjemputan di Bandara, perjalanan ke Sembalun, trekking ke Crater Rim Sembalun", "Hari 2: Summit Attack 3726m, turun ke Segara Anak (Mancing & Berendam Air Panas)", "Hari 3: Trekking naik ke Senaru Rim, turun ke basecamp Senaru, transfer Bandara"],
-    image: "https://images.unsplash.com/photo-1589309736404-2e142a2acdf0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600",
-    targetMountain: "Gunung Rinjani"
-  },
-  {
-    id: "pkg2",
-    title: "Paket Hemat Prau Sunrise Trip",
-    guideId: "guide3",
-    guideName: "Candra Wijaya",
-    vendorId: "vendor3",
-    vendorName: "Mountain Camp Store",
-    description: "Nikmati keindahan sunrise terbaik se-Jawa di Puncak Gunung Prau Dieng. Paket hemat sudah termasuk guide berlisensi, perlengkapan tidur hangat, dan dokumentasi puncak.",
-    duration: "2 Hari 1 Malam",
-    price: 650000,
-    promoDeadline: "2026-06-30",
-    services: ["Simaksi Prau", "Guide Berlisensi APIGI", "Sleeping Bag Hangat", "Tenda Dome Sharing", "Makan Malam & Sarapan Hangat"],
-    rundown: ["Hari 1: Trekking santai lewat Patak Banteng ke Area Camp, hunting Sunset", "Hari 2: Menikmati Golden Sunrise di sunrise point Prau, sarapan, trekking turun kembali"],
-    image: "https://images.unsplash.com/photo-1568516475772-498b4379829c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=600",
-    targetMountain: "Gunung Prau"
-  }
-];
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [mountains, setMountains] = useState<Mountain[]>(INITIAL_MOUNTAINS);
-  const [guides, setGuides] = useState<Guide[]>(INITIAL_GUIDES);
-  const [equipment, setEquipment] = useState<EquipmentItem[]>(INITIAL_EQUIPMENT);
+  const [mountains, setMountains] = useState<Mountain[]>([]);
+  const [guides, setGuides] = useState<Guide[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
+  const [tripPackages, setTripPackages] = useState<TripPackage[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [rentalOrders, setRentalOrders] = useState<RentalOrder[]>([]);
+  const [negotiations, setNegotiations] = useState<Negotiation[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [userActivities, setUserActivities] = useState<UserActivity[]>([]);
+  const [userWarnings, setUserWarnings] = useState<UserWarning[]>([]);
+  const [collaborationProposals, setCollaborationProposals] = useState<CollaborationProposal[]>([]);
+  const [depositTransactions, setDepositTransactions] = useState<DepositTransaction[]>([]);
+  
+  const [climberDeposit, setClimberDeposit] = useState<number>(500000);
+  const [guideWallet, setGuideWallet] = useState<number>(1500000);
+  const [vendorWallet, setVendorWallet] = useState<number>(2000000);
 
-  const [climberDeposit, setClimberDeposit] = useState<number>(() => {
-    const saved = localStorage.getItem("ayok_climber_deposit");
-    return saved ? parseInt(saved) : 500000;
-  });
+  // ─── Fetching Data From Supabase ──────────────────────────────────────────────
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const { data: usersData } = await supabase.from("users").select("*");
+        if (usersData) setUsers(usersData);
 
-  const [guideWallet, setGuideWallet] = useState<number>(() => {
-    const saved = localStorage.getItem("ayok_guide_wallet");
-    return saved ? parseInt(saved) : 1500000;
-  });
+        const { data: mtnData } = await supabase.from("mountains").select("*");
+        if (mtnData) {
+          setMountains(
+            mtnData.map((m: any) => ({
+              name: m.name,
+              location: m.location,
+              province: m.province,
+              elevation: m.elevation,
+              elevationM: m.elevation_m,
+              difficulty: m.difficulty,
+              image: m.image,
+              rating: Number(m.rating),
+              reviews: m.reviews,
+              lat: Number(m.lat),
+              lng: Number(m.lng),
+              status: m.status,
+              ticketPrice: Number(m.ticket_price),
+              adminContactMethod: m.admin_contact_method,
+              adminContactValue: m.admin_contact_value,
+              basecamps: m.basecamps || [],
+            }))
+          );
+        }
 
-  const [vendorWallet, setVendorWallet] = useState<number>(() => {
-    const saved = localStorage.getItem("ayok_vendor_wallet");
-    return saved ? parseInt(saved) : 2000000;
-  });
+        const { data: guidesData } = await supabase.from("guides").select("*");
+        if (guidesData && usersData) {
+          setGuides(
+            guidesData.map((g: any) => {
+              const user = usersData.find((u: any) => u.id === g.id);
+              return {
+                id: g.id,
+                name: user?.name || "Guide Name",
+                specialty: g.specialty,
+                location: g.location,
+                experience: g.experience,
+                trips: g.trips,
+                rating: Number(g.rating),
+                price: Number(g.price),
+                avatar: user?.avatar || "https://api.dicebear.com/7.x/avataaars/svg",
+                certifications: g.certifications || [],
+                status: g.status,
+                verified: user?.verified || false,
+                specialtyMountains: g.specialty_mountains || [],
+                busyDates: (g.busy_dates || []).map((d: any) => String(d)),
+                groupDiscountEnabled: g.group_discount_enabled || false,
+              };
+            })
+          );
+        }
 
-  const [userWarnings, setUserWarnings] = useState<UserWarning[]>(() => {
-    const saved = localStorage.getItem("ayok_user_warnings");
-    return saved ? JSON.parse(saved) : [];
-  });
+        const { data: vendorsData } = await supabase.from("vendors").select("*");
+        if (vendorsData && usersData) {
+          setVendors(
+            vendorsData.map((v: any) => {
+              const user = usersData.find((u: any) => u.id === v.id);
+              return {
+                id: v.id,
+                name: user?.name || "Vendor Name",
+                location: v.location,
+                verified: user?.verified || false,
+                avatar: user?.avatar || "https://api.dicebear.com/7.x/identicon/svg",
+                distances: v.distances || {},
+              };
+            })
+          );
+        }
 
-  const [depositTransactions, setDepositTransactions] = useState<DepositTransaction[]>(() => {
-    const saved = localStorage.getItem("ayok_deposit_transactions");
-    return saved ? JSON.parse(saved) : [
-      { id: "tx_mock1", type: "topup", amount: 500000, description: "Saldo awal deposit jaminan", createdAt: "2026-06-15 10:00" }
-    ];
-  });
+        const { data: eqData } = await supabase.from("equipment_items").select("*");
+        if (eqData && usersData) {
+          setEquipment(
+            eqData.map((eq: any) => {
+              const user = usersData.find((u: any) => u.id === eq.vendor_id);
+              return {
+                id: eq.id,
+                name: eq.name,
+                description: eq.description,
+                price: Number(eq.price),
+                vendorId: eq.vendor_id,
+                vendorName: user?.name || "Vendor Name",
+                rating: Number(eq.rating),
+                available: eq.available,
+                category: eq.category,
+                groupDiscountEnabled: eq.group_discount_enabled || false,
+                damageTerms: eq.damage_terms,
+              };
+            })
+          );
+        }
 
-  // Load dynamically created data from LocalStorage or use defaults
-  const [tripPackages, setTripPackages] = useState<TripPackage[]>(() => {
-    const saved = localStorage.getItem("ayok_packages");
-    return saved ? JSON.parse(saved) : INITIAL_PACKAGES;
-  });
+        const { data: pkgsData } = await supabase.from("trip_packages").select("*");
+        if (pkgsData && usersData) {
+          setTripPackages(
+            pkgsData.map((p: any) => {
+              const guideUser = usersData.find((u: any) => u.id === p.guide_id);
+              const vendorUser = usersData.find((u: any) => u.id === p.vendor_id);
+              return {
+                id: p.id,
+                title: p.title,
+                guideId: p.guide_id,
+                guideName: guideUser?.name || "Guide Name",
+                vendorId: p.vendor_id,
+                vendorName: vendorUser?.name || undefined,
+                description: p.description,
+                duration: p.duration,
+                price: Number(p.price),
+                promoDeadline: p.promo_deadline,
+                services: p.services || [],
+                rundown: p.rundown || [],
+                image: p.image,
+                targetMountain: p.target_mountain,
+              };
+            })
+          );
+        }
 
-  const [bookings, setBookings] = useState<Booking[]>(() => {
-    const saved = localStorage.getItem("ayok_bookings");
-    return saved ? JSON.parse(saved) : [
-      { id: "book_mock1", mountainName: "Gunung Semeru", guideId: "guide1", guideName: "Ahmad Hidayat", pendakiName: "Zaki Firdaus", pendakiId: "pendaki1", bookingDate: "2026-07-10", createdAt: "2026-06-15", price: 500000, status: "Telah Dibayar", bookingType: "mandiri", preTripMeetingDate: "2026-07-09", preTripMeetingTime: "19:00 - 19:30", preTripMeetingLink: "https://meet.google.com/abc-defg-hij", depositAmount: 100000, depositStatus: "held", climbersCount: 1 },
-      { id: "book_mock2", mountainName: "Gunung Semeru", pendakiName: "Zaki Firdaus", pendakiId: "pendaki1", bookingDate: "2026-07-10", createdAt: "2026-06-15", price: 35000, status: "Telah Dibayar", officialTicketBooking: true, bookingType: "mandiri", depositAmount: 100000, depositStatus: "held" }
-    ];
-  });
+        const { data: bookingsData } = await supabase.from("bookings").select("*");
+        if (bookingsData && usersData) {
+          setBookings(
+            bookingsData.map((b: any) => {
+              const guideUser = usersData.find((u: any) => u.id === b.guide_id);
+              const pendakiUser = usersData.find((u: any) => u.id === b.pendaki_id);
+              return {
+                id: b.id,
+                mountainName: b.mountain_name,
+                basecamp: b.basecamp,
+                guideId: b.guide_id,
+                guideName: guideUser?.name || undefined,
+                pendakiName: pendakiUser?.name || "Pendaki Name",
+                pendakiId: b.pendaki_id,
+                bookingDate: b.booking_date,
+                createdAt: b.created_at ? new Date(b.created_at).toISOString().split("T")[0] : "",
+                price: Number(b.price),
+                status: b.status,
+                disputeNotes: b.dispute_notes,
+                officialTicketBooking: b.official_ticket_booking,
+                bookingType: b.booking_type,
+                packageId: b.package_id,
+                preTripMeetingDate: b.pre_trip_meeting_date,
+                preTripMeetingTime: b.pre_trip_meeting_time,
+                preTripMeetingLink: b.pre_trip_meeting_link,
+                climbersCount: b.climbers_count,
+                depositAmount: Number(b.deposit_amount),
+                depositStatus: b.deposit_status,
+                fineAmount: Number(b.fine_amount),
+                fineNotes: b.fine_notes,
+                pendakiConfirmed: b.pendaki_confirmed,
+                partnerConfirmed: b.partner_confirmed,
+              };
+            })
+          );
+        }
 
-  const [rentalOrders, setRentalOrders] = useState<RentalOrder[]>(() => {
-    const saved = localStorage.getItem("ayok_rentals");
-    return saved ? JSON.parse(saved) : [
-      { id: "rent_mock1", itemId: "eq1", itemName: "Tenda Dome 4 Orang", vendorId: "vendor1", vendorName: "Outdoor Adventure Store", pendakiId: "pendaki1", pendakiName: "Zaki Firdaus", qty: 2, startDate: "2026-07-09", endDate: "2026-07-12", totalPrice: 450000, status: "Menunggu Konfirmasi", depositAmount: 100000, depositStatus: "held" }
-    ];
-  });
+        const { data: rentalsData } = await supabase.from("rental_orders").select("*");
+        if (rentalsData && eqData && usersData) {
+          setRentalOrders(
+            rentalsData.map((r: any) => {
+              const eqItem = eqData.find((eq: any) => eq.id === r.item_id);
+              const vendorUser = usersData.find((u: any) => u.id === r.vendor_id);
+              const pendakiUser = usersData.find((u: any) => u.id === r.pendaki_id);
+              return {
+                id: r.id,
+                itemId: r.item_id,
+                itemName: eqItem?.name || "Equipment Item",
+                vendorId: r.vendor_id,
+                vendorName: vendorUser?.name || "Vendor Name",
+                pendakiId: r.pendaki_id,
+                pendakiName: pendakiUser?.name || "Pendaki Name",
+                qty: r.qty,
+                startDate: r.start_date,
+                endDate: r.end_date,
+                totalPrice: Number(r.total_price),
+                status: r.status,
+                disputeNotes: r.dispute_notes,
+                depositAmount: Number(r.deposit_amount),
+                depositStatus: r.deposit_status,
+                fineAmount: Number(r.fine_amount),
+                fineNotes: r.fine_notes,
+                pendakiConfirmed: r.pendaki_confirmed,
+                partnerConfirmed: r.partner_confirmed,
+              };
+            })
+          );
+        }
 
-  const [negotiations, setNegotiations] = useState<Negotiation[]>(() => {
-    const saved = localStorage.getItem("ayok_negos");
-    return saved ? JSON.parse(saved) : [
-      { id: "nego_mock1", type: "rental", orderId: "rent_mock1", itemName: "Tenda Dome 4 Orang (2 Pcs, 3 Hari)", originalPrice: 450000, proposedPrice: 380000, senderName: "Zaki Firdaus", recipientId: "vendor1", recipientName: "Outdoor Adventure Store", status: "pending" }
-    ];
-  });
+        const { data: negosData } = await supabase.from("negotiations").select("*");
+        if (negosData) {
+          setNegotiations(
+            negosData.map((n: any) => ({
+              id: n.id,
+              type: n.type,
+              orderId: n.order_id,
+              itemName: n.item_name,
+              originalPrice: Number(n.original_price),
+              proposedPrice: Number(n.proposed_price),
+              senderName: n.sender_name,
+              recipientId: n.recipient_id,
+              recipientName: n.recipient_name,
+              status: n.status,
+              counterPrice: n.counter_price ? Number(n.counter_price) : undefined,
+              notes: n.notes,
+            }))
+          );
+        }
 
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
-    const saved = localStorage.getItem("ayok_chats");
-    return saved ? JSON.parse(saved) : [
-      { id: "chat_mock1", chatPartnerId: "guide1", chatPartnerName: "Ahmad Hidayat", senderId: "pendaki1", senderName: "Zaki Firdaus", message: "Halo mas Ahmad, ready buat tanggal 10 Juli nanti ke Semeru?", timestamp: "18:30" },
-      { id: "chat_mock2", chatPartnerId: "guide1", chatPartnerName: "Ahmad Hidayat", senderId: "guide1", senderName: "Ahmad Hidayat", message: "Halo mas! Siap, jadwal saya kosong tanggal segitu. Silakan diajukan booking ya.", timestamp: "18:32" }
-    ];
-  });
+        const { data: chatsData } = await supabase.from("chat_messages").select("*");
+        if (chatsData) {
+          setChatMessages(
+            chatsData.map((c: any) => ({
+              id: c.id,
+              chatPartnerId: c.chat_partner_id,
+              chatPartnerName: c.chat_partner_name,
+              senderId: c.sender_id,
+              senderName: c.sender_name,
+              message: c.message,
+              timestamp: c.timestamp,
+            }))
+          );
+        }
 
-  const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>(() => {
-    const saved = localStorage.getItem("ayok_verifications");
-    return saved ? JSON.parse(saved) : [
-      { id: "ver_mock1", userId: "guide4", userName: "Doni Prasetyo", role: "guide", documentName: "Sertifikasi APIGI & SAR", documentImage: "https://images.unsplash.com/photo-1586075010923-2dd4570fb338?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400", status: "pending", createdAt: "2026-06-15" }
-    ];
-  });
+        const { data: verData } = await supabase.from("verification_requests").select("*");
+        if (verData) {
+          setVerificationRequests(
+            verData.map((v: any) => ({
+              id: v.id,
+              userId: v.user_id,
+              userName: v.user_name,
+              role: v.role,
+              documentName: v.document_name,
+              documentImage: v.document_image,
+              status: v.status,
+              createdAt: v.created_at,
+            }))
+          );
+        }
 
-  // Save changes to localStorage
-  useEffect(() => { localStorage.setItem("ayok_packages", JSON.stringify(tripPackages)); }, [tripPackages]);
-  useEffect(() => { localStorage.setItem("ayok_bookings", JSON.stringify(bookings)); }, [bookings]);
-  useEffect(() => { localStorage.setItem("ayok_rentals", JSON.stringify(rentalOrders)); }, [rentalOrders]);
-  useEffect(() => { localStorage.setItem("ayok_negos", JSON.stringify(negotiations)); }, [negotiations]);
-  useEffect(() => { localStorage.setItem("ayok_chats", JSON.stringify(chatMessages)); }, [chatMessages]);
-  useEffect(() => { localStorage.setItem("ayok_verifications", JSON.stringify(verificationRequests)); }, [verificationRequests]);
-  useEffect(() => { localStorage.setItem("ayok_climber_deposit", climberDeposit.toString()); }, [climberDeposit]);
-  useEffect(() => { localStorage.setItem("ayok_guide_wallet", guideWallet.toString()); }, [guideWallet]);
-  useEffect(() => { localStorage.setItem("ayok_vendor_wallet", vendorWallet.toString()); }, [vendorWallet]);
-  useEffect(() => { localStorage.setItem("ayok_user_warnings", JSON.stringify(userWarnings)); }, [userWarnings]);
-  useEffect(() => { localStorage.setItem("ayok_deposit_transactions", JSON.stringify(depositTransactions)); }, [depositTransactions]);
+        const { data: warnData } = await supabase.from("user_warnings").select("*");
+        if (warnData) {
+          setUserWarnings(
+            warnData.map((w: any) => ({
+              id: w.id,
+              userId: w.user_id,
+              userName: w.user_name,
+              text: w.text,
+              date: w.created_at ? new Date(w.created_at).toISOString().split("T")[0] : "",
+            }))
+          );
+        }
+
+        const { data: propData } = await supabase.from("collaboration_proposals").select("*");
+        if (propData) {
+          setCollaborationProposals(
+            propData.map((p: any) => ({
+              id: p.id,
+              title: p.title,
+              guideId: p.guide_id,
+              guideName: p.guide_name,
+              vendorId: p.vendor_id,
+              vendorName: p.vendor_name,
+              description: p.description,
+              duration: p.duration,
+              price: Number(p.price),
+              targetMountain: p.target_mountain,
+              rentalMechanism: p.rental_mechanism,
+              bundledEquipmentIds: p.bundled_equipment_ids || [],
+              status: p.status,
+              senderId: p.sender_id,
+              createdAt: p.created_at,
+            }))
+          );
+        }
+
+        const { data: txData } = await supabase.from("deposit_transactions").select("*");
+        if (txData) {
+          setDepositTransactions(
+            txData.map((t: any) => ({
+              id: t.id,
+              type: t.type,
+              amount: Number(t.amount),
+              description: t.description,
+              createdAt: t.created_at ? new Date(t.created_at).toISOString().split("T")[0] : "",
+            }))
+          );
+        }
+
+        const { data: actData } = await supabase.from("user_activities").select("*");
+        if (actData) {
+          setUserActivities(
+            actData.map((a: any) => ({
+              id: a.id,
+              userId: a.user_id,
+              userName: a.user_name,
+              userRole: a.user_role as UserRole,
+              action: a.action,
+              timestamp: a.timestamp ? new Date(a.timestamp).toISOString().replace("T", " ").substring(0, 16) : "",
+            }))
+          );
+        }
+      } catch (err) {
+        console.error("Error loading data from Supabase:", err);
+      }
+    };
+    loadData();
+  }, []);
+
+  // Fetch wallets on currentUser change
+  useEffect(() => {
+    if (!currentUser) return;
+    const loadWallet = async () => {
+      try {
+        const { data } = await supabase
+          .from("wallets")
+          .select("balance")
+          .eq("user_id", currentUser.id)
+          .single();
+
+        if (data) {
+          const bal = Number(data.balance);
+          if (currentUser.role === "pendaki") {
+            setClimberDeposit(bal);
+          } else if (currentUser.role === "guide") {
+            setGuideWallet(bal);
+          } else if (currentUser.role === "vendor") {
+            setVendorWallet(bal);
+          }
+        }
+      } catch (err) {
+        console.error("Error loading wallet balance:", err);
+      }
+    };
+    loadWallet();
+  }, [currentUser]);
 
   // ─── Booking Actions ────────────────────────────────────────────────────────
   const addBooking = (bookingData: Omit<Booking, "id" | "createdAt" | "status">) => {
     const id = "book_" + Math.random().toString(36).substring(2, 9);
     
-    // Automatically pre-populate pre-trip meeting link & date for guide booking
     let preTripDate = "";
     let preTripTime = "";
     let preTripLink = "";
     if (bookingData.guideId) {
       const bDate = new Date(bookingData.bookingDate);
-      const mDate = new Date(bDate.getTime() - 24 * 60 * 60 * 1000); // 1 day before trip
+      const mDate = new Date(bDate.getTime() - 24 * 60 * 60 * 1000); // 1 day before
       preTripDate = mDate.toISOString().split("T")[0];
       preTripTime = "19:30 - 20:00 WIB";
       preTripLink = "https://meet.google.com/yok-mend-meet";
@@ -441,7 +659,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
-    // Deduct deposit from climber wallet
+    const newStatus = bookingData.guideId && bookingData.bookingType === "mandiri" ? "Menunggu Konfirmasi" : "Menunggu Pembayaran";
+
+    // Deduct deposit locally
     setClimberDeposit((prev) => Math.max(0, prev - 100000));
     setDepositTransactions((prev) => [
       {
@@ -458,14 +678,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...bookingData,
       id,
       createdAt: new Date().toISOString().split("T")[0],
-      status: bookingData.guideId && bookingData.bookingType === "mandiri" ? "Menunggu Konfirmasi" : "Menunggu Pembayaran",
+      status: newStatus,
       preTripMeetingDate: preTripDate || undefined,
       preTripMeetingTime: preTripTime || undefined,
       preTripMeetingLink: preTripLink || undefined,
       depositAmount: 100000,
       depositStatus: "held"
     };
+
     setBookings((prev) => [newBooking, ...prev]);
+
+    // Supabase Sync
+    supabase.from("bookings").insert({
+      id,
+      mountain_name: bookingData.mountainName,
+      basecamp: bookingData.basecamp,
+      guide_id: bookingData.guideId,
+      pendaki_id: bookingData.pendakiId,
+      booking_date: bookingData.bookingDate,
+      price: bookingData.price,
+      status: newStatus,
+      official_ticket_booking: bookingData.officialTicketBooking || false,
+      booking_type: bookingData.bookingType,
+      package_id: bookingData.packageId,
+      pre_trip_meeting_date: preTripDate || null,
+      pre_trip_meeting_time: preTripTime || null,
+      pre_trip_meeting_link: preTripLink || null,
+      climbers_count: bookingData.climbersCount || 1,
+      deposit_amount: 100000,
+      deposit_status: "held",
+      fine_amount: 0,
+      fine_notes: null,
+      pendaki_confirmed: false,
+      partner_confirmed: false
+    }).then(({ error }) => {
+      if (error) console.error("Error syncing booking:", error);
+    });
+
+    const climberId = bookingData.pendakiId || "pendaki1";
+    supabase.from("wallets").select("balance").eq("user_id", climberId).single().then(({ data }) => {
+      const bal = data ? Number(data.balance) : 0;
+      const newBal = Math.max(0, bal - 100000);
+      supabase.from("wallets").update({ balance: newBal }).eq("user_id", climberId).then(() => {
+        supabase.from("deposit_transactions").insert({
+          id: "tx_" + Math.random().toString(36).substring(2, 9),
+          user_id: climberId,
+          type: "withdraw",
+          amount: 100000,
+          description: `Deposit jaminan dikunci untuk booking ${bookingData.mountainName}`
+        });
+      });
+    });
+
     return id;
   };
 
@@ -473,16 +737,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBookings((prev) =>
       prev.map((b) => (b.id === id ? { ...b, status } : b))
     );
+    supabase.from("bookings").update({ status }).eq("id", id).then(({ error }) => {
+      if (error) console.error("Error updating booking status:", error);
+    });
   };
 
   // ─── Rental Actions ─────────────────────────────────────────────────────────
   const addRentalOrder = (orderData: Omit<RentalOrder, "id" | "status">) => {
     const id = "rent_" + Math.random().toString(36).substring(2, 9);
-    
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
-    // Deduct deposit from climber wallet
     setClimberDeposit((prev) => Math.max(0, prev - 100000));
     setDepositTransactions((prev) => [
       {
@@ -502,7 +767,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       depositAmount: 100000,
       depositStatus: "held"
     };
+
     setRentalOrders((prev) => [newOrder, ...prev]);
+
+    // Supabase Sync
+    supabase.from("rental_orders").insert({
+      id,
+      item_id: orderData.itemId,
+      vendor_id: orderData.vendorId,
+      pendaki_id: orderData.pendakiId,
+      qty: orderData.qty,
+      start_date: orderData.startDate,
+      end_date: orderData.endDate,
+      total_price: orderData.totalPrice,
+      status: "Menunggu Konfirmasi",
+      deposit_amount: 100000,
+      deposit_status: "held",
+      fine_amount: 0,
+      fine_notes: null,
+      pendaki_confirmed: false,
+      partner_confirmed: false
+    }).then(({ error }) => {
+      if (error) console.error("Error syncing rental order:", error);
+    });
+
+    const climberId = orderData.pendakiId || "pendaki1";
+    supabase.from("wallets").select("balance").eq("user_id", climberId).single().then(({ data }) => {
+      const bal = data ? Number(data.balance) : 0;
+      const newBal = Math.max(0, bal - 100000);
+      supabase.from("wallets").update({ balance: newBal }).eq("user_id", climberId).then(() => {
+        supabase.from("deposit_transactions").insert({
+          id: "tx_" + Math.random().toString(36).substring(2, 9),
+          user_id: climberId,
+          type: "withdraw",
+          amount: 100000,
+          description: `Deposit jaminan dikunci untuk rental ${orderData.itemName}`
+        });
+      });
+    });
+
     return id;
   };
 
@@ -510,6 +813,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setRentalOrders((prev) =>
       prev.map((r) => (r.id === id ? { ...r, status } : r))
     );
+    supabase.from("rental_orders").update({ status }).eq("id", id).then(({ error }) => {
+      if (error) console.error("Error updating rental status:", error);
+    });
   };
 
   // ─── Negotiation Actions ───────────────────────────────────────────────────
@@ -522,12 +828,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNegotiations((prev) => [newNego, ...prev]);
 
-    // Update status pemesanan
     if (negoData.type === "guide") {
       updateBookingStatus(negoData.orderId, "Menunggu Konfirmasi");
     } else {
       updateRentalStatus(negoData.orderId, "Menunggu Konfirmasi");
     }
+
+    supabase.from("negotiations").insert({
+      id,
+      type: negoData.type,
+      order_id: negoData.orderId,
+      item_name: negoData.itemName,
+      original_price: negoData.originalPrice,
+      proposed_price: negoData.proposedPrice,
+      sender_name: negoData.senderName,
+      recipient_id: negoData.recipientId,
+      recipient_name: negoData.recipientName,
+      status: "pending"
+    }).then(({ error }) => {
+      if (error) console.error("Error syncing negotiation:", error);
+    });
   };
 
   const respondToNegotiation = (id: string, action: "accepted" | "rejected" | "countered", counterPrice?: number) => {
@@ -541,7 +861,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           counterPrice: action === "countered" ? counterPrice : n.counterPrice,
         };
 
-        // Sync with related booking/rental status
         if (action === "accepted") {
           const finalPrice = n.status === "countered" && n.counterPrice ? n.counterPrice : n.proposedPrice;
           if (n.type === "guide") {
@@ -552,6 +871,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   : b
               )
             );
+            supabase.from("bookings").update({ price: finalPrice, status: "Menunggu Pembayaran" }).eq("id", n.orderId);
           } else {
             setRentalOrders((prevRentals) =>
               prevRentals.map((r) =>
@@ -560,6 +880,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   : r
               )
             );
+            supabase.from("rental_orders").update({ total_price: finalPrice, status: "Menunggu Pembayaran" }).eq("id", n.orderId);
           }
         } else if (action === "countered" && counterPrice) {
           if (n.type === "guide") {
@@ -568,12 +889,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 b.id === n.orderId ? { ...b, price: counterPrice } : b
               )
             );
+            supabase.from("bookings").update({ price: counterPrice }).eq("id", n.orderId);
           } else {
             setRentalOrders((prevRentals) =>
               prevRentals.map((r) =>
                 r.id === n.orderId ? { ...r, totalPrice: counterPrice } : r
               )
             );
+            supabase.from("rental_orders").update({ total_price: counterPrice }).eq("id", n.orderId);
           }
         } else if (action === "rejected") {
           if (n.type === "guide") {
@@ -582,6 +905,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             updateRentalStatus(n.orderId, "Dibatalkan");
           }
         }
+
+        supabase.from("negotiations").update({
+          status: action,
+          counter_price: action === "countered" ? counterPrice : undefined
+        }).eq("id", id);
 
         return updatedNego;
       })
@@ -604,6 +932,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       timestamp,
     };
     setChatMessages((prev) => [...prev, newMsg]);
+
+    supabase.from("chat_messages").insert({
+      id,
+      sender_id: currentUser.id,
+      sender_name: currentUser.name,
+      chat_partner_id: partnerId,
+      chat_partner_name: partnerName,
+      message,
+      timestamp
+    });
   };
 
   // ─── Admin Verification Actions ─────────────────────────────────────────────
@@ -619,7 +957,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setGuides((prev) =>
         prev.map((g) => (g.id === req.userId ? { ...g, verified: approve, status: approve ? "Aktif" : g.status } : g))
       );
+      supabase.from("guides").update({ status: approve ? "Aktif" : "Non-Aktif" }).eq("id", req.userId);
     }
+    supabase.from("users").update({ verified: approve }).eq("id", req.userId);
+
+    supabase.from("verification_requests").update({ status: approve ? "approved" : "rejected" }).eq("id", id);
   };
 
   const addVerificationRequest = (reqData: Omit<VerificationRequest, "id" | "status" | "createdAt">) => {
@@ -631,6 +973,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString().split("T")[0],
     };
     setVerificationRequests((prev) => [newReq, ...prev]);
+
+    supabase.from("verification_requests").insert({
+      id,
+      user_id: reqData.userId,
+      user_name: reqData.userName,
+      role: reqData.role,
+      document_name: reqData.documentName,
+      document_image: reqData.documentImage,
+      status: "pending"
+    });
   };
 
   // ─── Vendor Catalog Actions ─────────────────────────────────────────────────
@@ -642,16 +994,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       rating: 5.0,
     };
     setEquipment((prev) => [newItem, ...prev]);
+
+    supabase.from("equipment_items").insert({
+      id,
+      name: itemData.name,
+      description: itemData.description,
+      price: itemData.price,
+      vendor_id: itemData.vendorId,
+      rating: 5.0,
+      available: itemData.available,
+      category: itemData.category,
+      group_discount_enabled: itemData.groupDiscountEnabled || false,
+      damage_terms: itemData.damageTerms || null
+    });
   };
 
   const updateEquipmentItem = (id: string, itemData: Partial<EquipmentItem>) => {
     setEquipment((prev) =>
       prev.map((eq) => (eq.id === id ? { ...eq, ...itemData } : eq))
     );
+
+    const payload: any = {};
+    if (itemData.name !== undefined) payload.name = itemData.name;
+    if (itemData.description !== undefined) payload.description = itemData.description;
+    if (itemData.price !== undefined) payload.price = itemData.price;
+    if (itemData.available !== undefined) payload.available = itemData.available;
+    if (itemData.category !== undefined) payload.category = itemData.category;
+    if (itemData.groupDiscountEnabled !== undefined) payload.group_discount_enabled = itemData.groupDiscountEnabled;
+    if (itemData.damageTerms !== undefined) payload.damage_terms = itemData.damageTerms;
+
+    supabase.from("equipment_items").update(payload).eq("id", id);
   };
 
   const deleteEquipmentItem = (id: string) => {
     setEquipment((prev) => prev.filter((eq) => eq.id !== id));
+    supabase.from("equipment_items").delete().eq("id", id);
   };
 
   // ─── Trip Package Actions ───────────────────────────────────────────────────
@@ -662,6 +1039,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id
     };
     setTripPackages((prev) => [newPkg, ...prev]);
+
+    supabase.from("trip_packages").insert({
+      id,
+      title: pkgData.title,
+      guide_id: pkgData.guideId,
+      vendor_id: pkgData.vendorId || null,
+      description: pkgData.description,
+      duration: pkgData.duration,
+      price: pkgData.price,
+      promo_deadline: pkgData.promoDeadline,
+      services: pkgData.services || [],
+      rundown: pkgData.rundown || [],
+      image: pkgData.image,
+      target_mountain: pkgData.targetMountain
+    });
   };
 
   // ─── Dispute Actions ────────────────────────────────────────────────────────
@@ -670,10 +1062,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setBookings((prev) =>
         prev.map((b) => (b.id === id ? { ...b, status: "Dispute", disputeNotes: notes } : b))
       );
+      supabase.from("bookings").update({ status: "Dispute", dispute_notes: notes }).eq("id", id);
     } else {
       setRentalOrders((prev) =>
         prev.map((r) => (r.id === id ? { ...r, status: "Dispute", disputeNotes: notes } : r))
       );
+      supabase.from("rental_orders").update({ status: "Dispute", dispute_notes: notes }).eq("id", id);
     }
   };
 
@@ -682,21 +1076,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setBookings((prev) =>
         prev.map((b) => (b.id === id ? { ...b, status: refund ? "Dibatalkan" : "Selesai", depositStatus: refund ? "refunded" : "held" } : b))
       );
+      supabase.from("bookings").update({ status: refund ? "Dibatalkan" : "Selesai", deposit_status: refund ? "refunded" : "held" }).eq("id", id);
     } else {
       setRentalOrders((prev) =>
         prev.map((r) => (r.id === id ? { ...r, status: refund ? "Dibatalkan" : "Selesai", depositStatus: refund ? "refunded" : "held" } : r))
       );
+      supabase.from("rental_orders").update({ status: refund ? "Dibatalkan" : "Selesai", deposit_status: refund ? "refunded" : "held" }).eq("id", id);
     }
   };
 
   const toggleGroupDiscount = (role: "guide" | "vendor", id: string) => {
     if (role === "guide") {
       setGuides((prev) =>
-        prev.map((g) => (g.id === id ? { ...g, groupDiscountEnabled: !g.groupDiscountEnabled } : g))
+        prev.map((g) => {
+          if (g.id === id) {
+            const nextVal = !g.groupDiscountEnabled;
+            supabase.from("guides").update({ group_discount_enabled: nextVal }).eq("id", id);
+            return { ...g, groupDiscountEnabled: nextVal };
+          }
+          return g;
+        })
       );
     } else {
       setEquipment((prev) =>
-        prev.map((eq) => (eq.id === id ? { ...eq, groupDiscountEnabled: !eq.groupDiscountEnabled } : eq))
+        prev.map((eq) => {
+          if (eq.id === id) {
+            const nextVal = !eq.groupDiscountEnabled;
+            supabase.from("equipment_items").update({ group_discount_enabled: nextVal }).eq("id", id);
+            return { ...eq, groupDiscountEnabled: nextVal };
+          }
+          return eq;
+        })
       );
     }
   };
@@ -707,8 +1117,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         prev.map((b) => {
           if (b.id !== id) return b;
           const updated = { ...b };
-          if (role === "pendaki") updated.pendakiConfirmed = true;
-          else updated.partnerConfirmed = true;
+          if (role === "pendaki") {
+            updated.pendakiConfirmed = true;
+            supabase.from("bookings").update({ pendaki_confirmed: true }).eq("id", id);
+          } else {
+            updated.partnerConfirmed = true;
+            supabase.from("bookings").update({ partner_confirmed: true }).eq("id", id);
+          }
           return updated;
         })
       );
@@ -717,8 +1132,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         prev.map((r) => {
           if (r.id !== id) return r;
           const updated = { ...r };
-          if (role === "pendaki") updated.pendakiConfirmed = true;
-          else updated.partnerConfirmed = true;
+          if (role === "pendaki") {
+            updated.pendakiConfirmed = true;
+            supabase.from("rental_orders").update({ pendaki_confirmed: true }).eq("id", id);
+          } else {
+            updated.partnerConfirmed = true;
+            supabase.from("rental_orders").update({ partner_confirmed: true }).eq("id", id);
+          }
           return updated;
         })
       );
@@ -730,10 +1150,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setBookings((prev) =>
         prev.map((b) => (b.id === id ? { ...b, fineAmount, fineNotes } : b))
       );
+      supabase.from("bookings").update({ fine_amount: fineAmount, fine_notes: fineNotes }).eq("id", id);
     } else {
       setRentalOrders((prev) =>
         prev.map((r) => (r.id === id ? { ...r, fineAmount, fineNotes } : r))
       );
+      supabase.from("rental_orders").update({ fine_amount: fineAmount, fine_notes: fineNotes }).eq("id", id);
     }
   };
 
@@ -749,80 +1171,97 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const dep = b.depositAmount || 0;
           let depStatus: Booking["depositStatus"] = "refunded";
           
+          let climberBalChange = 0;
           if (approveFine && fine > 0) {
             if (fine >= dep) {
               depStatus = "forfeited";
               const excess = fine - dep;
-              if (excess > 0) {
-                setClimberDeposit((prevDep) => Math.max(0, prevDep - excess));
-                setDepositTransactions((prevTx) => [
-                  {
-                    id: "tx_" + Math.random().toString(36).substring(2, 9),
-                    type: "fine_deduction",
-                    amount: excess,
-                    description: `Kekurangan denda pelanggaran booking ${b.mountainName}: ${b.fineNotes || ""}`,
-                    createdAt: dateStr
-                  },
-                  ...prevTx
-                ]);
-              }
+              climberBalChange = -excess;
             } else {
               depStatus = "partially_refunded";
-              const refundAmount = dep - fine;
-              setClimberDeposit((prevDep) => prevDep + refundAmount);
-              setDepositTransactions((prevTx) => [
-                {
-                  id: "tx_" + Math.random().toString(36).substring(2, 9),
-                  type: "refund",
-                  amount: refundAmount,
-                  description: `Sisa pengembalian deposit jaminan booking ${b.mountainName}`,
-                  createdAt: dateStr
-                },
-                ...prevTx
-              ]);
+              climberBalChange = dep - fine;
             }
-            // Log the main fine deduction
-            setDepositTransactions((prevTx) => [
-              {
-                id: "tx_" + Math.random().toString(36).substring(2, 9),
-                type: "fine_deduction",
-                amount: Math.min(fine, dep),
-                description: `Denda pelanggaran booking ${b.mountainName}: ${b.fineNotes || ""}`,
-                createdAt: dateStr
-              },
-              ...prevTx
-            ]);
           } else {
-            // Refund full deposit
-            setClimberDeposit((prevDep) => prevDep + dep);
-            setDepositTransactions((prevTx) => [
-              {
-                id: "tx_" + Math.random().toString(36).substring(2, 9),
-                type: "refund",
-                amount: dep,
-                description: `Pengembalian penuh deposit jaminan booking ${b.mountainName}`,
-                createdAt: dateStr
-              },
-              ...prevTx
-            ]);
+            climberBalChange = dep;
           }
 
-          // Payout to Guide (90% + fine)
           const platformFee = Math.round(b.price * 0.1);
           const basePayout = b.price - platformFee;
           const finalPayout = basePayout + (approveFine ? fine : 0);
+
+          if (climberId) {
+            setClimberDeposit((prevDep) => Math.max(0, prevDep + climberBalChange));
+          }
           setGuideWallet((prev) => prev + finalPayout);
-          setDepositTransactions((prevTx) => [
-            {
+
+          // Database Sync
+          supabase.from("bookings").update({
+            status: "Selesai",
+            deposit_status: depStatus,
+            fine_amount: approveFine ? fine : 0
+          }).eq("id", id);
+
+          const climberId = b.pendakiId || "pendaki1";
+          if (climberBalChange !== 0) {
+            supabase.from("wallets").select("balance").eq("user_id", climberId).single().then(({ data }) => {
+              const current = data ? Number(data.balance) : 0;
+              supabase.from("wallets").update({ balance: Math.max(0, current + climberBalChange) }).eq("user_id", climberId);
+            });
+          }
+
+          if (b.guideId) {
+            supabase.from("wallets").select("balance").eq("user_id", b.guideId).single().then(({ data }) => {
+              const current = data ? Number(data.balance) : 0;
+              supabase.from("wallets").update({ balance: current + finalPayout }).eq("user_id", b.guideId);
+            });
+          }
+
+          if (approveFine && fine > 0) {
+            const excess = fine - dep;
+            if (excess > 0) {
+              supabase.from("deposit_transactions").insert({
+                id: "tx_" + Math.random().toString(36).substring(2, 9),
+                user_id: climberId,
+                type: "fine_deduction",
+                amount: excess,
+                description: `Kekurangan denda pelanggaran booking ${b.mountainName}: ${b.fineNotes || ""}`
+              });
+            } else {
+              supabase.from("deposit_transactions").insert({
+                id: "tx_" + Math.random().toString(36).substring(2, 9),
+                user_id: climberId,
+                type: "refund",
+                amount: dep - fine,
+                description: `Sisa pengembalian deposit jaminan booking ${b.mountainName}`
+              });
+            }
+            supabase.from("deposit_transactions").insert({
               id: "tx_" + Math.random().toString(36).substring(2, 9),
+              user_id: climberId,
+              type: "fine_deduction",
+              amount: Math.min(fine, dep),
+              description: `Denda pelanggaran booking ${b.mountainName}: ${b.fineNotes || ""}`
+            });
+          } else {
+            supabase.from("deposit_transactions").insert({
+              id: "tx_" + Math.random().toString(36).substring(2, 9),
+              user_id: climberId,
+              type: "refund",
+              amount: dep,
+              description: `Pengembalian penuh deposit jaminan booking ${b.mountainName}`
+            });
+          }
+
+          if (b.guideId) {
+            supabase.from("deposit_transactions").insert({
+              id: "tx_" + Math.random().toString(36).substring(2, 9),
+              user_id: b.guideId,
               type: "refund",
               amount: finalPayout,
-              description: `Penerimaan sewa jasa trip ${b.mountainName} &middot; Pendaki: ${b.pendakiName} ${approveFine ? `(Termasuk denda Rp ${fine.toLocaleString("id-ID")})` : ""}`,
-              createdAt: dateStr
-            },
-            ...prevTx
-          ]);
-          
+              description: `Penerimaan sewa jasa trip ${b.mountainName} · Pendaki: ${b.pendakiName} ${approveFine ? `(Termasuk denda Rp ${fine.toLocaleString("id-ID")})` : ""}`
+            });
+          }
+
           return {
             ...b,
             status: "Selesai",
@@ -839,80 +1278,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const dep = r.depositAmount || 0;
           let depStatus: RentalOrder["depositStatus"] = "refunded";
           
+          let climberBalChange = 0;
           if (approveFine && fine > 0) {
             if (fine >= dep) {
               depStatus = "forfeited";
               const excess = fine - dep;
-              if (excess > 0) {
-                setClimberDeposit((prevDep) => Math.max(0, prevDep - excess));
-                setDepositTransactions((prevTx) => [
-                  {
-                    id: "tx_" + Math.random().toString(36).substring(2, 9),
-                    type: "fine_deduction",
-                    amount: excess,
-                    description: `Kekurangan denda kerusakan rental ${r.itemName}: ${r.fineNotes || ""}`,
-                    createdAt: dateStr
-                  },
-                  ...prevTx
-                ]);
-              }
+              climberBalChange = -excess;
             } else {
               depStatus = "partially_refunded";
-              const refundAmount = dep - fine;
-              setClimberDeposit((prevDep) => prevDep + refundAmount);
-              setDepositTransactions((prevTx) => [
-                {
-                  id: "tx_" + Math.random().toString(36).substring(2, 9),
-                  type: "refund",
-                  amount: refundAmount,
-                  description: `Sisa pengembalian deposit jaminan rental ${r.itemName}`,
-                  createdAt: dateStr
-                },
-                ...prevTx
-              ]);
+              climberBalChange = dep - fine;
             }
-            // Log the main fine deduction
-            setDepositTransactions((prevTx) => [
-              {
-                id: "tx_" + Math.random().toString(36).substring(2, 9),
-                type: "fine_deduction",
-                amount: Math.min(fine, dep),
-                description: `Denda kerusakan rental ${r.itemName}: ${r.fineNotes || ""}`,
-                createdAt: dateStr
-              },
-              ...prevTx
-            ]);
           } else {
-            // Refund full deposit
-            setClimberDeposit((prevDep) => prevDep + dep);
-            setDepositTransactions((prevTx) => [
-              {
-                id: "tx_" + Math.random().toString(36).substring(2, 9),
-                type: "refund",
-                amount: dep,
-                description: `Pengembalian penuh deposit jaminan rental ${r.itemName}`,
-                createdAt: dateStr
-              },
-              ...prevTx
-            ]);
+            climberBalChange = dep;
           }
 
-          // Payout to Vendor (90% + fine)
           const platformFee = Math.round(r.totalPrice * 0.1);
           const basePayout = r.totalPrice - platformFee;
           const finalPayout = basePayout + (approveFine ? fine : 0);
+
+          setClimberDeposit((prevDep) => Math.max(0, prevDep + climberBalChange));
           setVendorWallet((prev) => prev + finalPayout);
-          setDepositTransactions((prevTx) => [
-            {
+
+          // Database Sync
+          supabase.from("rental_orders").update({
+            status: "Selesai",
+            deposit_status: depStatus,
+            fine_amount: approveFine ? fine : 0
+          }).eq("id", id);
+
+          const climberId = r.pendakiId || "pendaki1";
+          if (climberBalChange !== 0) {
+            supabase.from("wallets").select("balance").eq("user_id", climberId).single().then(({ data }) => {
+              const current = data ? Number(data.balance) : 0;
+              supabase.from("wallets").update({ balance: Math.max(0, current + climberBalChange) }).eq("user_id", climberId);
+            });
+          }
+
+          if (r.vendorId) {
+            supabase.from("wallets").select("balance").eq("user_id", r.vendorId).single().then(({ data }) => {
+              const current = data ? Number(data.balance) : 0;
+              supabase.from("wallets").update({ balance: current + finalPayout }).eq("user_id", r.vendorId);
+            });
+          }
+
+          if (approveFine && fine > 0) {
+            const excess = fine - dep;
+            if (excess > 0) {
+              supabase.from("deposit_transactions").insert({
+                id: "tx_" + Math.random().toString(36).substring(2, 9),
+                user_id: climberId,
+                type: "fine_deduction",
+                amount: excess,
+                description: `Kekurangan denda kerusakan rental ${r.itemName}: ${r.fineNotes || ""}`
+              });
+            } else {
+              supabase.from("deposit_transactions").insert({
+                id: "tx_" + Math.random().toString(36).substring(2, 9),
+                user_id: climberId,
+                type: "refund",
+                amount: dep - fine,
+                description: `Sisa pengembalian deposit jaminan rental ${r.itemName}`
+              });
+            }
+            supabase.from("deposit_transactions").insert({
               id: "tx_" + Math.random().toString(36).substring(2, 9),
+              user_id: climberId,
+              type: "fine_deduction",
+              amount: Math.min(fine, dep),
+              description: `Denda kerusakan rental ${r.itemName}: ${r.fineNotes || ""}`
+            });
+          } else {
+            supabase.from("deposit_transactions").insert({
+              id: "tx_" + Math.random().toString(36).substring(2, 9),
+              user_id: climberId,
+              type: "refund",
+              amount: dep,
+              description: `Pengembalian penuh deposit jaminan rental ${r.itemName}`
+            });
+          }
+
+          if (r.vendorId) {
+            supabase.from("deposit_transactions").insert({
+              id: "tx_" + Math.random().toString(36).substring(2, 9),
+              user_id: r.vendorId,
               type: "refund",
               amount: finalPayout,
-              description: `Penerimaan sewa alat ${r.itemName} &middot; Pendaki: ${r.pendakiName} ${approveFine ? `(Termasuk denda Rp ${fine.toLocaleString("id-ID")})` : ""}`,
-              createdAt: dateStr
-            },
-            ...prevTx
-          ]);
-          
+              description: `Penerimaan sewa alat ${r.itemName} · Pendaki: ${r.pendakiName} ${approveFine ? `(Termasuk denda Rp ${fine.toLocaleString("id-ID")})` : ""}`
+            });
+          }
+
           return {
             ...r,
             status: "Selesai",
@@ -946,9 +1400,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       ...prev
     ]);
+
+    let targetUserId = "";
+    if (role === "pendaki") targetUserId = "pendaki1";
+    else if (role === "guide") targetUserId = "guide1";
+    else if (role === "vendor") targetUserId = "vendor1";
+
+    if (targetUserId) {
+      supabase.from("wallets").select("balance").eq("user_id", targetUserId).single().then(({ data }) => {
+        const currentBal = data ? Number(data.balance) : 0;
+        const newBal = currentBal + amount;
+        supabase.from("wallets").update({ balance: newBal }).eq("user_id", targetUserId).then(() => {
+          supabase.from("deposit_transactions").insert({
+            id: "tx_" + Math.random().toString(36).substring(2, 9),
+            user_id: targetUserId,
+            type: "topup",
+            amount,
+            description: `Top Up Saldo Dompet (${role.toUpperCase()})`
+          });
+        });
+      });
+    }
   };
 
-  const withdrawWallet = (role: "pendaki" | "guide" | "vendor", amount: number) => {
+  const withdrawWallet = (role: "pendaki" | "guide" | "vendor", amount: number, description?: string) => {
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     
@@ -965,11 +1440,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: "tx_" + Math.random().toString(36).substring(2, 9),
         type: "withdraw",
         amount,
-        description: `Penarikan Dana Dompet (${role.toUpperCase()})`,
+        description: description || `Penarikan Dana Dompet (${role.toUpperCase()})`,
         createdAt: dateStr
       },
       ...prev
     ]);
+
+    let targetUserId = "";
+    if (role === "pendaki") targetUserId = "pendaki1";
+    else if (role === "guide") targetUserId = "guide1";
+    else if (role === "vendor") targetUserId = "vendor1";
+
+    if (targetUserId) {
+      supabase.from("wallets").select("balance").eq("user_id", targetUserId).single().then(({ data }) => {
+        const currentBal = data ? Number(data.balance) : 0;
+        const newBal = Math.max(0, currentBal - amount);
+        supabase.from("wallets").update({ balance: newBal }).eq("user_id", targetUserId).then(() => {
+          supabase.from("deposit_transactions").insert({
+            id: "tx_" + Math.random().toString(36).substring(2, 9),
+            user_id: targetUserId,
+            type: "withdraw",
+            amount,
+            description: description || `Penarikan Dana Dompet (${role.toUpperCase()})`
+          });
+        });
+      });
+    }
   };
 
   const addWarning = (userId: string, text: string) => {
@@ -993,10 +1489,157 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       date: dateStr
     };
     setUserWarnings((prev) => [newWarning, ...prev]);
+
+    supabase.from("user_warnings").insert({
+      id: newWarning.id,
+      user_id: userId,
+      user_name: uName,
+      text
+    });
   };
 
   const removeWarning = (id: string) => {
     setUserWarnings((prev) => prev.filter((w) => w.id !== id));
+    supabase.from("user_warnings").delete().eq("id", id);
+  };
+
+  const addCollaborationProposal = (propData: Omit<CollaborationProposal, "id" | "status" | "createdAt">) => {
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    const id = "prop_" + Math.random().toString(36).substring(2, 9);
+    const newProposal: CollaborationProposal = {
+      ...propData,
+      id,
+      status: "pending",
+      createdAt: dateStr
+    };
+    setCollaborationProposals((prev) => [newProposal, ...prev]);
+
+    supabase.from("collaboration_proposals").insert({
+      id,
+      title: propData.title,
+      guide_id: propData.guideId,
+      guide_name: propData.guideName,
+      vendor_id: propData.vendorId,
+      vendor_name: propData.vendorName,
+      description: propData.description,
+      duration: propData.duration,
+      price: propData.price,
+      target_mountain: propData.targetMountain,
+      rental_mechanism: propData.rentalMechanism,
+      bundled_equipment_ids: propData.bundledEquipmentIds || [],
+      status: "pending",
+      sender_id: propData.senderId
+    });
+  };
+
+  const respondToCollaborationProposal = (id: string, status: "accepted" | "rejected") => {
+    setCollaborationProposals((prev) =>
+      prev.map((p) => {
+        if (p.id === id) {
+          const updated = { ...p, status };
+          if (status === "accepted") {
+            addTripPackage({
+              title: p.title,
+              guideId: p.guideId,
+              guideName: p.guideName,
+              vendorId: p.vendorId,
+              vendorName: p.vendorName,
+              description: p.description,
+              duration: p.duration,
+              price: p.price,
+              promoDeadline: "2026-07-31",
+              services: [
+                "Jasa Pemandu Gunung Bersertifikat",
+                "Penyewaan Alat Bundling (Tenda, Carrier, Nesting)",
+                "Mekanisme Sewa: " + p.rentalMechanism
+              ],
+              rundown: [
+                "Hari 1: Penjemputan di basecamp & persiapan peralatan bersama Vendor",
+                "Hari 2: Trekking & camp malam bersama Pemandu",
+                "Hari 3: Summit attack & pengembalian peralatan ke Vendor"
+              ],
+              image: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=600&auto=format&fit=crop&q=80",
+              targetMountain: p.targetMountain
+            });
+          }
+          return updated;
+        }
+        return p;
+      })
+    );
+
+    supabase.from("collaboration_proposals").update({ status }).eq("id", id);
+  };
+
+  const logUserActivity = (userId: string, userName: string, role: UserActivity["userRole"], action: string) => {
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    const id = "act_" + Math.random().toString(36).substring(2, 9);
+    const newAct: UserActivity = {
+      id,
+      userId,
+      userName,
+      userRole: role,
+      action,
+      timestamp: dateStr
+    };
+    
+    setUserActivities((prev) => [newAct, ...prev]);
+
+    supabase.from("user_activities").insert({
+      id,
+      user_id: userId,
+      user_name: userName,
+      user_role: role,
+      action
+    });
+  };
+
+  const updateUserStatus = (id: string, status: "active" | "suspended") => {
+    setUsers((prev) =>
+      prev.map((u) => (u.id === id ? { ...u, status } : u))
+    );
+    const u = users.find(x => x.id === id);
+    if (u) {
+      logUserActivity("admin1", "Super Admin", "admin", `Mengubah status akun ${u.name} (${u.role.toUpperCase()}) menjadi ${status === "active" ? "Aktif" : "Suspended"}`);
+    }
+
+    supabase.from("users").update({ status }).eq("id", id);
+  };
+
+  const toggleUserVerification = (id: string) => {
+    let oldVerified = false;
+    let uName = "";
+    let uRole = "";
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === id) {
+          oldVerified = !!u.verified;
+          uName = u.name;
+          uRole = u.role;
+          return { ...u, verified: !u.verified };
+        }
+        return u;
+      })
+    );
+    
+    const nextVerified = !oldVerified;
+
+    logUserActivity("admin1", "Super Admin", "admin", `Mengubah status verifikasi ${uName} menjadi ${nextVerified ? "Verified" : "Unverified"}`);
+    
+    setGuides((prev) => prev.map(g => g.id === id ? { ...g, verified: nextVerified } : g));
+    setVendors((prev) => prev.map(v => v.id === id ? { ...v, verified: nextVerified } : v));
+
+    supabase.from("users").update({ verified: nextVerified }).eq("id", id).then(() => {
+      if (uRole === "guide") {
+        supabase.from("guides").update({ verified: nextVerified }).eq("id", id);
+      } else if (uRole === "vendor") {
+        supabase.from("vendors").update({ verified: nextVerified }).eq("id", id);
+      }
+    });
   };
 
   return (
@@ -1008,7 +1651,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setMountains,
         guides,
         setGuides,
-        vendors: INITIAL_VENDORS,
+        vendors,
         equipment,
         setEquipment,
         tripPackages,
@@ -1046,6 +1689,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         withdrawWallet,
         addWarning,
         removeWarning,
+        collaborationProposals,
+        addCollaborationProposal,
+        respondToCollaborationProposal,
+        users,
+        updateUserStatus,
+        toggleUserVerification,
+        userActivities,
+        logUserActivity,
       }}
     >
       {children}

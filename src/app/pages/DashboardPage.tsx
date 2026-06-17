@@ -93,7 +93,15 @@ export function DashboardPage() {
     addWarning,
     removeWarning,
     guideWallet,
-    vendorWallet
+    vendorWallet,
+    collaborationProposals,
+    addCollaborationProposal,
+    respondToCollaborationProposal,
+    users,
+    updateUserStatus,
+    toggleUserVerification,
+    userActivities,
+    logUserActivity
   } = useApp();
 
   const location = useLocation();
@@ -122,6 +130,13 @@ export function DashboardPage() {
   const [activePaymentItem, setActivePaymentItem] = useState<{ id: string; type: "booking" | "rental"; amount: number } | null>(null);
   const [paymentMethod, setPaymentMethod] = useState("gopay");
   const [isPaying, setIsPaying] = useState(false);
+
+  // Payment Gateway Simulated States
+  const [showPaymentGateway, setShowPaymentGateway] = useState(false);
+  const [paymentGatewayAmount, setPaymentGatewayAmount] = useState(0);
+  const [paymentGatewayRole, setPaymentGatewayRole] = useState<"pendaki" | "guide" | "vendor">("pendaki");
+  const [paymentGatewayMethod, setPaymentGatewayMethod] = useState<"va" | "qris" | "cc">("qris");
+  const [paymentGatewayBank, setPaymentGatewayBank] = useState<"bca" | "mandiri" | "bni" | "bri">("bca");
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewItem, setReviewItem] = useState<{ id: string; name: string; type: "guide" | "rental" } | null>(null);
@@ -190,6 +205,146 @@ export function DashboardPage() {
     adminContactValue: "",
     status: "Buka" as "Buka" | "Tutup"
   });
+  const [prefilledWarningUserId, setPrefilledWarningUserId] = useState("");
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState<any>(null);
+
+  const [vendorCollabSubTab, setVendorCollabSubTab] = useState("guides");
+  const [collabModalOpen, setCollabModalOpen] = useState(false);
+  const [selectedCollabPartner, setSelectedCollabPartner] = useState<any>(null);
+  const [collabForm, setCollabForm] = useState({
+    title: "",
+    targetMountain: "",
+    duration: "3 Hari 2 Malam",
+    price: "1200000",
+    description: "",
+    rentalMechanism: "",
+    bundledEquipmentIds: [] as string[]
+  });
+
+  const handleOpenCollabForm = (partner: any) => {
+    setSelectedCollabPartner(partner);
+    setCollabForm({
+      title: "",
+      targetMountain: mountains.length > 0 ? mountains[0].name : "",
+      duration: "3 Hari 2 Malam",
+      price: "1200000",
+      description: `Paket trip promo spesial kolaborasi bersama ${partner.name}. Sudah termasuk sewa peralatan kemping lengkap & jasa pemandu profesional.`,
+      rentalMechanism: "Alat diambil langsung oleh Guide di toko H-1 sebelum keberangkatan, denda kerusakan ditanggung bersama.",
+      bundledEquipmentIds: []
+    });
+    setCollabModalOpen(true);
+  };
+
+  const handleSaveCollabProposal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !selectedCollabPartner) return;
+
+    const priceNum = parseInt(collabForm.price);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      toast.error("Silakan masukkan harga yang valid.");
+      return;
+    }
+
+    addCollaborationProposal({
+      title: collabForm.title || `Paket Spesial ${currentUser.name} & ${selectedCollabPartner.name}`,
+      guideId: currentUser.role === "guide" ? currentUser.id : selectedCollabPartner.id,
+      guideName: currentUser.role === "guide" ? currentUser.name : selectedCollabPartner.name,
+      vendorId: currentUser.role === "vendor" ? currentUser.id : selectedCollabPartner.id,
+      vendorName: currentUser.role === "vendor" ? currentUser.name : selectedCollabPartner.name,
+      description: collabForm.description,
+      duration: collabForm.duration,
+      price: priceNum,
+      targetMountain: collabForm.targetMountain,
+      rentalMechanism: collabForm.rentalMechanism,
+      bundledEquipmentIds: collabForm.bundledEquipmentIds,
+      senderId: currentUser.id
+    });
+
+    setCollabModalOpen(false);
+    toast.success("Proposal kerjasama kolaborasi berhasil diajukan ke partner!");
+  };
+
+  const renderProposalsCenter = () => {
+    if (!currentUser) return null;
+    const relevantProposals = collaborationProposals.filter(
+      (p) => p.guideId === currentUser.id || p.vendorId === currentUser.id
+    );
+
+    if (relevantProposals.length === 0) return null;
+
+    return (
+      <Card className="border border-amber-200 bg-amber-50/10 shadow-sm mb-6">
+        <CardHeader className="py-4 border-b border-amber-100 flex flex-row items-center gap-2">
+          <Award className="size-5 text-amber-605 shrink-0 animate-bounce" />
+          <div>
+            <CardTitle className="text-sm font-extrabold text-amber-900">Pusat Proposal & Negosiasi Kerjasama Partner</CardTitle>
+            <CardDescription className="text-xs text-amber-700">Setujui penawaran kerjasama bundling sewa alat & jasa trip.</CardDescription>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 space-y-4">
+          {relevantProposals.map((p) => {
+            const isSender = p.senderId === currentUser.id;
+            const partnerName = currentUser.role === "guide" ? p.vendorName : p.guideName;
+            return (
+              <div key={p.id} className="p-4 rounded-xl border border-gray-150 bg-white shadow-xs flex flex-col gap-3">
+                <div className="flex justify-between items-start flex-wrap gap-2">
+                  <div>
+                    <h4 className="font-extrabold text-gray-800 text-sm">Proposal: {p.title}</h4>
+                    <p className="text-xs text-gray-400 mt-0.5">Gunung: <b>{p.targetMountain}</b> &middot; Durasi: <b>{p.duration}</b></p>
+                    <p className="text-xs text-gray-500 mt-1 font-semibold">
+                      {isSender ? `Mengajukan ke Partner: ${partnerName}` : `Diajukan oleh Partner: ${partnerName}`}
+                    </p>
+                  </div>
+                  <Badge className={`text-[10px] font-bold ${
+                    p.status === "pending"
+                      ? "bg-blue-50 text-blue-700 border border-blue-200 animate-pulse"
+                      : p.status === "accepted"
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : "bg-red-50 text-red-700 border border-red-200"
+                  }`}>
+                    {p.status.toUpperCase()}
+                  </Badge>
+                </div>
+
+                <div className="p-3 bg-gray-55/40 rounded-lg text-xs space-y-2 text-gray-750 font-medium">
+                  <p><b>Deskripsi Rencana Trip:</b> {p.description}</p>
+                  <p><b>Mekanisme Logistik & Sewa Alat:</b> <span className="font-semibold text-emerald-800">{p.rentalMechanism}</span></p>
+                  <p className="font-bold text-gray-800">Harga Kesepakatan Paket: Rp {p.price.toLocaleString("id-ID")}</p>
+                </div>
+
+                {p.status === "pending" && !isSender && (
+                  <div className="flex gap-2 justify-end pt-1">
+                    <Button
+                      size="xs"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 h-8"
+                      onClick={() => {
+                        respondToCollaborationProposal(p.id, "accepted");
+                        toast.success("Kerjasama disetujui! Paket promo bundling otomatis diterbitkan.");
+                      }}
+                    >
+                      Terima Kerjasama
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      className="text-xs border-red-200 text-red-600 hover:bg-red-55 h-8 font-semibold"
+                      onClick={() => {
+                        respondToCollaborationProposal(p.id, "rejected");
+                        toast.warning("Proposal kerjasama ditolak.");
+                      }}
+                    >
+                      Tolak
+                    </Button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+    );
+  };
 
   // Filter messages for current chat session
   const activeChatMessages = useMemo(() => {
@@ -370,6 +525,17 @@ export function DashboardPage() {
       setSelectedChatPartnerName(chatPartnersList[0].name);
     }
   }, [chatPartnersList, selectedChatPartnerId]);
+  
+  // Synchronize collaboration subtab based on active role
+  useEffect(() => {
+    if (currentUser) {
+      if (currentUser.role === "guide") {
+        setVendorCollabSubTab("vendors");
+      } else if (currentUser.role === "vendor") {
+        setVendorCollabSubTab("guides");
+      }
+    }
+  }, [currentUser]);
 
   // Initialize package form select values
   useEffect(() => {
@@ -434,6 +600,59 @@ export function DashboardPage() {
   const handleOpenPayment = (id: string, type: "booking" | "rental", amount: number) => {
     setActivePaymentItem({ id, type, amount });
     setPaymentModalOpen(true);
+  };
+
+  const handlePayWithWallet = (id: string, type: "booking" | "rental", amount: number) => {
+    if (!currentUser) return;
+    
+    if (climberDeposit < amount) {
+      toast.error("Saldo Dompet Anda Tidak Mencukupi!", {
+        description: `Saldo Anda saat ini Rp ${climberDeposit.toLocaleString("id-ID")}. Silakan lakukan Top Up terlebih dahulu di menu Deposit & Dompet.`,
+      });
+      setActiveTab("deposit_wallet");
+      return;
+    }
+
+    // Deduct from climber deposit (wallet balance)
+    withdrawWallet("pendaki", amount, `Pembayaran ${type === "booking" ? "Booking Guide" : "Sewa Alat"} (ID: ${id})`);
+    logUserActivity(currentUser.id, currentUser.name || "Pendaki", "pendaki", `Melakukan pembayaran ${type === "booking" ? "Booking Guide" : "Sewa Alat"} senilai Rp ${amount.toLocaleString("id-ID")}`);
+
+    if (type === "booking") {
+      updateBookingStatus(id, "Telah Dibayar");
+      
+      // Automatic Rental Order creation for bundle packages!
+      const b = bookings.find(item => item.id === id);
+      if (b && b.bookingType === "paket" && b.packageId) {
+        const pkg = tripPackages.find(p => p.id === b.packageId);
+        if (pkg && pkg.vendorId) {
+          const startDate = new Date(b.bookingDate);
+          const endDate = new Date(startDate.getTime() + 2 * 24 * 60 * 60 * 1000);
+          const endDateStr = endDate.toISOString().split("T")[0];
+          
+          const rentalId = addRentalOrder({
+            itemId: pkg.id,
+            itemName: `Alat Bundling: ${pkg.title}`,
+            vendorId: pkg.vendorId,
+            vendorName: pkg.vendorName || "Vendor Partner",
+            pendakiId: currentUser.id,
+            pendakiName: currentUser.name || "Pendaki",
+            qty: b.climbersCount || 1,
+            startDate: b.bookingDate,
+            endDate: endDateStr,
+            totalPrice: 0, // Included in package bundle
+          });
+          
+          updateRentalStatus(rentalId, "Telah Dibayar");
+          logUserActivity(currentUser.id, currentUser.name || "Pendaki", "pendaki", `Otomatis membuat rental order bundling ${pkg.title} ke Vendor ${pkg.vendorName}`);
+        }
+      }
+    } else {
+      updateRentalStatus(id, "Telah Dibayar");
+    }
+
+    toast.success("Pembayaran Berhasil!", {
+      description: `Pembayaran sebesar Rp ${amount.toLocaleString("id-ID")} berhasil didebet dari Saldo Dompet Anda.`,
+    });
   };
 
   const handleProcessPayment = () => {
@@ -592,10 +811,33 @@ export function DashboardPage() {
       toast.error("Masukkan nominal yang valid!");
       return;
     }
-    topUpWallet(currentUser?.role as any, amount);
+    setPaymentGatewayAmount(amount);
+    setPaymentGatewayRole(currentUser?.role as any || "pendaki");
     setTopUpModalOpen(false);
     setDepositAmountInput("");
-    toast.success(`Berhasil melakukan top up sebesar Rp ${amount.toLocaleString("id-ID")}!`);
+    setPaymentGatewayMethod("qris");
+    setShowPaymentGateway(true);
+  };
+
+  const handlePaymentGatewaySuccess = () => {
+    topUpWallet(paymentGatewayRole, paymentGatewayAmount);
+    logUserActivity(
+      currentUser?.id || "unknown",
+      currentUser?.name || "User",
+      paymentGatewayRole,
+      `Melakukan Top Up Saldo Deposit sebesar Rp ${paymentGatewayAmount.toLocaleString("id-ID")} via Payment Gateway (${paymentGatewayMethod.toUpperCase()})`
+    );
+    setShowPaymentGateway(false);
+    toast.success(`Berhasil melakukan top up sebesar Rp ${paymentGatewayAmount.toLocaleString("id-ID")}!`, {
+      description: "Saldo dompet Anda berhasil dikreditkan secara instan.",
+    });
+  };
+
+  const handlePaymentGatewayCancel = () => {
+    setShowPaymentGateway(false);
+    toast.error("Pembayaran Dibatalkan / Gagal", {
+      description: "Saldo dompet Anda tidak bertambah karena transaksi dibatalkan atau tidak terverifikasi.",
+    });
   };
 
   const handleWithdrawSubmit = (e: React.FormEvent) => {
@@ -800,6 +1042,7 @@ export function DashboardPage() {
                   { id: "bookings", label: "Booking Masuk", icon: <FileText className="size-4" /> },
                   { id: "trips", label: "Trip Lapangan", icon: <Activity className="size-4" /> },
                   { id: "packages", label: "Iklan Paket (Ads)", icon: <Award className="size-4" /> },
+                  { id: "vendor_catalog", label: "Katalog Vendor & Kolaborasi", icon: <Building className="size-4" /> },
                   { id: "deposit_wallet", label: "Dompet Penghasilan", icon: <Wallet className="size-4" /> },
                   { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> }
                 ].map(t => (
@@ -867,14 +1110,15 @@ export function DashboardPage() {
 
             {currentUser.role === "admin" && (
               <>
-                {[
-                  { id: "verify", label: "Verifikasi Berkas", icon: <UserCheck className="size-4" /> },
-                  { id: "escrow", label: "Monitoring Transaksi", icon: <DollarSign className="size-4" /> },
-                  { id: "disputes", label: "Penyelesaian Dispute", icon: <ShieldAlert className="size-4" /> },
-                  { id: "manage_mountains", label: "Kontak Tiket Gunung", icon: <MountainIcon className="size-4" /> },
-                  { id: "warnings", label: "Sanksi & Warning", icon: <AlertTriangle className="size-4" /> },
-                  { id: "reports", label: "Laporan Keuangan", icon: <TrendingUp className="size-4" /> }
-                ].map(t => (
+                 {[
+                   { id: "user_control", label: "Aktivitas & Kontrol User", icon: <Users className="size-4" /> },
+                   { id: "verify", label: "Verifikasi Berkas", icon: <UserCheck className="size-4" /> },
+                   { id: "escrow", label: "Monitoring Transaksi", icon: <DollarSign className="size-4" /> },
+                   { id: "disputes", label: "Penyelesaian Dispute", icon: <ShieldAlert className="size-4" /> },
+                   { id: "manage_mountains", label: "Kontak Tiket Gunung", icon: <MountainIcon className="size-4" /> },
+                   { id: "warnings", label: "Sanksi & Warning", icon: <AlertTriangle className="size-4" /> },
+                   { id: "reports", label: "Laporan Keuangan", icon: <TrendingUp className="size-4" /> }
+                 ].map(t => (
                   <button
                     key={t.id}
                     onClick={() => setActiveTab(t.id)}
@@ -1015,7 +1259,7 @@ export function DashboardPage() {
                             {b.fineAmount && b.fineAmount > 0 && (
                               <div className="mt-3 p-3 bg-red-50 rounded-xl border border-red-200/50 max-w-lg text-xs text-red-800 space-y-1">
                                 <p className="font-bold flex items-center gap-1">⚠️ Pelanggaran / Denda Dilaporkan Mitra:</p>
-                                <p>Nominal: **Rp {b.fineAmount.toLocaleString("id-ID")}**</p>
+                                <p>Nominal: <b>Rp {b.fineAmount.toLocaleString("id-ID")}</b></p>
                                 <p className="italic">Alasan: "{b.fineNotes}"</p>
                                 <p className="text-[10px] text-gray-500 mt-1 font-normal leading-tight">Denda ini akan dikonfirmasi oleh Super Admin dan otomatis dipotong dari dana deposit jaminan Anda.</p>
                               </div>
@@ -1023,8 +1267,8 @@ export function DashboardPage() {
 
                             <div className="flex gap-2 w-full justify-end border-t border-gray-100 pt-3 mt-3">
                                 {b.status === "Menunggu Pembayaran" && (
-                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => handleOpenPayment(b.id, "booking", b.price)}>
-                                    <CreditCard className="size-3.5 mr-1" /> Bayar Simulasi
+                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold" onClick={() => handlePayWithWallet(b.id, "booking", b.price)}>
+                                    <Wallet className="size-3.5 mr-1" /> Bayar dengan Saldo Dompet
                                   </Button>
                                 )}
                                 {["Telah Dibayar", "Start", "Muncak"].includes(b.status) && (
@@ -1051,6 +1295,30 @@ export function DashboardPage() {
                                     <Star className="size-3.5 mr-1 text-yellow-500 fill-yellow-500" /> Beri Ulasan
                                   </Button>
                                 )}
+                                {b.status !== "Menunggu Pembayaran" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs border-gray-250 text-gray-700 hover:bg-gray-50 font-bold"
+                                    onClick={() => {
+                                      setReceiptData({
+                                        id: b.id,
+                                        type: "booking",
+                                        date: new Date().toISOString(),
+                                        amount: b.price,
+                                        description: b.officialTicketBooking 
+                                          ? `Pemesanan Tiket Resmi Gunung ${b.mountainName}`
+                                          : `Booking Layanan Guide Gunung ${b.mountainName}`,
+                                        senderName: currentUser.name,
+                                        recipientName: b.guideName || "Platform AyokMendaki",
+                                        details: `Tanggal Trip: ${b.bookingDate} • Gunung: ${b.mountainName} ${b.bookingType === "paket" ? "• Paket Kemitraan" : ""}`
+                                      });
+                                      setReceiptModalOpen(true);
+                                    }}
+                                  >
+                                    <FileText className="size-3.5 mr-1 text-slate-500" /> Cetak Resi
+                                  </Button>
+                                )}
                               </div>
                             </div>
                         ))
@@ -1075,8 +1343,8 @@ export function DashboardPage() {
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                               <div>
                                 <h4 className="font-bold text-gray-800">{r.itemName}</h4>
-                                <p className="text-xs text-gray-500 mt-1">Vendor: **{r.vendorName}** &nbsp;•&nbsp; Jumlah: **{r.qty} Unit**</p>
-                                <p className="text-xs text-gray-500 mt-0.5">Tanggal Sewa: **{r.startDate}** s/d **{r.endDate}**</p>
+                                <p className="text-xs text-gray-500 mt-1">Vendor: <b>{r.vendorName}</b> &nbsp;•&nbsp; Jumlah: <b>{r.qty} Unit</b></p>
+                                <p className="text-xs text-gray-500 mt-0.5">Tanggal Sewa: <b>{r.startDate}</b> s/d <b>{r.endDate}</b></p>
                                 <p className="text-xs text-emerald-700 font-bold mt-1">Total Biaya: Rp {r.totalPrice.toLocaleString("id-ID")}</p>
                               </div>
                               
@@ -1103,7 +1371,7 @@ export function DashboardPage() {
                             {r.fineAmount && r.fineAmount > 0 && (
                               <div className="mt-3 p-3 bg-red-50 rounded-xl border border-red-200/50 max-w-lg text-xs text-red-800 space-y-1">
                                 <p className="font-bold flex items-center gap-1">⚠️ Pelanggaran / Denda Dilaporkan Vendor:</p>
-                                <p>Nominal: **Rp {r.fineAmount.toLocaleString("id-ID")}**</p>
+                                <p>Nominal: <b>Rp {r.fineAmount.toLocaleString("id-ID")}</b></p>
                                 <p className="italic">Alasan: "{r.fineNotes}"</p>
                                 <p className="text-[10px] text-gray-500 mt-1 font-normal leading-tight">Denda ini akan dikonfirmasi oleh Super Admin dan otomatis dipotong dari dana deposit jaminan Anda.</p>
                               </div>
@@ -1111,8 +1379,8 @@ export function DashboardPage() {
 
                             <div className="flex gap-2 w-full justify-end border-t border-gray-100 pt-3 mt-3">
                                 {r.status === "Menunggu Pembayaran" && (
-                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-semibold" onClick={() => handleOpenPayment(r.id, "rental", r.totalPrice)}>
-                                    <CreditCard className="size-3.5 mr-1" /> Bayar Simulasi
+                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold" onClick={() => handlePayWithWallet(r.id, "rental", r.totalPrice)}>
+                                    <Wallet className="size-3.5 mr-1" /> Bayar dengan Saldo Dompet
                                   </Button>
                                 )}
                                 {["Telah Dibayar", "Siap Diambil", "Sedang Disewa"].includes(r.status) && (
@@ -1139,6 +1407,28 @@ export function DashboardPage() {
                                     <Star className="size-3.5 mr-1 text-yellow-500 fill-yellow-500" /> Beri Ulasan
                                   </Button>
                                 )}
+                                {r.status !== "Menunggu Pembayaran" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs border-gray-250 text-gray-700 hover:bg-gray-50 font-bold animate-in fade-in duration-200"
+                                    onClick={() => {
+                                      setReceiptData({
+                                        id: r.id,
+                                        type: "rental",
+                                        date: new Date().toISOString(),
+                                        amount: r.totalPrice,
+                                        description: `Penyewaan Alat Outdoor: ${r.qty}x ${r.itemName}`,
+                                        senderName: currentUser.name,
+                                        recipientName: r.vendorName || "Platform AyokMendaki",
+                                        details: `Mulai: ${r.startDate} • Selesai: ${r.endDate} • Vendor: ${r.vendorName}`
+                                      });
+                                      setReceiptModalOpen(true);
+                                    }}
+                                  >
+                                    <FileText className="size-3.5 mr-1 text-slate-500" /> Cetak Resi
+                                  </Button>
+                                )}
                               </div>
                           </div>
                         ))
@@ -1162,14 +1452,14 @@ export function DashboardPage() {
                           <div key={n.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                             <div>
                               <h4 className="font-bold text-gray-800 text-sm">{n.itemName}</h4>
-                              <p className="text-xs text-gray-500 mt-1">Ditujukan Ke: **{n.recipientName}**</p>
+                              <p className="text-xs text-gray-500 mt-1">Ditujukan Ke: <b>{n.recipientName}</b></p>
                               <div className="grid grid-cols-2 gap-3 mt-2 text-xs border border-gray-50 p-2 rounded-lg bg-gray-50/50">
                                 <div>Harga Awal: <b className="text-gray-500 line-through">Rp {n.originalPrice.toLocaleString()}</b></div>
                                 <div>Tawaran Anda: <b className="text-emerald-700 font-bold">Rp {n.proposedPrice.toLocaleString()}</b></div>
                               </div>
                               {n.status === "countered" && (
                                 <p className="text-xs text-amber-700 bg-amber-50 p-2 rounded mt-2 border border-amber-100 font-semibold">
-                                  ⚠️ Guide/Vendor menawarkan harga balik: **Rp {n.counterPrice?.toLocaleString()}**
+                                  ⚠️ Guide/Vendor menawarkan harga balik: <b>Rp {n.counterPrice?.toLocaleString()}</b>
                                 </p>
                               )}
                             </div>
@@ -1285,6 +1575,72 @@ export function DashboardPage() {
                            </div>
                          )}
                       </div>
+
+                      {/* Riwayat Transaksi Section */}
+                      <div className="border-t border-gray-100 pt-6">
+                        <h4 className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-2">
+                          <TrendingUp className="size-4 text-emerald-600" />
+                          Riwayat Transaksi Dompet
+                        </h4>
+                        {depositTransactions.length === 0 ? (
+                          <div className="text-center py-8 text-gray-400 text-xs">Belum ada riwayat transaksi dompet.</div>
+                        ) : (
+                          <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                            {depositTransactions.map((tx) => {
+                              let badgeColor = "bg-gray-100 text-gray-800";
+                              let amountPrefix = "";
+                              let amountColor = "text-gray-700";
+
+                              if (tx.type === "topup" || tx.type === "refund") {
+                                badgeColor = "bg-emerald-100 text-emerald-800 border border-emerald-200";
+                                amountPrefix = "+";
+                                amountColor = "text-emerald-700";
+                              } else {
+                                badgeColor = "bg-red-100 text-red-800 border border-red-200";
+                                amountPrefix = "-";
+                                amountColor = "text-red-700";
+                              }
+
+                              return (
+                                <div key={tx.id} className="p-3.5 rounded-xl border border-gray-150 bg-white flex justify-between items-center gap-4 hover:shadow-xs transition-shadow">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <Badge className={`${badgeColor} uppercase text-[9px] font-bold px-1.5 py-0.5`}>{tx.type}</Badge>
+                                      <span className="text-[10px] text-gray-400 font-mono">{tx.createdAt}</span>
+                                    </div>
+                                    <p className="text-xs font-semibold text-gray-700">{tx.description}</p>
+                                  </div>
+                                  <div className="flex items-center gap-3 shrink-0">
+                                    <span className={`font-mono font-bold text-xs ${amountColor}`}>
+                                      {amountPrefix} Rp {tx.amount.toLocaleString("id-ID")}
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 text-[10px] px-2 border-gray-200 text-gray-700 hover:bg-gray-50 font-bold rounded-lg animate-in fade-in"
+                                      onClick={() => {
+                                        setReceiptData({
+                                          id: tx.id,
+                                          type: tx.type,
+                                          date: tx.createdAt,
+                                          amount: tx.amount,
+                                          description: tx.description,
+                                          senderName: tx.type === "withdraw" || tx.type === "fine_deduction" ? currentUser.name : "Payment Gateway System",
+                                          recipientName: tx.type === "topup" || tx.type === "refund" ? currentUser.name : "Platform AyokMendaki / Mitra",
+                                          details: `Transaksi: ${tx.type.toUpperCase()} • ID: ${tx.id}`
+                                        });
+                                        setReceiptModalOpen(true);
+                                      }}
+                                    >
+                                      Cetak Resi
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 )}
@@ -1374,13 +1730,13 @@ export function DashboardPage() {
                                   <h4 className="font-bold text-gray-800">{b.pendakiName}</h4>
                                   <Badge className="bg-emerald-100 text-emerald-800 text-[10px] py-0">{b.mountainName}</Badge>
                                 </div>
-                                <p className="text-xs text-gray-500 flex items-center gap-1"><Calendar className="size-3.5" /> Tanggal Trip: **{b.bookingDate}**</p>
+                                <p className="text-xs text-gray-500 flex items-center gap-1"><Calendar className="size-3.5" /> Tanggal Trip: <b>{b.bookingDate}</b></p>
                                 <p className="text-xs text-emerald-700 font-bold mt-1">Tarif Diajukan: Rp {b.price.toLocaleString("id-ID")}</p>
                                 
                                 {relevantNego && (
                                   <div className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-100 mt-2 space-y-1 max-w-md">
                                     <p className="font-bold">💬 Negosiasi Harga Masuk:</p>
-                                    <p>Pendaki menawar tarif menjadi **Rp {relevantNego.proposedPrice.toLocaleString("id-ID")}** (Tarif Normal Anda: Rp {relevantNego.originalPrice.toLocaleString()})</p>
+                                    <p>Pendaki menawar tarif menjadi <b>Rp {relevantNego.proposedPrice.toLocaleString("id-ID")}</b> (Tarif Normal Anda: Rp {relevantNego.originalPrice.toLocaleString()})</p>
                                     {relevantNego.notes && <p className="text-gray-500 italic mt-0.5">Pesan: "{relevantNego.notes}"</p>}
                                   </div>
                                 )}
@@ -1439,7 +1795,7 @@ export function DashboardPage() {
                             <div className="flex justify-between items-center flex-wrap gap-2">
                               <div>
                                 <h4 className="font-bold text-gray-800 text-base">{b.pendakiName} &middot; Simaksi {b.mountainName}</h4>
-                                <p className="text-xs text-gray-500">Tanggal Mulai: **{b.bookingDate}** &nbsp;•&nbsp; Tarif Jasa: **Rp {b.price.toLocaleString("id-ID")}**</p>
+                                <p className="text-xs text-gray-500">Tanggal Mulai: <b>{b.bookingDate}</b> &nbsp;•&nbsp; Tarif Jasa: <b>Rp {b.price.toLocaleString("id-ID")}</b></p>
                               </div>
                               <div>{getStatusBadge(b.status)}</div>
                             </div>
@@ -1711,8 +2067,8 @@ export function DashboardPage() {
                                 <h4 className="font-bold text-gray-800">{p.title}</h4>
                                 <Badge variant="outline" className="text-[9px] uppercase">{p.duration}</Badge>
                               </div>
-                              <p className="text-xs text-gray-500">Gunung Target: **{p.targetMountain}**</p>
-                              {p.vendorName && <p className="text-xs text-emerald-800">⛺ Mitra Vendor: **{p.vendorName}**</p>}
+                              <p className="text-xs text-gray-500">Gunung Target: <b>{p.targetMountain}</b></p>
+                              {p.vendorName && <p className="text-xs text-emerald-800">⛺ Mitra Vendor: <b>{p.vendorName}</b></p>}
                               <p className="text-xs text-emerald-700 font-bold mt-1">Rp {p.price.toLocaleString("id-ID")} / Orang &middot; Promo s/d: {p.promoDeadline}</p>
                             </div>
                             
@@ -1729,6 +2085,123 @@ export function DashboardPage() {
                       )}
                     </CardContent>
                   </Card>
+                )}
+
+
+                {activeTab === "vendor_catalog" && (
+                  <>
+                    {renderProposalsCenter()}
+                    <Card className="border border-gray-150 shadow-sm font-sans bg-white">
+                      <CardHeader className="pb-3 border-b border-gray-100">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                          <div>
+                            <CardTitle className="text-lg font-bold text-gray-800">Katalog Vendor &amp; Kolaborasi</CardTitle>
+                            <CardDescription className="text-xs">
+                              Temukan vendor rental alat kemping untuk diajak berkolaborasi membuat paket trip bundling promo.
+                            </CardDescription>
+                          </div>
+                          <div className="flex gap-1.5 shrink-0 bg-gray-55/40 p-1 rounded-lg border border-gray-200">
+                            <button
+                              className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-all ${
+                                vendorCollabSubTab === "vendors" ? "bg-white shadow-xs text-emerald-700 font-bold" : "text-gray-500 hover:text-gray-805"
+                              }`}
+                              onClick={() => setVendorCollabSubTab("vendors")}
+                            >
+                              Daftar Vendor (Sewa Alat)
+                            </button>
+                            <button
+                              className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-all ${
+                                vendorCollabSubTab === "packages" ? "bg-white shadow-xs text-emerald-700 font-bold" : "text-gray-500 hover:text-gray-850"
+                              }`}
+                              onClick={() => setVendorCollabSubTab("packages")}
+                            >
+                              Paket Aktif ({tripPackages.filter(p => p.guideId === currentUser.id).length})
+                            </button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pt-6 space-y-4 font-sans">
+                        {vendorCollabSubTab === "vendors" && (
+                          <div className="space-y-4 animate-in fade-in duration-200">
+                            {vendors.map((v) => (
+                              <div key={v.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xs">
+                                <div>
+                                  <h4 className="font-extrabold text-gray-800 text-sm flex items-center gap-2">
+                                    {v.name}
+                                    <Badge className="bg-emerald-100 text-emerald-800 text-[9px]">⭐ {v.rating}</Badge>
+                                    {v.verified && <Badge className="bg-blue-100 text-blue-800 text-[9px] border border-blue-200 py-0.5">Verified</Badge>}
+                                  </h4>
+                                  <p className="text-xs text-gray-500 mt-1">Lokasi: <b>{v.location}</b></p>
+                                  <p className="text-xs text-gray-400 mt-0.5 font-normal">Menyediakan berbagai perlengkapan kemping berkualitas.</p>
+                                </div>
+                                <div className="flex gap-2 w-full sm:w-auto">
+                                  <Button
+                                    size="sm"
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex-1 sm:flex-initial rounded-xl"
+                                    onClick={() => handleOpenCollabForm(v)}
+                                  >
+                                    Tawarkan Kolaborasi
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs border-gray-200 text-gray-700 hover:bg-gray-50 font-bold flex-1 sm:flex-initial rounded-xl"
+                                    onClick={() => {
+                                      setSelectedChatPartnerId(v.id);
+                                      setSelectedChatPartnerName(v.name);
+                                      setActiveTab("chat");
+                                      toast.info(`Membuka obrolan dengan ${v.name}`);
+                                    }}
+                                  >
+                                    Chat Vendor
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {vendorCollabSubTab === "packages" && (
+                          <div className="space-y-4 animate-in fade-in duration-200">
+                            {tripPackages.filter(p => p.guideId === currentUser.id).length === 0 ? (
+                              <div className="text-center py-12 text-gray-400 text-xs italic">
+                                Belum ada kolaborasi paket pendakian aktif dengan Vendor saat ini.
+                              </div>
+                            ) : (
+                              tripPackages.filter(p => p.guideId === currentUser.id).map((p) => (
+                                <div key={p.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-md transition-all shadow-xs">
+                                  <div className="flex gap-3 items-start">
+                                    <img src={p.image} className="w-16 h-16 object-cover rounded-lg shrink-0 border border-gray-100" />
+                                    <div>
+                                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                        <h4 className="font-bold text-gray-800 text-sm">{p.title}</h4>
+                                        <Badge className="bg-emerald-50 text-emerald-800 text-[9px] border-emerald-200 border">{p.duration}</Badge>
+                                      </div>
+                                      <p className="text-xs text-gray-500">Vendor Partner: <b>{p.vendorName || "Tidak Diketahui"}</b> &middot; Gunung: <b>{p.targetMountain}</b></p>
+                                      <p className="text-xs text-emerald-700 font-bold mt-1">Total Harga Paket: Rp {p.price.toLocaleString("id-ID")}</p>
+                                    </div>
+                                  </div>
+                                  <div className="shrink-0 flex flex-col items-end gap-1.5 w-full sm:w-auto border-t sm:border-t-0 pt-2.5 sm:pt-0">
+                                    <Badge className="bg-emerald-600 text-white text-[10px]">Kolaborasi Aktif</Badge>
+                                    {p.vendorId && (
+                                      <Button variant="outline" size="sm" className="text-xs w-full sm:w-auto font-bold rounded-xl" onClick={() => {
+                                        setSelectedChatPartnerId(p.vendorId!);
+                                        setSelectedChatPartnerName(p.vendorName || "Vendor Partner");
+                                        setActiveTab("chat");
+                                        toast.info(`Membuka obrolan dengan ${p.vendorName}`);
+                                      }}>
+                                        Hubungi Vendor
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </>
                 )}
               </>
             )}
@@ -1891,14 +2364,14 @@ export function DashboardPage() {
                                   <h4 className="font-bold text-gray-800">{r.itemName}</h4>
                                   <Badge className="bg-emerald-100 text-emerald-800 text-[10px] py-0">Qty: {r.qty} Unit</Badge>
                                 </div>
-                                <p className="text-xs text-gray-500">Penyewa: **{r.pendakiName}**</p>
-                                <p className="text-xs text-gray-500 mt-0.5">Durasi: **{r.startDate}** s/d **{r.endDate}**</p>
+                                <p className="text-xs text-gray-500">Penyewa: <b>{r.pendakiName}</b></p>
+                                <p className="text-xs text-gray-500 mt-0.5">Durasi: <b>{r.startDate}</b> s/d <b>{r.endDate}</b></p>
                                 <p className="text-xs text-emerald-700 font-bold mt-1">Total Tarif: Rp {r.totalPrice.toLocaleString("id-ID")}</p>
                                 
                                 {relevantNego && (
                                   <div className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-100 mt-2 space-y-1 max-w-md">
                                     <p className="font-bold">💬 Negosiasi Harga Masuk:</p>
-                                    <p>Pendaki menawar total tarif sewa menjadi **Rp {relevantNego.proposedPrice.toLocaleString("id-ID")}** (Tarif Normal: Rp {relevantNego.originalPrice.toLocaleString()})</p>
+                                    <p>Pendaki menawar total tarif sewa menjadi <b>Rp {relevantNego.proposedPrice.toLocaleString("id-ID")}</b> (Tarif Normal: Rp {relevantNego.originalPrice.toLocaleString()})</p>
                                     {relevantNego.notes && <p className="text-gray-500 italic mt-0.5">Pesan: "{relevantNego.notes}"</p>}
                                   </div>
                                 )}
@@ -1975,49 +2448,117 @@ export function DashboardPage() {
 
                 {/* 3. Tab Kolaborasi Guide */}
                 {activeTab === "collaborations" && (
-                  <Card className="border border-gray-150 shadow-sm">
-                    <CardHeader>
-                      <CardTitle className="text-lg">Kolaborasi Paket Pendakian (Guide Ads)</CardTitle>
-                      <CardDescription className="text-xs">
-                        Lihat iklan paket trip pendakian aktif hasil kolaborasi toko rental Anda dengan pemandu (guide) profesional.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {tripPackages.filter(p => p.vendorId === currentUser.id).length === 0 ? (
-                        <div className="text-center py-12 text-gray-400 text-sm">
-                          Belum ada kolaborasi paket pendakian aktif dengan Tour Guide saat ini.
-                        </div>
-                      ) : (
-                        tripPackages.filter(p => p.vendorId === currentUser.id).map((p) => (
-                          <div key={p.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-md transition-all">
-                            <div className="flex gap-3 items-start">
-                              <img src={p.image} className="w-16 h-16 object-cover rounded-lg shrink-0 border border-gray-100" />
-                              <div>
-                                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                  <h4 className="font-bold text-gray-800 text-sm">{p.title}</h4>
-                                  <Badge className="bg-emerald-50 text-emerald-800 text-[9px] border-emerald-200 border">{p.duration}</Badge>
-                                </div>
-                                <p className="text-xs text-gray-500">Pemandu: **{p.guideName}** &middot; Gunung: **{p.targetMountain}**</p>
-                                <p className="text-xs text-gray-500 mt-0.5">Tenggat Booking: {p.promoDeadline}</p>
-                                <p className="text-xs text-emerald-700 font-bold mt-1">Total Paket: Rp {p.price.toLocaleString("id-ID")}</p>
-                              </div>
-                            </div>
-                            <div className="shrink-0 flex flex-col items-end gap-1.5 w-full sm:w-auto border-t sm:border-t-0 pt-2.5 sm:pt-0">
-                              <Badge className="bg-emerald-600 text-white text-[10px]">Kolaborasi Aktif</Badge>
-                              <Button variant="outline" size="sm" className="text-xs w-full sm:w-auto" onClick={() => {
-                                setSelectedChatPartnerId(p.guideId);
-                                setSelectedChatPartnerName(p.guideName);
-                                setActiveTab("chat");
-                                toast.info(`Membuka obrolan dengan ${p.guideName}`);
-                              }}>
-                                Hubungi Guide
-                              </Button>
-                            </div>
+                  <>
+                    {renderProposalsCenter()}
+                    <Card className="border border-gray-150 shadow-sm">
+                      <CardHeader className="pb-3 border-b border-gray-100">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                          <div>
+                            <CardTitle className="text-lg font-bold">Kolaborasi Paket Pendakian</CardTitle>
+                            <CardDescription className="text-xs">
+                              Kelola kerjasama paket trip pendakian bundling dengan pemandu (guide) profesional.
+                            </CardDescription>
                           </div>
-                        ))
-                      )}
-                    </CardContent>
-                  </Card>
+                          <div className="flex gap-1.5 shrink-0 bg-gray-50 p-1 rounded-lg border border-gray-200">
+                            <button
+                              className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-all ${
+                                vendorCollabSubTab === "guides" ? "bg-white shadow-xs text-emerald-700 font-bold" : "text-gray-500 hover:text-gray-800"
+                              }`}
+                              onClick={() => setVendorCollabSubTab("guides")}
+                            >
+                              Daftar Pemandu (Guides)
+                            </button>
+                            <button
+                              className={`text-xs font-semibold px-3 py-1.5 rounded-md transition-all ${
+                                vendorCollabSubTab === "packages" ? "bg-white shadow-xs text-emerald-700 font-bold" : "text-gray-500 hover:text-gray-800"
+                              }`}
+                              onClick={() => setVendorCollabSubTab("packages")}
+                            >
+                              Paket Aktif ({tripPackages.filter(p => p.vendorId === currentUser.id).length})
+                            </button>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pt-6 space-y-4">
+                        {vendorCollabSubTab === "guides" && (
+                          <div className="space-y-4 animate-in fade-in duration-200">
+                            {guides.map((g) => (
+                              <div key={g.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-xs">
+                                <div>
+                                  <h4 className="font-extrabold text-gray-800 text-sm flex items-center gap-2">
+                                    {g.name}
+                                    <Badge className="bg-emerald-100 text-emerald-800 text-[9px]">⭐ {g.rating}</Badge>
+                                  </h4>
+                                  <p className="text-xs text-gray-500 mt-1">Spesialis Gunung: <b>{g.specialties.join(", ")}</b></p>
+                                  <p className="text-xs text-emerald-700 font-bold mt-0.5">Tarif Pemandu: Rp {g.price.toLocaleString("id-ID")}/hari &middot; Pengalaman: {g.experience}</p>
+                                </div>
+                                <div className="flex gap-2 w-full sm:w-auto">
+                                  <Button
+                                    size="sm"
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex-1 sm:flex-initial"
+                                    onClick={() => handleOpenCollabForm(g)}
+                                  >
+                                    Tawarkan Kolaborasi
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-xs border-gray-200 text-gray-700 hover:bg-gray-50 font-semibold flex-1 sm:flex-initial"
+                                    onClick={() => {
+                                      setSelectedChatPartnerId(g.id);
+                                      setSelectedChatPartnerName(g.name);
+                                      setActiveTab("chat");
+                                      toast.info(`Membuka obrolan dengan ${g.name}`);
+                                    }}
+                                  >
+                                    Chat Pemandu
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {vendorCollabSubTab === "packages" && (
+                          <div className="space-y-4 animate-in fade-in duration-200">
+                            {tripPackages.filter(p => p.vendorId === currentUser.id).length === 0 ? (
+                              <div className="text-center py-12 text-gray-400 text-sm">
+                                Belum ada kolaborasi paket pendakian aktif dengan Tour Guide saat ini.
+                              </div>
+                            ) : (
+                              tripPackages.filter(p => p.vendorId === currentUser.id).map((p) => (
+                                <div key={p.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-md transition-all shadow-xs">
+                                  <div className="flex gap-3 items-start">
+                                    <img src={p.image} className="w-16 h-16 object-cover rounded-lg shrink-0 border border-gray-100" />
+                                    <div>
+                                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                        <h4 className="font-bold text-gray-800 text-sm">{p.title}</h4>
+                                        <Badge className="bg-emerald-50 text-emerald-800 text-[9px] border-emerald-200 border">{p.duration}</Badge>
+                                      </div>
+                                      <p className="text-xs text-gray-500">Pemandu: <b>{p.guideName}</b> &middot; Gunung: <b>{p.targetMountain}</b></p>
+                                      <p className="text-xs text-gray-500 mt-0.5">Tenggat Booking: {p.promoDeadline}</p>
+                                      <p className="text-xs text-emerald-700 font-bold mt-1">Total Paket: Rp {p.price.toLocaleString("id-ID")}</p>
+                                    </div>
+                                  </div>
+                                  <div className="shrink-0 flex flex-col items-end gap-1.5 w-full sm:w-auto border-t sm:border-t-0 pt-2.5 sm:pt-0">
+                                    <Badge className="bg-emerald-600 text-white text-[10px]">Kolaborasi Aktif</Badge>
+                                    <Button variant="outline" size="sm" className="text-xs w-full sm:w-auto" onClick={() => {
+                                      setSelectedChatPartnerId(p.guideId);
+                                      setSelectedChatPartnerName(p.guideName);
+                                      setActiveTab("chat");
+                                      toast.info(`Membuka obrolan dengan ${p.guideName}`);
+                                    }}>
+                                      Hubungi Guide
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </>
                 )}
               </>
             )}
@@ -2025,6 +2566,192 @@ export function DashboardPage() {
             {/* ════════════════════ SUPER ADMIN VIEW ════════════════════ */}
             {currentUser.role === "admin" && (
               <>
+                {/* Tab Aktivitas & Kontrol User */}
+                {activeTab === "user_control" && (
+                  <div className="space-y-6 font-sans">
+                    {/* Upper Grid: Stats & Activity Timeline */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      
+                      {/* Stats Card */}
+                      <Card className="lg:col-span-1 border border-gray-150 shadow-sm bg-white">
+                        <CardHeader className="pb-3 border-b border-gray-100">
+                          <CardTitle className="text-sm font-bold text-gray-800 uppercase tracking-wider">Statistik Platform</CardTitle>
+                          <CardDescription className="text-[10px]">Ringkasan jumlah pengguna terdaftar.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="pt-4 space-y-4">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-center">
+                              <p className="text-[10px] font-semibold text-blue-700">Pendaki</p>
+                              <p className="text-xl font-extrabold text-blue-900 mt-1">{users.filter(u => u.role === "pendaki").length}</p>
+                            </div>
+                            <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-center">
+                              <p className="text-[10px] font-semibold text-emerald-700">Guide</p>
+                              <p className="text-xl font-extrabold text-emerald-900 mt-1">{users.filter(u => u.role === "guide").length}</p>
+                            </div>
+                            <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-center col-span-2">
+                              <p className="text-[10px] font-semibold text-amber-700">Vendor</p>
+                              <p className="text-xl font-extrabold text-amber-900 mt-1">{users.filter(u => u.role === "vendor").length}</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Dynamic Timeline Card */}
+                      <Card className="lg:col-span-2 border border-gray-150 shadow-sm bg-white flex flex-col max-h-[350px]">
+                        <CardHeader className="pb-3 border-b border-gray-100">
+                          <CardTitle className="text-sm font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
+                            <Activity className="size-4 text-emerald-600 animate-pulse" />
+                            Log Aktivitas Pengguna (Real-time)
+                          </CardTitle>
+                          <CardDescription className="text-[10px]">Riwayat tindakan pendaki, guide, vendor & superadmin.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="pt-4 flex-1 overflow-y-auto space-y-3.5 pr-2">
+                          {userActivities.length === 0 ? (
+                            <div className="text-center py-12 text-gray-400 text-xs">Belum ada log aktivitas tercatat.</div>
+                          ) : (
+                            userActivities.map((act) => {
+                              let badgeColor = "bg-gray-100 text-gray-800";
+                              if (act.userRole === "admin") badgeColor = "bg-purple-100 text-purple-800 border border-purple-200";
+                              else if (act.userRole === "guide") badgeColor = "bg-emerald-100 text-emerald-800 border border-emerald-200";
+                              else if (act.userRole === "vendor") badgeColor = "bg-amber-100 text-amber-800 border border-amber-200";
+                              else if (act.userRole === "pendaki") badgeColor = "bg-blue-100 text-blue-800 border border-blue-200";
+
+                              return (
+                                <div key={act.id} className="flex items-start gap-3 text-xs border-b border-gray-50 pb-2.5 last:border-b-0 last:pb-0 animate-in fade-in duration-200">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                      <span className="font-bold text-gray-800">{act.userName}</span>
+                                      <Badge className={`${badgeColor} uppercase text-[9px] font-bold px-1.5 py-0.5 rounded-md`}>{act.userRole}</Badge>
+                                      <span className="text-[9px] text-gray-400 font-mono ml-auto">{new Date(act.timestamp).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+                                    </div>
+                                    <p className="text-gray-650 leading-relaxed font-medium">{act.action}</p>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </CardContent>
+                      </Card>
+
+                    </div>
+
+                    {/* Lower Table: Account controls */}
+                    <Card className="border border-gray-150 shadow-sm bg-white">
+                      <CardHeader className="pb-3 border-b border-gray-100">
+                        <CardTitle className="text-base font-bold text-gray-800">Direktori & Pengontrolan Akun Pengguna</CardTitle>
+                        <CardDescription className="text-xs">Kelola status aktifasi, verifikasi berkas, dan kirim sanksi warning ke seluruh pengguna.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-4 p-0 overflow-x-auto">
+                        <table className="w-full text-left text-xs font-semibold text-gray-700">
+                          <thead>
+                            <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 text-[10px] uppercase tracking-wider">
+                              <th className="py-3 px-4">Nama Pengguna</th>
+                              <th className="py-3 px-4">Email</th>
+                              <th className="py-3 px-4">Role</th>
+                              <th className="py-3 px-4 text-center">Status</th>
+                              <th className="py-3 px-4 text-center">Verifikasi</th>
+                              <th className="py-3 px-4 text-right">Aksi Kontrol</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {users.map((u) => {
+                              const isSuspended = u.status === "suspended";
+                              const isVerified = u.verified;
+
+                              let roleBadge = "bg-gray-100 text-gray-800";
+                              if (u.role === "admin") roleBadge = "bg-purple-100 text-purple-800 border border-purple-200";
+                              else if (u.role === "guide") roleBadge = "bg-emerald-100 text-emerald-800 border border-emerald-200";
+                              else if (u.role === "vendor") roleBadge = "bg-amber-100 text-amber-800 border border-amber-200";
+                              else if (u.role === "pendaki") roleBadge = "bg-blue-100 text-blue-800 border border-blue-200";
+
+                              return (
+                                <tr key={u.id} className="hover:bg-gray-55/50 transition-colors">
+                                  <td className="py-3.5 px-4 font-bold text-gray-950">{u.name}</td>
+                                  <td className="py-3.5 px-4 font-normal text-gray-500">{u.email}</td>
+                                  <td className="py-3.5 px-4">
+                                    <Badge className={`${roleBadge} uppercase text-[9px] font-extrabold px-2 py-0.5`}>{u.role}</Badge>
+                                  </td>
+                                  <td className="py-3.5 px-4 text-center">
+                                    {isSuspended ? (
+                                      <Badge className="bg-red-100 text-red-800 border border-red-200 text-[9px] font-bold">Suspended</Badge>
+                                    ) : (
+                                      <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200 text-[9px] font-bold">Aktif</Badge>
+                                    )}
+                                  </td>
+                                  <td className="py-3.5 px-4 text-center">
+                                    {isVerified ? (
+                                      <Badge className="bg-blue-100 text-blue-800 border border-blue-200 text-[9px] font-bold">Verified</Badge>
+                                    ) : (
+                                      <Badge className="bg-gray-100 text-gray-500 border border-gray-200 text-[9px] font-bold">Unverified</Badge>
+                                    )}
+                                  </td>
+                                  <td className="py-3.5 px-4 text-right space-x-1.5 whitespace-nowrap">
+                                    {u.role !== "admin" ? (
+                                      <>
+                                        {/* Status Toggle Button */}
+                                        <Button
+                                          size="sm"
+                                          className={`text-[10px] h-7 font-bold px-2.5 py-1 rounded-lg ${
+                                            isSuspended
+                                              ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                              : "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
+                                          }`}
+                                          onClick={() => {
+                                            const newStatus = isSuspended ? "active" : "suspended";
+                                            updateUserStatus(u.id, newStatus);
+                                            toast.success(`Akun ${u.name} berhasil di-${newStatus === "active" ? "aktifkan kembali" : "suspend"}`);
+                                          }}
+                                        >
+                                          {isSuspended ? "Aktifkan" : "Suspend"}
+                                        </Button>
+
+                                        {/* Verification Toggle Button */}
+                                        {(u.role === "guide" || u.role === "vendor") && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className={`text-[10px] h-7 font-bold px-2.5 py-1 rounded-lg border ${
+                                              isVerified
+                                                ? "border-gray-200 text-gray-500 hover:bg-gray-55"
+                                                : "border-blue-200 text-blue-700 hover:bg-blue-50"
+                                            }`}
+                                            onClick={() => {
+                                              toggleUserVerification(u.id);
+                                              toast.success(`Status verifikasi ${u.name} diperbarui!`);
+                                            }}
+                                          >
+                                            {isVerified ? "Batal Verif" : "Verifikasi"}
+                                          </Button>
+                                        )}
+
+                                        {/* Warn Button */}
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="text-[10px] h-7 font-bold px-2.5 py-1 rounded-lg border-amber-250 text-amber-700 hover:bg-amber-50"
+                                          onClick={() => {
+                                            setPrefilledWarningUserId(u.id);
+                                            setActiveTab("warnings");
+                                            toast.info(`Prefill surat peringatan untuk ${u.name}`);
+                                          }}
+                                        >
+                                          ⚠️ Peringatan
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <span className="text-gray-400 text-[10px] font-normal italic pr-2">Super Admin</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
                 {/* 1. Tab Verify Documents */}
                 {activeTab === "verify" && (
                   <Card className="border border-gray-150 shadow-sm">
@@ -2328,7 +3055,7 @@ export function DashboardPage() {
                               <div className="flex justify-between items-start flex-wrap gap-2">
                                 <div>
                                   <h4 className="font-bold text-red-800">Trip Gunung/Guide Dispute</h4>
-                                  <p className="text-xs text-gray-500">Pendaki: **{b.pendakiName}** &nbsp;•&nbsp; Guide: **{b.guideName}** &nbsp;•&nbsp; Tarif: **Rp {b.price.toLocaleString()}**</p>
+                                  <p className="text-xs text-gray-500">Pendaki: <b>{b.pendakiName}</b> &nbsp;•&nbsp; Guide: <b>{b.guideName}</b> &nbsp;•&nbsp; Tarif: <b>Rp {b.price.toLocaleString()}</b></p>
                                 </div>
                                 <Badge className="bg-red-600 text-white">DISPUTE</Badge>
                               </div>
@@ -2357,7 +3084,7 @@ export function DashboardPage() {
                               <div className="flex justify-between items-start flex-wrap gap-2">
                                 <div>
                                   <h4 className="font-bold text-red-800">Rental Alat Dispute</h4>
-                                  <p className="text-xs text-gray-500">Penyewa: **{r.pendakiName}** &nbsp;•&nbsp; Vendor: **{r.vendorName}** &nbsp;•&nbsp; Total Tarif: **Rp {r.totalPrice.toLocaleString()}**</p>
+                                  <p className="text-xs text-gray-500">Penyewa: <b>{r.pendakiName}</b> &nbsp;•&nbsp; Vendor: <b>{r.vendorName}</b> &nbsp;•&nbsp; Total Tarif: <b>Rp {r.totalPrice.toLocaleString()}</b></p>
                                 </div>
                                 <Badge className="bg-red-600 text-white">DISPUTE</Badge>
                               </div>
@@ -2410,19 +3137,26 @@ export function DashboardPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="text-xs font-semibold text-gray-700 block mb-1">Target Pengguna</label>
-                            <select name="targetUser" className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 font-medium">
+                            <select
+                              name="targetUser"
+                              value={prefilledWarningUserId}
+                              onChange={(e) => setPrefilledWarningUserId(e.target.value)}
+                              className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 font-medium"
+                            >
                               <option value="">-- Pilih Pengguna --</option>
                               <optgroup label="Pendaki">
-                                <option value="pendaki1">Zaki Firdaus (Pendaki)</option>
+                                {users.filter(u => u.role === "pendaki").map(u => (
+                                  <option key={u.id} value={u.id}>{u.name} (Pendaki)</option>
+                                ))}
                               </optgroup>
                               <optgroup label="Guides">
-                                {guides.map(g => (
-                                  <option key={g.id} value={g.id}>{g.name} (Guide)</option>
+                                {users.filter(u => u.role === "guide").map(u => (
+                                  <option key={u.id} value={u.id}>{u.name} (Guide)</option>
                                 ))}
                               </optgroup>
                               <optgroup label="Vendors">
-                                {vendors.map(v => (
-                                  <option key={v.id} value={v.id}>{v.name} (Vendor)</option>
+                                {users.filter(u => u.role === "vendor").map(u => (
+                                  <option key={u.id} value={u.id}>{u.name} (Vendor)</option>
                                 ))}
                               </optgroup>
                             </select>
@@ -3188,7 +3922,7 @@ export function DashboardPage() {
               <h3 className="text-lg">Berikan Ulasan Layanan</h3>
             </div>
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-              Tulis ulasan Anda untuk **{reviewItem.name}**. Ulasan Anda bersifat transparan untuk membantu pendaki lainnya.
+              Tulis ulasan Anda untuk <b>{reviewItem.name}</b>. Ulasan Anda bersifat transparan untuk membantu pendaki lainnya.
             </p>
             <div className="space-y-4">
               <div className="text-center">
@@ -3233,7 +3967,7 @@ export function DashboardPage() {
               <h3 className="text-lg">Laporkan Sengketa Layanan</h3>
             </div>
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-              Ajukan klaim perselisihan atas pesanan **{disputeItem.id}** jika Mitra tidak memenuhi kewajiban trip atau barang sewaan tidak sesuai deskripsi.
+              Ajukan klaim perselisihan atas pesanan <b>{disputeItem.id}</b> jika Mitra tidak memenuhi kewajiban trip atau barang sewaan tidak sesuai deskripsi.
             </p>
             <div className="space-y-4">
               <div>
@@ -3271,8 +4005,8 @@ export function DashboardPage() {
             </p>
             <div className="space-y-4">
               <div className="p-3 bg-emerald-50 rounded-xl text-xs space-y-1.5">
-                <p>Harga Normal Jasa: **Rp {counterNego.originalPrice.toLocaleString()}**</p>
-                <p>Tawaran Awal Pendaki: **Rp {counterNego.proposedPrice.toLocaleString()}**</p>
+                <p>Harga Normal Jasa: <b>Rp {counterNego.originalPrice.toLocaleString()}</b></p>
+                <p>Tawaran Awal Pendaki: <b>Rp {counterNego.proposedPrice.toLocaleString()}</b></p>
               </div>
 
               <div>
@@ -3350,7 +4084,7 @@ export function DashboardPage() {
               <h3 className="text-lg">Edit Kontak Tiket Resmi</h3>
             </div>
             <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-              Sesuaikan info tiket resmi untuk **{editingMountain.name}**. Perubahan ini akan langsung diperbarui pada halaman informasi gunung bagi Pendaki.
+              Sesuaikan info tiket resmi untuk <b>{editingMountain.name}</b>. Perubahan ini akan langsung diperbarui pada halaman informasi gunung bagi Pendaki.
             </p>
             <form onSubmit={handleSaveMountain} className="space-y-4">
               <div>
@@ -3420,7 +4154,7 @@ export function DashboardPage() {
               <h3 className="text-lg">Laporkan Kerusakan & Klaim Deposit</h3>
             </div>
             <p className="text-xs text-gray-500 mb-4 leading-relaxed font-normal">
-              Laporkan kerusakan atau unit hilang untuk pesanan sewa **{fineTargetId}**. Klaim ini akan diverifikasi oleh Super Admin dan otomatis dipotong dari dana deposit Pendaki.
+              Laporkan kerusakan atau unit hilang untuk pesanan sewa <b>{fineTargetId}</b>. Klaim ini akan diverifikasi oleh Super Admin dan otomatis dipotong dari dana deposit Pendaki.
             </p>
             <form onSubmit={handleSaveFine} className="space-y-4">
               <div>
@@ -3495,6 +4229,194 @@ export function DashboardPage() {
           </div>
         </div>
       )}
+      {/* Simulated Payment Gateway Modal */}
+      {showPaymentGateway && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4 font-sans animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl relative border border-slate-100 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            
+            {/* Header */}
+            <div className="bg-slate-900 text-white p-6 relative">
+              <button 
+                onClick={handlePaymentGatewayCancel}
+                className="absolute top-5 right-5 p-1 rounded-full bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+              >
+                <X className="size-4" />
+              </button>
+              <div className="flex items-center gap-2 mb-2">
+                <div className="bg-emerald-500 rounded-lg p-1.5 shrink-0">
+                  <MountainIcon className="size-5 text-slate-950 font-bold" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-200">Secure Payment Gateway</h3>
+                  <p className="text-[10px] text-emerald-400 font-semibold">AyokMendaki Escrow System</p>
+                </div>
+              </div>
+              
+              <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between items-end">
+                <div>
+                  <p className="text-[10px] text-slate-400 font-medium">TOTAL PEMBAYARAN</p>
+                  <p className="text-2xl font-black text-emerald-400 font-mono">Rp {paymentGatewayAmount.toLocaleString("id-ID")}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-slate-400 font-medium">ORDER ID</p>
+                  <p className="text-xs font-bold font-mono text-slate-200">AM-TOPUP-{Math.random().toString(36).substring(2, 8).toUpperCase()}</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Content Area */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              
+              {/* Payment Methods Tabs */}
+              <div>
+                <label className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">Pilih Metode Pembayaran</label>
+                <div className="grid grid-cols-3 gap-2 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                  {[
+                    { id: "qris", label: "QRIS / E-Wallet", icon: "📱" },
+                    { id: "va", label: "Virtual Account", icon: "🏦" },
+                    { id: "cc", label: "Kartu Kredit", icon: "💳" }
+                  ].map(m => (
+                    <button
+                      key={m.id}
+                      onClick={() => setPaymentGatewayMethod(m.id as any)}
+                      className={`py-2 px-1 rounded-lg text-center text-xs font-bold transition-all ${
+                        paymentGatewayMethod === m.id 
+                          ? "bg-white text-slate-900 shadow-sm border border-slate-200/50" 
+                          : "text-slate-500 hover:text-slate-850"
+                      }`}
+                    >
+                      <div className="text-lg mb-0.5">{m.icon}</div>
+                      <div>{m.label}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Payment Method Details */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex-1">
+                {paymentGatewayMethod === "qris" && (
+                  <div className="text-center space-y-3">
+                    <p className="text-xs font-bold text-slate-700">Scan Kode QR menggunakan GoPay, ShopeePay, Dana, dll.</p>
+                    <div className="inline-block bg-white p-3 rounded-2xl border border-slate-150/50 shadow-xs">
+                      {/* SVG mockup of QR code */}
+                      <svg width="150" height="150" viewBox="0 0 100 100" className="mx-auto">
+                        <rect width="100" height="100" fill="white" />
+                        <rect x="5" y="5" width="25" height="25" fill="#1e293b" />
+                        <rect x="10" y="10" width="15" height="15" fill="white" />
+                        <rect x="12" y="12" width="11" height="11" fill="#10b981" />
+                        
+                        <rect x="70" y="5" width="25" height="25" fill="#1e293b" />
+                        <rect x="75" y="10" width="15" height="15" fill="white" />
+                        <rect x="77" y="12" width="11" height="11" fill="#10b981" />
+                        
+                        <rect x="5" y="70" width="25" height="25" fill="#1e293b" />
+                        <rect x="10" y="75" width="15" height="15" fill="white" />
+                        <rect x="12" y="77" width="11" height="11" fill="#10b981" />
+                        
+                        <path d="M 40 10 H 50 V 20 H 40 Z M 55 5 H 65 V 15 H 55 Z M 45 30 H 60 V 35 H 45 Z M 10 40 H 20 V 45 H 10 Z M 30 50 H 35 V 60 H 30 Z M 40 45 H 55 V 55 H 40 Z M 60 40 H 75 V 50 H 60 Z M 80 40 H 90 V 60 H 80 Z M 70 70 H 85 V 80 H 70 Z M 80 80 H 95 V 95 H 80 Z M 45 70 H 60 V 90 H 45 Z M 20 85 H 35 V 95 H 20 Z" fill="#334155" />
+                        <path d="M 40 25 H 45 V 30 H 40 Z M 50 60 H 55 V 65 H 50 Z" fill="#10b981" />
+                      </svg>
+                    </div>
+                    <div className="flex items-center justify-center gap-1.5 text-[10px] font-bold text-emerald-600 animate-pulse">
+                      <span className="inline-block size-2 rounded-full bg-emerald-500"></span>
+                      <span>Menunggu Pembayaran Dipindai...</span>
+                    </div>
+                  </div>
+                )}
+                
+                {paymentGatewayMethod === "va" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Pilih Bank Penerima</label>
+                      <div className="grid grid-cols-4 gap-2">
+                        {["BCA", "Mandiri", "BNI", "BRI"].map(b => (
+                          <button
+                            key={b}
+                            type="button"
+                            onClick={() => setPaymentGatewayBank(b.toLowerCase() as any)}
+                            className={`py-1.5 rounded-lg border text-center text-xs font-bold transition-all ${
+                              paymentGatewayBank === b.toLowerCase() 
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-300" 
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                            }`}
+                          >
+                            {b}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div className="p-3 bg-white rounded-xl border border-slate-200/50 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-400">NOMOR VIRTUAL ACCOUNT</span>
+                        <Badge className="bg-slate-100 text-slate-700 text-[9px]">Salin</Badge>
+                      </div>
+                      <p className="text-sm font-black font-mono tracking-widest text-slate-800">
+                        {paymentGatewayBank === "bca" ? "880123456789" :
+                         paymentGatewayBank === "mandiri" ? "900123456789" :
+                         paymentGatewayBank === "bni" ? "827123456789" : "112123456789"}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-medium">Batas Pembayaran: 23 jam dari sekarang.</p>
+                    </div>
+                  </div>
+                )}
+                
+                {paymentGatewayMethod === "cc" && (
+                  <div className="space-y-3 font-sans">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-0.5">NOMOR KARTU</label>
+                      <Input placeholder="4111 2222 3333 4444" className="text-xs h-9 bg-white font-mono" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-0.5">EXPIRED DATE</label>
+                        <Input placeholder="MM/YY" className="text-xs h-9 bg-white font-mono" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 block mb-0.5">CVV</label>
+                        <Input type="password" placeholder="***" className="text-xs h-9 bg-white font-mono" maxLength={3} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* Payment Gateway Actions */}
+              <div className="space-y-2.5">
+                <Button 
+                  onClick={handlePaymentGatewaySuccess}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-10 rounded-xl shadow-md flex items-center justify-center gap-1.5 animate-pulse"
+                >
+                  Simulasikan Pembayaran Sukses
+                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={handlePaymentGatewayCancel}
+                    className="flex-1 border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs h-10 rounded-xl"
+                  >
+                    Simulasikan Gagal
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={handlePaymentGatewayCancel}
+                    className="flex-1 border-slate-200 text-slate-500 hover:bg-slate-50 font-semibold text-xs h-10 rounded-xl"
+                  >
+                    Batal
+                  </Button>
+                </div>
+              </div>
+              
+            </div>
+            
+            {/* Footer note */}
+            <div className="bg-slate-50 border-t border-slate-100 px-6 py-4 text-center">
+              <p className="text-[9px] text-slate-400 font-medium">Platform AyokMendaki bermitra resmi dengan Midtrans & Xendit Indonesia. Seluruh data transaksi dilindungi enkripsi SSL 256-bit.</p>
+            </div>
+            
+          </div>
+        </div>
+      )}
 
       {/* 9. Withdraw Deposit Modal */}
       {withdrawModalOpen && (
@@ -3532,6 +4454,282 @@ export function DashboardPage() {
                 <Button type="submit" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl">Konfirmasi Penarikan</Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* 10. Collaboration Proposal Submission Modal */}
+      {collabModalOpen && selectedCollabPartner && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <button onClick={() => setCollabModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400">
+              <X className="size-5" />
+            </button>
+            <div className="flex items-center gap-2 text-emerald-800 font-bold mb-3 border-b border-gray-100 pb-2">
+              <Award className="size-6 text-emerald-600 shrink-0 animate-pulse" />
+              <div>
+                <h3 className="text-lg">Ajukan Kerjasama & Make a Deal</h3>
+                <p className="text-[10px] text-gray-400 font-normal leading-tight">Buat proposal promo paket pendakian terintegrasi dengan partner.</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveCollabProposal} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-1">Judul Paket Kerjasama</label>
+                  <Input
+                    required
+                    className="text-xs font-semibold"
+                    placeholder="Contoh: Open Trip Merbabu Super Bundling"
+                    value={collabForm.title}
+                    onChange={(e) => setCollabForm({ ...collabForm, title: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-1">Target Gunung</label>
+                  <select
+                    className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 font-semibold"
+                    value={collabForm.targetMountain}
+                    onChange={(e) => setCollabForm({ ...collabForm, targetMountain: e.target.value })}
+                  >
+                    {mountains.map((m) => (
+                      <option key={m.name} value={m.name}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-1">Durasi Rencana Trip</label>
+                  <Input
+                    required
+                    className="text-xs font-semibold"
+                    placeholder="Contoh: 3 Hari 2 Malam"
+                    value={collabForm.duration}
+                    onChange={(e) => setCollabForm({ ...collabForm, duration: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-1">Total Harga Paket Promo (Rp)</label>
+                  <Input
+                    required
+                    type="number"
+                    className="text-xs font-bold font-mono text-emerald-700"
+                    placeholder="Contoh: 1200000"
+                    value={collabForm.price}
+                    onChange={(e) => setCollabForm({ ...collabForm, price: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Pilih Alat Kemping yang Di-bundle</label>
+                <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto border border-gray-150 rounded-lg p-2.5 bg-gray-55/40 rounded-xl">
+                  {(() => {
+                    const partnerId = currentUser.role === "guide" ? selectedCollabPartner.id : currentUser.id;
+                    const partnerEq = equipment.filter(eq => eq.vendorId === partnerId);
+                    if (partnerEq.length === 0) return <p className="text-[10px] text-gray-400 col-span-2 text-center py-4">Tidak ada barang katalog.</p>;
+                    return partnerEq.map((item) => (
+                      <label key={item.id} className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                          checked={collabForm.bundledEquipmentIds.includes(item.id)}
+                          onChange={(e) => {
+                            const ids = e.target.checked
+                              ? [...collabForm.bundledEquipmentIds, item.id]
+                              : collabForm.bundledEquipmentIds.filter((id) => id !== item.id);
+                            setCollabForm({ ...collabForm, bundledEquipmentIds: ids });
+                          }}
+                        />
+                        <span>{item.name} (Rp {item.price.toLocaleString("id-ID")})</span>
+                      </label>
+                    ));
+                  })()}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Deskripsi Paket Rencana Perjalanan</label>
+                <textarea
+                  required
+                  className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 h-16 resize-none"
+                  placeholder="Ceritakan detail trip dan fasilitas lainnya..."
+                  value={collabForm.description}
+                  onChange={(e) => setCollabForm({ ...collabForm, description: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Mekanisme Serah Terima & Sewa Alat</label>
+                <textarea
+                  required
+                  className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 h-16 resize-none font-semibold text-emerald-800"
+                  placeholder="Bagaimana alat rental dikirim/diambil dan denda jika rusak..."
+                  value={collabForm.rentalMechanism}
+                  onChange={(e) => setCollabForm({ ...collabForm, rentalMechanism: e.target.value })}
+                />
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <Button type="button" variant="outline" className="flex-1 text-xs" onClick={() => setCollabModalOpen(false)}>Batal</Button>
+                <Button type="submit" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Ajukan Penawaran Deal</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 11. Transaction Receipt / Invoice Modal */}
+      {receiptModalOpen && receiptData && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-in fade-in duration-200 no-print">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl relative border border-gray-100 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col print-receipt-container max-h-[90vh]">
+            
+            {/* Modal Actions Header - hidden on print */}
+            <div className="bg-gray-50 border-b border-gray-100 px-6 py-4 flex items-center justify-between no-print">
+              <h3 className="font-bold text-gray-800 text-sm">Resi Pembayaran Resmi</h3>
+              <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  onClick={() => window.print()} 
+                  className="bg-emerald-600 hover:bg-emerald-700 text-xs text-white font-bold rounded-xl"
+                >
+                  Cetak / Simpan PDF
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={() => {
+                    setReceiptModalOpen(false);
+                    setReceiptData(null);
+                  }}
+                  className="text-xs border-gray-200 rounded-xl"
+                >
+                  Tutup
+                </Button>
+              </div>
+            </div>
+
+            {/* Print Styling Injection */}
+            <style dangerouslySetInnerHTML={{__html: `
+              @media print {
+                body * {
+                  visibility: hidden !important;
+                }
+                .print-receipt-container, .print-receipt-container * {
+                  visibility: visible !important;
+                }
+                .print-receipt-container {
+                  position: absolute !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  height: auto !important;
+                  border: none !important;
+                  box-shadow: none !important;
+                  background: white !important;
+                  color: black !important;
+                  margin: 0 !important;
+                  padding: 10mm !important;
+                }
+                .no-print {
+                  display: none !important;
+                }
+              }
+            `}} />
+
+            {/* Receipt Printable Contents */}
+            <div className="p-6 md:p-8 space-y-6 flex-1 overflow-y-auto bg-white text-gray-800">
+              
+              {/* Receipt Header */}
+              <div className="text-center border-b border-dashed border-gray-200 pb-5">
+                <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 font-extrabold px-3 py-1 rounded-full text-xs mb-3 border border-emerald-100">
+                  <MountainIcon className="size-3.5 text-emerald-650" />
+                  <span>AYOKMENDAKI</span>
+                </div>
+                <h2 className="text-xl font-black text-gray-900 tracking-tight">KUITANSI PEMBAYARAN RESMI</h2>
+                <p className="text-[10px] text-gray-400 mt-1 uppercase font-semibold">No. Invoice: {receiptData.id}</p>
+                <p className="text-[10px] text-gray-400 font-semibold">Tanggal Cetak: {new Date(receiptData.date).toLocaleString("id-ID")}</p>
+              </div>
+
+              {/* Receipt Info Body */}
+              <div className="space-y-4">
+                
+                {/* Meta info */}
+                <div className="grid grid-cols-2 gap-3 text-xs bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+                  <div>
+                    <span className="text-[10px] text-gray-400 uppercase font-bold block">Tipe Transaksi</span>
+                    <span className="font-bold text-gray-800 uppercase">{receiptData.type}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-gray-400 uppercase font-bold block">Status</span>
+                    <span className="font-extrabold text-emerald-600 flex items-center gap-1">
+                      <span className="size-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                      SUKSES / PAID
+                    </span>
+                  </div>
+                  <div className="col-span-2 border-t border-gray-100 pt-2 mt-1">
+                    <span className="text-[10px] text-gray-400 uppercase font-bold block">Deskripsi</span>
+                    <span className="font-semibold text-gray-700">{receiptData.description || "Pembayaran Layanan AyokMendaki"}</span>
+                  </div>
+                </div>
+
+                {/* Party Details */}
+                <div className="grid grid-cols-2 gap-4 text-xs pt-2">
+                  <div>
+                    <span className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Dibayar Oleh:</span>
+                    <span className="font-extrabold text-gray-900 block">{receiptData.senderName || "Pendaki / Member"}</span>
+                    <span className="text-[10px] text-gray-400 font-normal">Pengguna Terdaftar AyokMendaki</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Diterima Oleh:</span>
+                    <span className="font-extrabold text-gray-900 block">{receiptData.recipientName || "Platform AyokMendaki"}</span>
+                    <span className="text-[10px] text-gray-400 font-normal">{receiptData.type === "topup" ? "Virtual Gateway Receiver" : "Mitra Penyedia Jasa"}</span>
+                  </div>
+                </div>
+
+                {/* Amount breakdown table */}
+                <div className="border border-gray-150 rounded-2xl overflow-hidden mt-4">
+                  <div className="bg-gray-50 px-4 py-2 text-[10px] text-gray-500 font-bold uppercase tracking-wider flex justify-between border-b border-gray-100">
+                    <span>Rincian Transaksi</span>
+                    <span>Subtotal</span>
+                  </div>
+                  <div className="divide-y divide-gray-100 bg-white">
+                    <div className="px-4 py-3 flex justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-gray-800">{receiptData.description || "Biaya Layanan"}</span>
+                        {receiptData.details && <span className="text-[10px] text-gray-450 block font-normal mt-0.5">{receiptData.details}</span>}
+                      </div>
+                      <span className="font-bold font-mono text-gray-755">Rp {receiptData.amount.toLocaleString("id-ID")}</span>
+                    </div>
+                    {receiptData.type === "booking" && (
+                      <div className="px-4 py-2 flex justify-between text-[11px] text-gray-500">
+                        <span>Platform Escrow Fee</span>
+                        <span className="font-mono">Rp 0 (FREE)</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="bg-emerald-50/50 px-4 py-3 border-t border-gray-150 flex justify-between items-center">
+                    <span className="text-xs font-extrabold text-emerald-800">TOTAL DIBAYARKAN</span>
+                    <span className="text-sm font-black font-mono text-emerald-700">Rp {receiptData.amount.toLocaleString("id-ID")}</span>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Receipt Footer */}
+              <div className="text-center pt-5 border-t border-dashed border-gray-200">
+                <p className="text-[10px] text-gray-400 font-semibold leading-relaxed">
+                  Ini adalah kuitansi digital sah yang diterbitkan oleh sistem AyokMendaki. Seluruh transaksi bersifat final, aman, dan dilindungi oleh garansi jaminan deposit escrow.
+                </p>
+                <div className="mt-4 flex items-center justify-center gap-1.5 text-[9px] font-bold text-emerald-750">
+                  <CheckCircle2 className="size-3 text-emerald-600" />
+                  <span>PROSES TRANSAKSI 100% AMAN &amp; VERIFIED</span>
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
       )}
