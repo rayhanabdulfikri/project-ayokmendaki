@@ -13,6 +13,9 @@ export interface User {
   verified?: boolean;
   avatar?: string;
   status?: "active" | "suspended";
+  ktp_number?: string;
+  ktp_image?: string;
+  selfie_image?: string;
 }
 
 export interface UserActivity {
@@ -284,14 +287,30 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUserState] = useState<User | null>(null);
+  const [currentUser, setCurrentUserState] = useState<User | null>(() => {
+    const cached = localStorage.getItem("currentUser");
+    return cached ? JSON.parse(cached) : null;
+  });
   
   const setCurrentUser = (user: User | null) => {
     setCurrentUserState(user);
     if (user === null) {
+      localStorage.removeItem("currentUser");
       supabase.auth.signOut();
+    } else {
+      localStorage.setItem("currentUser", JSON.stringify(user));
     }
   };
+
+  // Keep localStorage in sync with currentUser changes
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem("currentUser", JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem("currentUser");
+    }
+  }, [currentUser]);
+
   const [mountains, setMountains] = useState<Mountain[]>([]);
   const [guides, setGuides] = useState<Guide[]>([]);
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -334,20 +353,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const pendingRegStr = localStorage.getItem("pending_oauth_register");
             if (pendingRegStr) {
               const pendingReg = JSON.parse(pendingRegStr);
+              const emailFromGoogle = session.user.email?.toLowerCase();
+              const nameFromGoogle = session.user.user_metadata?.full_name || session.user.user_metadata?.name || emailFromGoogle?.split("@")[0] || "User Google";
 
               // 1. Create user profile in public.users
               const newUserObj = {
                 id: userId,
-                name: pendingReg.role === "vendor" ? pendingReg.storeName : pendingReg.name,
-                email: pendingReg.email,
-                role: pendingReg.role,
-                phone: pendingReg.phone,
+                name: pendingReg.role === "vendor" ? (pendingReg.storeName || nameFromGoogle) : (pendingReg.name || nameFromGoogle),
+                email: pendingReg.email || emailFromGoogle,
+                role: pendingReg.role || "pendaki",
+                phone: pendingReg.phone || null,
                 verified: false,
-                avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${pendingReg.name}`,
+                avatar: session.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${nameFromGoogle}`,
                 status: "active",
-                ktp_number: pendingReg.ktpNumber,
-                ktp_image: pendingReg.ktpPhotoUrl,
-                selfie_image: pendingReg.selfiePhotoUrl
+                ktp_number: pendingReg.ktpNumber || null,
+                ktp_image: pendingReg.ktpPhotoUrl || null,
+                selfie_image: pendingReg.selfiePhotoUrl || null
               };
 
               await supabase.from("users").insert(newUserObj);
@@ -362,38 +383,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (pendingReg.role === "guide") {
                 await supabase.from("guides").insert({
                   id: userId,
-                  specialty: pendingReg.specialty,
+                  specialty: pendingReg.specialty || "Gn. Semeru",
                   location: "Kota Malang, Jawa Timur",
-                  experience: pendingReg.experience + " Tahun",
+                  experience: (pendingReg.experience || "0") + " Tahun",
                   trips: 0,
                   rating: 5.0,
                   price: parseInt(pendingReg.price) || 450000,
-                  certifications: pendingReg.certifications,
+                  certifications: pendingReg.certifications || [],
                   status: "Non-Aktif",
-                  specialty_mountains: [pendingReg.specialty],
+                  specialty_mountains: pendingReg.specialty ? [pendingReg.specialty] : ["Gn. Semeru"],
                   busy_dates: [],
                   group_discount_enabled: false
                 });
               } else if (pendingReg.role === "vendor") {
                 await supabase.from("vendors").insert({
                   id: userId,
-                  location: pendingReg.address,
+                  location: pendingReg.address || "Jawa Timur",
                   distances: {}
                 });
               }
 
-              // 4. Submit verification request (triggers automated KYC)
-              await supabase.from("verification_requests").insert({
-                user_id: userId,
-                user_name: pendingReg.role === "vendor" ? pendingReg.storeName : pendingReg.name,
-                role: pendingReg.role,
-                document_name: pendingReg.role === "vendor" ? `NIB: ${pendingReg.nib}` : `KYC: KTP ${pendingReg.ktpNumber}`,
-                document_image: pendingReg.role === "guide" ? pendingReg.docImage : pendingReg.ktpPhotoUrl,
-                ktp_number: pendingReg.ktpNumber,
-                ktp_photo: pendingReg.ktpPhotoUrl,
-                selfie_photo: pendingReg.selfiePhotoUrl,
-                status: "pending"
-              });
+              // 4. Submit verification request if they have KYC (only for regular registration cached details)
+              if (pendingReg.ktpNumber && pendingReg.ktpPhotoUrl) {
+                await supabase.from("verification_requests").insert({
+                  user_id: userId,
+                  user_name: pendingReg.role === "vendor" ? pendingReg.storeName : pendingReg.name,
+                  role: pendingReg.role,
+                  document_name: pendingReg.role === "vendor" ? `NIB: ${pendingReg.nib}` : `KYC: KTP ${pendingReg.ktpNumber}`,
+                  document_image: pendingReg.role === "guide" ? pendingReg.docImage : pendingReg.ktpPhotoUrl,
+                  ktp_number: pendingReg.ktpNumber,
+                  ktp_photo: pendingReg.ktpPhotoUrl,
+                  selfie_photo: pendingReg.selfiePhotoUrl,
+                  status: "pending"
+                });
+              }
 
               matchedUser = {
                 id: newUserObj.id,
@@ -435,6 +458,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           if (matchedUser) {
             setCurrentUserState(matchedUser);
+            localStorage.setItem("currentUser", JSON.stringify(matchedUser));
+
+            // Clean up the Google OAuth token hash and redirect to dashboard
+            if (window.location.hash && (window.location.hash.includes("access_token") || window.location.hash.includes("id_token"))) {
+              window.history.replaceState(null, "", window.location.pathname);
+              window.location.href = window.location.origin + "/dashboard";
+            }
           }
         }
 

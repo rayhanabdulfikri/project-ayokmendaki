@@ -97,6 +97,11 @@ export function RentalPage() {
       return;
     }
 
+    if (currentUser.role !== "pendaki") {
+      toast.error("Hanya Pendaki yang dapat menyewa alat.");
+      return;
+    }
+
     setSelectedItem(item);
     setStartDate("");
     setEndDate("");

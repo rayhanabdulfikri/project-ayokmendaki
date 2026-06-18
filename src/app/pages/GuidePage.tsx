@@ -81,6 +81,11 @@ export function GuidePage() {
       return;
     }
     
+    if (currentUser.role !== "pendaki") {
+      toast.error("Hanya Pendaki yang dapat menyewa guide.");
+      return;
+    }
+    
     if (guide.status !== "Aktif") {
       toast.error(`Guide ${guide.name} sedang tidak aktif / libur.`);
       return;

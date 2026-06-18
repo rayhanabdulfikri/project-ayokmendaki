@@ -79,39 +79,8 @@ export function LoginPage() {
           toast.success(`Selamat datang kembali, ${matchedUser.name}!`);
           navigate("/dashboard");
         } else {
-          // If user doesn't exist, create user profile dynamically in Supabase as a Pendaki
-          const newId = "custom_" + Math.random().toString(36).substring(2, 9);
-          const customUser: User = {
-            id: newId,
-            name: email.split("@")[0],
-            email: email,
-            role: "pendaki",
-            phone: "08120000000",
-            verified: true,
-            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
-            status: "active"
-          };
-
-          await supabase.from("users").insert({
-            id: customUser.id,
-            name: customUser.name,
-            email: customUser.email,
-            role: customUser.role,
-            phone: customUser.phone,
-            verified: customUser.verified,
-            avatar: customUser.avatar,
-            status: customUser.status
-          });
-
-          await supabase.from("wallets").insert({
-            user_id: customUser.id,
-            balance: 500000
-          });
-
-          setCurrentUser(customUser);
+          setError("Akun tidak ditemukan. Silakan daftar terlebih dahulu.");
           setLoading(false);
-          toast.success(`Akun baru dibuat secara otomatis! Selamat datang, ${customUser.name}`);
-          navigate("/dashboard");
         }
       } catch (err: any) {
         setLoading(false);

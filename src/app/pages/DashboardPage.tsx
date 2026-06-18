@@ -107,6 +107,242 @@ export function DashboardPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Profile Completion Form States
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    name: "",
+    phone: "",
+    password: "",
+    confirmPassword: "",
+    ktpNumber: "",
+    ktpPhotoName: "ktp_identitas.jpg",
+    ktpPhotoUrl: "https://images.unsplash.com/photo-1554774853-aae0a22c8aa4?w=400&q=80",
+    selfiePhotoName: "selfie_wajah.jpg",
+    selfiePhotoUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80",
+    // Guide specific
+    specialty: "",
+    experience: "",
+    price: "450000",
+    certifications: [] as string[],
+    docName: "Sertifikat APIGI",
+    docImage: "https://images.unsplash.com/photo-1586075010923-2dd4570fb338?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400",
+    // Vendor specific
+    storeName: "",
+    nib: "",
+    address: ""
+  });
+  const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
+
+  // Prefill the form when user details are fetched
+  useEffect(() => {
+    if (currentUser) {
+      setProfileForm(prev => ({
+        ...prev,
+        phone: prev.phone || currentUser.phone || "",
+        storeName: prev.storeName || (currentUser.role === "vendor" ? currentUser.name : ""),
+        name: prev.name || (currentUser.role !== "vendor" ? currentUser.name : "")
+      }));
+    }
+  }, [currentUser]);
+
+  const handleProfileCheckboxChange = (cert: string, checked: boolean) => {
+    const current = [...profileForm.certifications];
+    if (checked) {
+      current.push(cert);
+    } else {
+      const idx = current.indexOf(cert);
+      if (idx > -1) current.splice(idx, 1);
+    }
+    setProfileForm(prev => ({ ...prev, certifications: current }));
+  };
+
+  const isProfileIncomplete = useMemo(() => {
+    if (!currentUser) return false;
+    if (currentUser.role === "admin") return false;
+
+    // Check basic data diri
+    const hasBasicData =
+      currentUser.phone &&
+      currentUser.phone !== "08120000000" &&
+      currentUser.ktp_number &&
+      currentUser.ktp_image &&
+      currentUser.selfie_image;
+
+    if (!hasBasicData) return true;
+
+    // Check role-specific profile records
+    if (currentUser.role === "guide") {
+      const guideProfile = guides.find((g) => g.id === currentUser.id);
+      if (!guideProfile || !guideProfile.specialty || !guideProfile.experience) {
+        return true;
+      }
+    }
+
+    if (currentUser.role === "vendor") {
+      const vendorProfile = vendors.find((v) => v.id === currentUser.id);
+      if (!vendorProfile || !vendorProfile.location) {
+        return true;
+      }
+    }
+
+    return false;
+  }, [currentUser, guides, vendors]);
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser) return;
+
+    // Validation
+    const errs: Record<string, string> = {};
+    if (currentUser.role !== "vendor" && !profileForm.name.trim()) {
+      errs.name = "Nama lengkap wajib diisi.";
+    }
+    if (!profileForm.phone.trim()) errs.phone = "Nomor telepon wajib diisi.";
+    else if (!/^(\+62|0)[0-9]{8,12}$/.test(profileForm.phone.replace(/\s/g, "")))
+      errs.phone = "Nomor telepon tidak valid.";
+
+    if (!profileForm.ktpNumber.trim()) errs.ktpNumber = "Nomor NIK KTP wajib diisi.";
+    else if (!/^[0-9]{16}$/.test(profileForm.ktpNumber.trim()))
+      errs.ktpNumber = "Nomor NIK KTP harus 16 digit.";
+
+    if (profileForm.password) {
+      if (profileForm.password.length < 8) {
+        errs.password = "Kata sandi minimal 8 karakter.";
+      }
+      if (profileForm.password !== profileForm.confirmPassword) {
+        errs.confirmPassword = "Konfirmasi kata sandi tidak cocok.";
+      }
+    }
+
+    if (currentUser.role === "guide") {
+      if (!profileForm.specialty.trim()) errs.specialty = "Spesialisasi gunung wajib diisi.";
+      if (!profileForm.experience.trim()) errs.experience = "Pengalaman wajib diisi.";
+      if (!profileForm.price.trim()) errs.price = "Tarif harian wajib diisi.";
+      if (profileForm.certifications.length === 0) errs.certifications = "Pilih minimal satu sertifikasi.";
+    }
+
+    if (currentUser.role === "vendor") {
+      if (!profileForm.storeName.trim()) errs.storeName = "Nama toko wajib diisi.";
+      if (!profileForm.nib.trim()) errs.nib = "NIB wajib diisi.";
+      if (!profileForm.address.trim()) errs.address = "Alamat toko wajib diisi.";
+    }
+
+    if (Object.keys(errs).length > 0) {
+      setProfileErrors(errs);
+      toast.error("Silakan lengkapi seluruh kolom yang wajib diisi.");
+      return;
+    }
+
+    setProfileLoading(true);
+
+    try {
+      // 1. Update password if provided in Supabase Auth
+      if (profileForm.password) {
+        const { error: pwdErr } = await supabase.auth.updateUser({ password: profileForm.password });
+        if (pwdErr) throw pwdErr;
+      }
+
+      // 2. Update users table
+      const updatedName = currentUser.role === "vendor" ? profileForm.storeName : profileForm.name;
+      const { error: userErr } = await supabase
+        .from("users")
+        .update({
+          phone: profileForm.phone,
+          ktp_number: profileForm.ktpNumber,
+          ktp_image: profileForm.ktpPhotoUrl,
+          selfie_image: profileForm.selfiePhotoUrl,
+          verified: false,
+          name: updatedName
+        })
+        .eq("id", currentUser.id);
+
+      if (userErr) throw userErr;
+
+      // 2. Insert role profile
+      if (currentUser.role === "guide") {
+        const { error: guideErr } = await supabase.from("guides").insert({
+          id: currentUser.id,
+          specialty: profileForm.specialty,
+          location: "Kota Malang, Jawa Timur",
+          experience: profileForm.experience + " Tahun",
+          trips: 0,
+          rating: 5.0,
+          price: parseInt(profileForm.price) || 450000,
+          certifications: profileForm.certifications,
+          status: "Non-Aktif",
+          specialty_mountains: [profileForm.specialty],
+          busy_dates: [],
+          group_discount_enabled: false
+        });
+        if (guideErr) throw guideErr;
+
+        // submit verification request
+        addVerificationRequest({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          role: "guide",
+          documentName: `Sertifikasi ${profileForm.certifications.join(" & ")}`,
+          documentImage: profileForm.docImage,
+          ktpNumber: profileForm.ktpNumber,
+          ktpPhoto: profileForm.ktpPhotoUrl,
+          selfiePhoto: profileForm.selfiePhotoUrl
+        });
+
+      } else if (currentUser.role === "vendor") {
+        const { error: vendorErr } = await supabase.from("vendors").insert({
+          id: currentUser.id,
+          location: profileForm.address,
+          distances: {}
+        });
+        if (vendorErr) throw vendorErr;
+
+        addVerificationRequest({
+          userId: currentUser.id,
+          userName: profileForm.storeName,
+          role: "vendor",
+          documentName: `NIB / Izin Usaha UKM: ${profileForm.nib}`,
+          documentImage: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400",
+          ktpNumber: profileForm.ktpNumber,
+          ktpPhoto: profileForm.ktpPhotoUrl,
+          selfiePhoto: profileForm.selfiePhotoUrl
+        });
+
+      } else if (currentUser.role === "pendaki") {
+        addVerificationRequest({
+          userId: currentUser.id,
+          userName: currentUser.name,
+          role: "pendaki",
+          documentName: `KYC Pendaki: KTP ${profileForm.ktpNumber}`,
+          documentImage: profileForm.ktpPhotoUrl,
+          ktpNumber: profileForm.ktpNumber,
+          ktpPhoto: profileForm.ktpPhotoUrl,
+          selfiePhoto: profileForm.selfiePhotoUrl
+        });
+      }
+
+      // 3. Update local user context
+      setCurrentUser({
+        ...currentUser,
+        phone: profileForm.phone,
+        ktp_number: profileForm.ktpNumber,
+        ktp_image: profileForm.ktpPhotoUrl,
+        selfie_image: profileForm.selfiePhotoUrl,
+        verified: false,
+        name: updatedName
+      });
+
+      toast.success("Data diri berhasil disimpan! Menunggu verifikasi admin.");
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (err: any) {
+      console.error("Error saving profile details:", err);
+      toast.error("Gagal menyimpan data diri: " + err.message);
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
   // Navigation tabs in dashboard
   const [activeTab, setActiveTab] = useState("bookings");
   const [reportsSubTab, setReportsSubTab] = useState("analytics");
@@ -957,6 +1193,241 @@ export function DashboardPage() {
               Ke Beranda
             </Button>
           </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isProfileIncomplete) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-50 flex items-center justify-center px-4 py-12 font-sans">
+        <Card className="max-w-2xl w-full shadow-2xl border-0 bg-white rounded-3xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-emerald-800 text-white p-6 relative">
+            <h2 className="text-xl font-bold">Lengkapi Data Diri Anda</h2>
+            <p className="text-xs opacity-80 mt-1">
+              Harap isi data diri & berkas identitas terlebih dahulu sebelum Anda dapat menggunakan layanan dan dashboard AyokMendaki.
+            </p>
+          </div>
+          <CardContent className="p-6">
+            <form onSubmit={handleProfileSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Name */}
+                {currentUser.role !== "vendor" && (
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-xs font-semibold text-gray-700">Nama Lengkap</label>
+                    <Input
+                      placeholder="Masukkan nama lengkap Anda"
+                      className={`bg-gray-55 border-gray-200 text-xs ${profileErrors.name ? "border-red-400 focus:border-red-400" : ""}`}
+                      value={profileForm.name}
+                      onChange={(e) => setProfileForm(prev => ({ ...prev, name: e.target.value }))}
+                    />
+                    {profileErrors.name && <p className="text-[10px] text-red-500">{profileErrors.name}</p>}
+                  </div>
+                )}
+                {/* Phone */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-700">Nomor Telepon (WhatsApp)</label>
+                  <Input
+                    placeholder="Contoh: 081234567890"
+                    className={`bg-gray-55 border-gray-200 text-xs ${profileErrors.phone ? "border-red-400 focus:border-red-400" : ""}`}
+                    value={profileForm.phone}
+                    onChange={(e) => setProfileForm(prev => ({ ...prev, phone: e.target.value }))}
+                  />
+                  {profileErrors.phone && <p className="text-[10px] text-red-500">{profileErrors.phone}</p>}
+                </div>
+
+                {/* NIK */}
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-700">Nomor NIK KTP (16 Digit)</label>
+                  <Input
+                    maxLength={16}
+                    placeholder="Masukkan 16 digit NIK"
+                    className={`bg-gray-55 border-gray-200 text-xs ${profileErrors.ktpNumber ? "border-red-400 focus:border-red-400" : ""}`}
+                    value={profileForm.ktpNumber}
+                    onChange={(e) => setProfileForm(prev => ({ ...prev, ktpNumber: e.target.value.replace(/[^0-9]/g, "") }))}
+                  />
+                  {profileErrors.ktpNumber && <p className="text-[10px] text-red-500">{profileErrors.ktpNumber}</p>}
+                </div>
+              </div>
+
+              {/* Password Fields */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-700">Kata Sandi Baru (Opsional)</label>
+                  <Input
+                    type="password"
+                    placeholder="Min. 8 karakter jika ingin diatur/diubah"
+                    className={`bg-gray-55 border-gray-200 text-xs ${profileErrors.password ? "border-red-400 focus:border-red-400" : ""}`}
+                    value={profileForm.password}
+                    onChange={(e) => setProfileForm(prev => ({ ...prev, password: e.target.value }))}
+                  />
+                  {profileErrors.password && <p className="text-[10px] text-red-500">{profileErrors.password}</p>}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-700">Konfirmasi Kata Sandi Baru</label>
+                  <Input
+                    type="password"
+                    placeholder="Ulangi kata sandi baru"
+                    className={`bg-gray-55 border-gray-200 text-xs ${profileErrors.confirmPassword ? "border-red-400 focus:border-red-400" : ""}`}
+                    value={profileForm.confirmPassword}
+                    onChange={(e) => setProfileForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                  />
+                  {profileErrors.confirmPassword && <p className="text-[10px] text-red-500">{profileErrors.confirmPassword}</p>}
+                </div>
+              </div>
+
+              {/* KYC Photo Inputs */}
+              <div className="bg-emerald-50/20 p-4 rounded-2xl border border-emerald-100/50 space-y-3">
+                <div className="flex items-center gap-1.5 border-b border-emerald-100 pb-1.5">
+                  <ShieldAlert className="size-4 text-emerald-600" />
+                  <h4 className="text-xs font-bold text-emerald-800">Verifikasi Identitas (KYC)</h4>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-gray-650">Foto KTP Asli</label>
+                    <div className="border border-dashed border-emerald-300 rounded-lg p-2.5 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors">
+                      <Award className="size-5 text-emerald-600 mx-auto mb-1" />
+                      <p className="text-[10px] text-emerald-700 font-semibold">{profileForm.ktpPhotoName}</p>
+                      <p className="text-[8px] text-gray-400">File KTP terdeteksi otomatis</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-gray-655">Foto Selfie dengan KTP</label>
+                    <div className="border border-dashed border-emerald-300 rounded-lg p-2.5 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors">
+                      <Award className="size-5 text-emerald-600 mx-auto mb-1" />
+                      <p className="text-[10px] text-emerald-700 font-semibold">{profileForm.selfiePhotoName}</p>
+                      <p className="text-[8px] text-gray-400">Foto wajah verified</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Guide-Specific Fields */}
+              {currentUser.role === "guide" && (
+                <div className="bg-emerald-50/30 p-4 rounded-2xl border border-emerald-100 space-y-3 animate-in fade-in duration-200">
+                  <h4 className="text-xs font-bold text-emerald-800 border-b border-emerald-100 pb-1.5">Informasi Profesi Guide Gunung</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-gray-600">Spesialisasi Gunung</label>
+                      <Input
+                        placeholder="Gn. Rinjani, Gn. Semeru"
+                        className="bg-white border-gray-200 text-xs"
+                        value={profileForm.specialty}
+                        onChange={(e) => setProfileForm(prev => ({ ...prev, specialty: e.target.value }))}
+                      />
+                      {profileErrors.specialty && <p className="text-[10px] text-red-500">{profileErrors.specialty}</p>}
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-gray-600">Pengalaman (Tahun)</label>
+                      <Input
+                        type="number"
+                        placeholder="Contoh: 5"
+                        className="bg-white border-gray-200 text-xs"
+                        value={profileForm.experience}
+                        onChange={(e) => setProfileForm(prev => ({ ...prev, experience: e.target.value }))}
+                      />
+                      {profileErrors.experience && <p className="text-[10px] text-red-500">{profileErrors.experience}</p>}
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-gray-600">Tarif Jasa Harian (Rp)</label>
+                      <Input
+                        type="number"
+                        placeholder="Contoh: 450000"
+                        className="bg-white border-gray-200 text-xs"
+                        value={profileForm.price}
+                        onChange={(e) => setProfileForm(prev => ({ ...prev, price: e.target.value }))}
+                      />
+                      {profileErrors.price && <p className="text-[10px] text-red-500">{profileErrors.price}</p>}
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-gray-600">Sertifikasi yang Dimiliki</label>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {["APIGI", "HPI", "SAR", "K3 Gunung"].map((cert) => (
+                          <label key={cert} className="flex items-center gap-1 text-xs text-gray-600">
+                            <input
+                              type="checkbox"
+                              checked={profileForm.certifications.includes(cert)}
+                              onChange={(e) => handleProfileCheckboxChange(cert, e.target.checked)}
+                              className="size-3.5 rounded border-gray-300 accent-emerald-600"
+                            />
+                            {cert}
+                          </label>
+                        ))}
+                      </div>
+                      {profileErrors.certifications && <p className="text-[10px] text-red-500">{profileErrors.certifications}</p>}
+                    </div>
+                  </div>
+                  <div className="space-y-1 pt-1">
+                    <label className="text-[11px] font-semibold text-gray-600">Upload Dokumen Sertifikat Resmi</label>
+                    <div className="border border-dashed border-emerald-300 rounded-lg p-3 text-center bg-white">
+                      <Award className="size-5 text-emerald-600 mx-auto mb-1" />
+                      <p className="text-[10px] text-emerald-700 font-semibold">{profileForm.docName}</p>
+                      <p className="text-[8px] text-gray-400 mt-0.5">Format PDF/JPG, maks. 5MB (Disimulasikan)</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Vendor-Specific Fields */}
+              {currentUser.role === "vendor" && (
+                <div className="bg-emerald-50/30 p-4 rounded-2xl border border-emerald-100 space-y-3 animate-in fade-in duration-200">
+                  <h4 className="text-xs font-bold text-emerald-800 border-b border-emerald-100 pb-1.5">Informasi Vendor Rental Outdoor</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-gray-600">Nama Toko Outdoor</label>
+                      <Input
+                        placeholder="Contoh: Summit Gear Rental"
+                        className="bg-white border-gray-200 text-xs"
+                        value={profileForm.storeName}
+                        onChange={(e) => setProfileForm(prev => ({ ...prev, storeName: e.target.value }))}
+                      />
+                      {profileErrors.storeName && <p className="text-[10px] text-red-500">{profileErrors.storeName}</p>}
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-gray-600">NIB / Izin UKM</label>
+                      <Input
+                        placeholder="Contoh: 1234567890"
+                        className="bg-white border-gray-200 text-xs"
+                        value={profileForm.nib}
+                        onChange={(e) => setProfileForm(prev => ({ ...prev, nib: e.target.value }))}
+                      />
+                      {profileErrors.nib && <p className="text-[10px] text-red-500">{profileErrors.nib}</p>}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-gray-600">Alamat Toko Fisik</label>
+                    <Input
+                      placeholder="Contoh: Jl. Pendaki No. 12, Wonosobo, Jawa Tengah"
+                      className="bg-white border-gray-200 text-xs"
+                      value={profileForm.address}
+                      onChange={(e) => setProfileForm(prev => ({ ...prev, address: e.target.value }))}
+                    />
+                    {profileErrors.address && <p className="text-[10px] text-red-500">{profileErrors.address}</p>}
+                  </div>
+                </div>
+              )}
+
+              {/* Submit Buttons */}
+              <div className="flex gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 text-xs text-gray-650 h-10 font-bold border-gray-200"
+                  onClick={() => setCurrentUser(null)}
+                >
+                  Keluar Akun (Log Out)
+                </Button>
+                <Button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white h-10 text-xs font-bold shadow-md"
+                  disabled={profileLoading}
+                >
+                  {profileLoading ? "Menyimpan Data..." : "Kirim Data Verifikasi"}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
         </Card>
       </div>
     );

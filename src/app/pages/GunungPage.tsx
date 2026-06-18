@@ -152,6 +152,10 @@ export function GunungPage() {
       navigate("/login");
       return;
     }
+    if (currentUser.role !== "pendaki") {
+      toast.error("Hanya Pendaki yang dapat memesan tiket.");
+      return;
+    }
     setBookingMountain(mountain);
     setBookingDate("");
     setClimbersCount(1);

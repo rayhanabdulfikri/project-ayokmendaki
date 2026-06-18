@@ -41,7 +41,6 @@ export function RegisterPage() {
   const [success, setSuccess] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>("pendaki");
   const navigate = useNavigate();
-  const { addVerificationRequest, setGuides } = useApp();
 
   const [form, setForm] = useState({
     name: "",
@@ -50,23 +49,6 @@ export function RegisterPage() {
     password: "",
     confirmPassword: "",
     agreeTerms: false,
-    // KYC fields
-    ktpNumber: "",
-    ktpPhotoName: "ktp_identitas.jpg",
-    ktpPhotoUrl: "https://images.unsplash.com/photo-1554774853-aae0a22c8aa4?w=400&q=80",
-    selfiePhotoName: "selfie_wajah.jpg",
-    selfiePhotoUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80",
-    // Guide specific
-    specialty: "",
-    experience: "",
-    price: "",
-    certifications: [] as string[],
-    docName: "Sertifikat APIGI",
-    docImage: "https://images.unsplash.com/photo-1586075010923-2dd4570fb338?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400",
-    // Vendor specific
-    storeName: "",
-    nib: "",
-    address: "",
   });
 
   const passwordStrength = getPasswordStrength(form.password);
@@ -76,45 +58,17 @@ export function RegisterPage() {
     setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
-  const handleCheckboxChange = (cert: string, checked: boolean) => {
-    const current = [...form.certifications];
-    if (checked) {
-      current.push(cert);
-    } else {
-      const idx = current.indexOf(cert);
-      if (idx > -1) current.splice(idx, 1);
-    }
-    handleChange("certifications", current);
-  };
-
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!form.name.trim()) newErrors.name = "Nama lengkap wajib diisi.";
     if (!form.email.trim()) newErrors.email = "Email wajib diisi.";
     else if (!/\S+@\S+\.\S+/.test(form.email)) newErrors.email = "Format email tidak valid.";
     if (!form.phone.trim()) newErrors.phone = "Nomor telepon wajib diisi.";
-    else if (!/^(\+62|0)[0-9]{8,12}$/.test(form.phone.replace(/\s/g, "")))
-      newErrors.phone = "Masukkan nomor telepon Indonesia yang valid.";
-    
-    if (selectedRole === "guide") {
-      if (!form.specialty.trim()) newErrors.specialty = "Spesialisasi gunung wajib diisi.";
-      if (!form.experience.trim()) newErrors.experience = "Pengalaman kerja wajib diisi.";
-      if (!form.price.trim()) newErrors.price = "Tarif harian wajib diisi.";
-      if (form.certifications.length === 0) newErrors.certifications = "Pilih minimal satu sertifikasi.";
-    }
-    
-    if (selectedRole === "vendor") {
-      if (!form.storeName.trim()) newErrors.storeName = "Nama toko outdoor wajib diisi.";
-      if (!form.nib.trim()) newErrors.nib = "NIB/Izin UKM wajib diisi.";
-      if (!form.address.trim()) newErrors.address = "Alamat toko wajib diisi.";
-    }
+    else if (!/^(\+62|0)[0-9]{8,14}$/.test(form.phone.replace(/\s/g, "")))
+      newErrors.phone = "Nomor telepon wajib diisi.";
 
     if (!form.password) newErrors.password = "Kata sandi wajib diisi.";
     else if (form.password.length < 8) newErrors.password = "Kata sandi minimal 8 karakter.";
-    
-    // KYC validation
-    if (!form.ktpNumber.trim()) newErrors.ktpNumber = "Nomor NIK KTP wajib diisi.";
-    else if (!/^[0-9]{16}$/.test(form.ktpNumber.trim())) newErrors.ktpNumber = "Nomor NIK KTP harus 16 digit angka.";
 
     if (!form.confirmPassword) newErrors.confirmPassword = "Konfirmasi kata sandi wajib diisi.";
     else if (form.password !== form.confirmPassword)
@@ -133,19 +87,19 @@ export function RegisterPage() {
       const newUserId = "user_" + Math.random().toString(36).substring(2, 9);
       
       try {
-        // 1. Create User in Supabase with KYC columns
+        // 1. Create User in Supabase with basic columns (KYC is null initially)
         const { error: userErr } = await supabase.from("users").insert({
           id: newUserId,
-          name: selectedRole === "vendor" ? form.storeName : form.name,
+          name: form.name,
           email: form.email,
           role: selectedRole,
           phone: form.phone,
-          verified: false, // All start as unverified until admin approves KYC
+          verified: false, // All start as unverified until they fill KYC and admin approves
           avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${form.name}`,
           status: "active",
-          ktp_number: form.ktpNumber,
-          ktp_image: form.ktpPhotoUrl,
-          selfie_image: form.selfiePhotoUrl
+          ktp_number: null,
+          ktp_image: null,
+          selfie_image: null
         });
 
         if (userErr) throw userErr;
@@ -156,91 +110,9 @@ export function RegisterPage() {
           balance: 0
         });
 
-        if (selectedRole === "pendaki") {
-          // Submit verification request for pendaki KYC
-          addVerificationRequest({
-            userId: newUserId,
-            userName: form.name,
-            role: "pendaki",
-            documentName: `KYC Pendaki: KTP ${form.ktpNumber}`,
-            documentImage: form.ktpPhotoUrl,
-            ktpNumber: form.ktpNumber,
-            ktpPhoto: form.ktpPhotoUrl,
-            selfiePhoto: form.selfiePhotoUrl
-          });
-        } else if (selectedRole === "guide") {
-          // Add Guide profile
-          const { error: guideErr } = await supabase.from("guides").insert({
-            id: newUserId,
-            specialty: form.specialty,
-            location: "Kota Malang, Jawa Timur",
-            experience: form.experience + " Tahun",
-            trips: 0,
-            rating: 5.0,
-            price: parseInt(form.price) || 450000,
-            certifications: form.certifications,
-            status: "Non-Aktif",
-            specialty_mountains: [form.specialty],
-            busy_dates: [],
-            group_discount_enabled: false
-          });
-
-          if (guideErr) throw guideErr;
-
-          // Add to local state (optimistic)
-          const newGuideObj = {
-            id: newUserId,
-            name: form.name,
-            specialty: form.specialty,
-            location: "Kota Malang, Jawa Timur",
-            experience: form.experience + " Tahun",
-            trips: 0,
-            rating: 5.0,
-            price: parseInt(form.price) || 450000,
-            avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${form.name}`,
-            certifications: form.certifications,
-            status: "Non-Aktif" as const,
-            verified: false
-          };
-          setGuides((prev) => [newGuideObj, ...prev]);
-
-          // Submit verification request
-          addVerificationRequest({
-            userId: newUserId,
-            userName: form.name,
-            role: "guide",
-            documentName: `Sertifikasi ${form.certifications.join(" & ")}`,
-            documentImage: form.docImage,
-            ktpNumber: form.ktpNumber,
-            ktpPhoto: form.ktpPhotoUrl,
-            selfiePhoto: form.selfiePhotoUrl
-          });
-        } else if (selectedRole === "vendor") {
-          // Add Vendor profile
-          const { error: vendorErr } = await supabase.from("vendors").insert({
-            id: newUserId,
-            location: form.address,
-            distances: {}
-          });
-
-          if (vendorErr) throw vendorErr;
-
-          // Submit verification request for vendor
-          addVerificationRequest({
-            userId: newUserId,
-            userName: form.storeName,
-            role: "vendor",
-            documentName: `NIB / Izin Usaha UKM: ${form.nib}`,
-            documentImage: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400",
-            ktpNumber: form.ktpNumber,
-            ktpPhoto: form.ktpPhotoUrl,
-            selfiePhoto: form.selfiePhotoUrl
-          });
-        }
-
         setLoading(false);
         setSuccess(true);
-        toast.success("Registrasi berhasil diajukan!");
+        toast.success("Registrasi berhasil!");
       } catch (err: any) {
         setLoading(false);
         console.error("Error registering user:", err);
@@ -250,28 +122,10 @@ export function RegisterPage() {
   };
 
   const handleGoogleRegister = async () => {
-    if (!validate()) {
-      toast.error("Silakan lengkapi formulir pendaftaran terlebih dahulu.");
-      return;
-    }
     setLoading(true);
     try {
       const pendingData = {
-        name: form.name,
-        email: form.email,
-        phone: form.phone,
         role: selectedRole,
-        ktpNumber: form.ktpNumber,
-        ktpPhotoUrl: form.ktpPhotoUrl,
-        selfiePhotoUrl: form.selfiePhotoUrl,
-        specialty: form.specialty,
-        experience: form.experience,
-        price: form.price,
-        certifications: form.certifications,
-        docImage: form.docImage,
-        storeName: form.storeName,
-        nib: form.nib,
-        address: form.address,
       };
       
       localStorage.setItem("pending_oauth_register", JSON.stringify(pendingData));
@@ -299,23 +153,9 @@ export function RegisterPage() {
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Pendaftaran Berhasil!</h2>
           
-          {selectedRole === "pendaki" ? (
-            <p className="text-gray-500 mb-6 text-sm">
-              Akun Anda telah berhasil dibuat. Silakan login menggunakan email Anda untuk mulai mendaki gunung Indonesia.
-            </p>
-          ) : (
-            <div className="mb-6 space-y-3">
-              <p className="text-gray-600 text-sm">
-                Akun Kemitraan (**{selectedRole.toUpperCase()}**) berhasil didaftarkan.
-              </p>
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 text-left">
-                ⚠️ **Menunggu Verifikasi Admin:** Berkas Anda (Sertifikat/NIB UKM) sedang ditinjau oleh Admin. Akun Anda akan aktif setelah disetujui.
-              </div>
-              <p className="text-xs text-gray-400">
-                Tip Demo: Anda dapat masuk sebagai **Super Admin** menggunakan demo widget untuk langsung menyetujui pengajuan pendaftaran ini!
-              </p>
-            </div>
-          )}
+          <p className="text-gray-500 mb-6 text-sm">
+            Akun Anda (**{selectedRole.toUpperCase()}**) telah berhasil dibuat. Silakan login ke dashboard untuk melengkapi data diri Anda terlebih dahulu agar akun dapat diaktifkan dan digunakan.
+          </p>
 
           <div className="space-y-3">
             <Link to="/login">
@@ -323,20 +163,6 @@ export function RegisterPage() {
                 Masuk Sekarang
               </Button>
             </Link>
-            {selectedRole !== "pendaki" && (
-              <Button
-                variant="outline"
-                className="w-full text-xs"
-                onClick={() => {
-                  // Instant login as admin to make testing easy
-                  const adminAcc: User = { id: "admin1", name: "Super Admin", email: "admin@ayokmendaki.com", role: "admin", verified: true, avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=admin" };
-                  navigate("/login");
-                  toast.info("Gunakan tombol 'Super Admin' di halaman login untuk memverifikasi akun ini.");
-                }}
-              >
-                Buka Halaman Login &rarr; Verifikasi sebagai Admin
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -396,228 +222,62 @@ export function RegisterPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Common Fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Name */}
-                <div className="space-y-1">
-                  <label htmlFor="name" className="text-xs font-semibold text-gray-700">
-                    Nama Lengkap
-                  </label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
-                    <Input
-                      id="name"
-                      type="text"
-                      placeholder="Nama lengkap Anda"
-                      className={`pl-9 bg-gray-50 border-gray-200 text-sm ${errors.name ? "border-red-400 focus:border-red-400" : ""}`}
-                      value={form.name}
-                      onChange={(e) => handleChange("name", e.target.value)}
-                    />
-                  </div>
-                  {errors.name && <p className="text-[10px] text-red-500">{errors.name}</p>}
-                </div>
-
-                {/* Email */}
-                <div className="space-y-1">
-                  <label htmlFor="email" className="text-xs font-semibold text-gray-700">
-                    Alamat Email
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="contoh@email.com"
-                      className={`pl-9 bg-gray-50 border-gray-200 text-sm ${errors.email ? "border-red-400 focus:border-red-400" : ""}`}
-                      value={form.email}
-                      onChange={(e) => handleChange("email", e.target.value)}
-                    />
-                  </div>
-                  {errors.email && <p className="text-[10px] text-red-500">{errors.email}</p>}
-                </div>
-
-                {/* Phone */}
-                <div className="space-y-1 sm:col-span-2">
-                  <label htmlFor="phone" className="text-xs font-semibold text-gray-700">
-                    Nomor Telepon (WhatsApp)
-                  </label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
-                    <Input
-                      id="phone"
-                      type="tel"
-                      placeholder="08xxxxxxxxxx"
-                      className={`pl-9 bg-gray-50 border-gray-200 text-sm ${errors.phone ? "border-red-400 focus:border-red-400" : ""}`}
-                      value={form.phone}
-                      onChange={(e) => handleChange("phone", e.target.value)}
-                    />
-                  </div>
-                  {errors.phone && <p className="text-[10px] text-red-500">{errors.phone}</p>}
-                </div>
-              </div>
-
-              {/* KYC Verification Section (Required for all roles) */}
-              <div className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-100 space-y-3">
-                <div className="flex items-center gap-1.5 border-b border-emerald-100 pb-1.5">
-                  <Shield className="size-4 text-emerald-600" />
-                  <h4 className="text-xs font-bold text-emerald-800">Verifikasi Identitas (KYC)</h4>
-                </div>
-
-                <div className="space-y-1">
-                  <label htmlFor="ktpNumber" className="text-xs font-semibold text-gray-700">
-                    Nomor NIK KTP (16 Digit)
-                  </label>
+              {/* Name */}
+              <div className="space-y-1">
+                <label htmlFor="name" className="text-xs font-semibold text-gray-700">
+                  Nama Lengkap
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
                   <Input
-                    id="ktpNumber"
+                    id="name"
                     type="text"
-                    maxLength={16}
-                    placeholder="Masukkan 16 digit nomor NIK Anda"
-                    className={`bg-white border-gray-200 text-xs ${errors.ktpNumber ? "border-red-400 focus:border-red-400" : ""}`}
-                    value={form.ktpNumber}
-                    onChange={(e) => handleChange("ktpNumber", e.target.value.replace(/[^0-9]/g, ""))}
+                    placeholder="Nama lengkap Anda"
+                    className={`pl-9 bg-gray-50 border-gray-200 text-sm ${errors.name ? "border-red-400 focus:border-red-400" : ""}`}
+                    value={form.name}
+                    onChange={(e) => handleChange("name", e.target.value)}
                   />
-                  {errors.ktpNumber && <p className="text-[10px] text-red-500">{errors.ktpNumber}</p>}
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  {/* KTP Photo upload */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-gray-600">Foto KTP Asli</label>
-                    <div className="border border-dashed border-emerald-300 rounded-lg p-2.5 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors">
-                      <Award className="size-5 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-[10px] text-emerald-700 font-semibold">{form.ktpPhotoName}</p>
-                      <p className="text-[8px] text-gray-400">File KTP terdeteksi otomatis</p>
-                    </div>
-                  </div>
-
-                  {/* Selfie photo upload */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-gray-600">Foto Selfie dengan KTP</label>
-                    <div className="border border-dashed border-emerald-300 rounded-lg p-2.5 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors">
-                      <Award className="size-5 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-[10px] text-emerald-700 font-semibold">{form.selfiePhotoName}</p>
-                      <p className="text-[8px] text-gray-400">Foto wajah verified</p>
-                    </div>
-                  </div>
-                </div>
+                {errors.name && <p className="text-[10px] text-red-500">{errors.name}</p>}
               </div>
 
-              {/* Guide-Specific Fields */}
-              {selectedRole === "guide" && (
-                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3 animate-in fade-in duration-200">
-                  <h4 className="text-xs font-bold text-emerald-800 border-b border-emerald-100 pb-1.5">Informasi Profesi Guide Gunung</h4>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-gray-600">Spesialisasi Gunung</label>
-                      <Input
-                        placeholder="Contoh: Gn. Rinjani, Gn. Semeru"
-                        className="bg-white border-gray-200 text-xs h-9"
-                        value={form.specialty}
-                        onChange={(e) => handleChange("specialty", e.target.value)}
-                      />
-                      {errors.specialty && <p className="text-[10px] text-red-500">{errors.specialty}</p>}
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-gray-600">Pengalaman (Tahun)</label>
-                      <Input
-                        type="number"
-                        placeholder="Contoh: 5"
-                        className="bg-white border-gray-200 text-xs h-9"
-                        value={form.experience}
-                        onChange={(e) => handleChange("experience", e.target.value)}
-                      />
-                      {errors.experience && <p className="text-[10px] text-red-500">{errors.experience}</p>}
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-gray-600">Tarif Jasa Harian (Rp)</label>
-                      <Input
-                        type="number"
-                        placeholder="Contoh: 450000"
-                        className="bg-white border-gray-200 text-xs h-9"
-                        value={form.price}
-                        onChange={(e) => handleChange("price", e.target.value)}
-                      />
-                      {errors.price && <p className="text-[10px] text-red-500">{errors.price}</p>}
-                    </div>
-
-                    {/* Certifications checkboxes */}
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-gray-600">Sertifikasi yang Dimiliki</label>
-                      <div className="flex flex-wrap gap-3 mt-1.5">
-                        {["APIGI", "HPI", "SAR", "K3 Gunung"].map((cert) => (
-                          <label key={cert} className="flex items-center gap-1.5 text-xs text-gray-600">
-                            <input
-                              type="checkbox"
-                              checked={form.certifications.includes(cert)}
-                              onChange={(e) => handleCheckboxChange(cert, e.target.checked)}
-                              className="size-3.5 rounded border-gray-300 accent-emerald-600"
-                            />
-                            {cert}
-                          </label>
-                        ))}
-                      </div>
-                      {errors.certifications && <p className="text-[10px] text-red-500">{errors.certifications}</p>}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-gray-600">Upload Dokumen Sertifikat Resmi</label>
-                    <div className="border border-dashed border-emerald-300 rounded-lg p-3 text-center bg-white">
-                      <Award className="size-6 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-[10px] text-emerald-700 font-semibold">{form.docName}</p>
-                      <p className="text-[9px] text-gray-400 mt-0.5">Format PDF/JPG, maks. 5MB (Disimulasikan)</p>
-                    </div>
-                  </div>
+              {/* Email */}
+              <div className="space-y-1">
+                <label htmlFor="email" className="text-xs font-semibold text-gray-700">
+                  Alamat Email
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="contoh@email.com"
+                    className={`pl-9 bg-gray-50 border-gray-200 text-sm ${errors.email ? "border-red-400 focus:border-red-400" : ""}`}
+                    value={form.email}
+                    onChange={(e) => handleChange("email", e.target.value)}
+                  />
                 </div>
-              )}
+                {errors.email && <p className="text-[10px] text-red-500">{errors.email}</p>}
+              </div>
 
-              {/* Vendor-Specific Fields */}
-              {selectedRole === "vendor" && (
-                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 space-y-3 animate-in fade-in duration-200">
-                  <h4 className="text-xs font-bold text-emerald-800 border-b border-emerald-100 pb-1.5">Informasi Vendor Rental Outdoor</h4>
-                  
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-gray-600">Nama Toko Outdoor</label>
-                      <Input
-                        placeholder="Contoh: Summit Gear Rental"
-                        className="bg-white border-gray-200 text-xs h-9"
-                        value={form.storeName}
-                        onChange={(e) => handleChange("storeName", e.target.value)}
-                      />
-                      {errors.storeName && <p className="text-[10px] text-red-500">{errors.storeName}</p>}
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-gray-600">NIB / Izin UKM</label>
-                      <Input
-                        placeholder="Contoh: 1234567890"
-                        className="bg-white border-gray-200 text-xs h-9"
-                        value={form.nib}
-                        onChange={(e) => handleChange("nib", e.target.value)}
-                      />
-                      {errors.nib && <p className="text-[10px] text-red-500">{errors.nib}</p>}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-gray-600">Alamat Toko Fisik</label>
-                    <div className="relative">
-                      <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-gray-400" />
-                      <Input
-                        placeholder="Jl. Pendaki No. 12, Wonosobo, Jawa Tengah"
-                        className="bg-white border-gray-200 pl-8 text-xs h-9"
-                        value={form.address}
-                        onChange={(e) => handleChange("address", e.target.value)}
-                      />
-                    </div>
-                    {errors.address && <p className="text-[10px] text-red-500">{errors.address}</p>}
-                  </div>
+              {/* Phone */}
+              <div className="space-y-1">
+                <label htmlFor="phone" className="text-xs font-semibold text-gray-700">
+                  Nomor Telepon (WhatsApp)
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-gray-400" />
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="08xxxxxxxxxx"
+                    className={`pl-9 bg-gray-55 border-gray-200 text-sm ${errors.phone ? "border-red-400 focus:border-red-400" : ""}`}
+                    value={form.phone}
+                    onChange={(e) => handleChange("phone", e.target.value)}
+                  />
                 </div>
-              )}
+                {errors.phone && <p className="text-[10px] text-red-500">{errors.phone}</p>}
+              </div>
 
               {/* Password Fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -632,7 +292,7 @@ export function RegisterPage() {
                       id="password"
                       type={showPassword ? "text" : "password"}
                       placeholder="Min. 8 karakter"
-                      className={`pl-9 pr-9 bg-gray-50 border-gray-200 text-sm ${errors.password ? "border-red-400 focus:border-red-400" : ""}`}
+                      className={`pl-9 pr-9 bg-gray-55 border-gray-200 text-sm ${errors.password ? "border-red-400 focus:border-red-400" : ""}`}
                       value={form.password}
                       onChange={(e) => handleChange("password", e.target.value)}
                     />
@@ -673,7 +333,7 @@ export function RegisterPage() {
                       id="confirmPassword"
                       type={showConfirmPassword ? "text" : "password"}
                       placeholder="Ulangi kata sandi"
-                      className={`pl-9 pr-9 bg-gray-50 border-gray-200 text-sm ${errors.confirmPassword ? "border-red-400 focus:border-red-400" : ""}`}
+                      className={`pl-9 pr-9 bg-gray-55 border-gray-200 text-sm ${errors.confirmPassword ? "border-red-400 focus:border-red-400" : ""}`}
                       value={form.confirmPassword}
                       onChange={(e) => handleChange("confirmPassword", e.target.value)}
                     />
