@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useApp, Booking, RentalOrder, Negotiation, UserRole, EquipmentItem, User, Mountain } from "../context/AppContext";
+import { supabase } from "../../supabase";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Input } from "../components/ui/input";
