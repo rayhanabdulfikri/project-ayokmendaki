@@ -129,28 +129,7 @@ export function LoginPage() {
           <p className="mt-2 text-gray-500 text-sm">Selamat datang kembali, pendaki!</p>
         </div>
 
-        {/* Demo Fast Login Panel */}
-        <Card className="shadow-lg border border-emerald-100 mb-6 bg-white">
-          <CardHeader className="py-3 px-4 flex flex-row items-center gap-2 border-b border-gray-50">
-            <Sparkles className="size-4 text-emerald-600 animate-pulse" />
-            <CardTitle className="text-xs font-bold text-gray-700">Demo Quick Login (Pilih Peran)</CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 grid grid-cols-2 gap-2">
-            {DEMO_ACCOUNTS.map((user) => (
-              <Button
-                key={user.id}
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => handleQuickLogin(user)}
-                className="text-xs h-9 justify-start font-semibold text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition-all"
-              >
-                <img src={user.avatar} alt={user.name} className="size-5 rounded-full mr-1.5 bg-gray-100 shrink-0" />
-                <span className="truncate">{user.name.split(" ")[0]} ({user.role})</span>
-              </Button>
-            ))}
-          </CardContent>
-        </Card>
+
 
         <Card className="shadow-xl border-0 bg-white">
           <CardHeader className="pb-4">

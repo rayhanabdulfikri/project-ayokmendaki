@@ -10,7 +10,6 @@ import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { AppProvider } from "./context/AppContext";
-import { DemoWidget } from "./components/DemoWidget";
 
 export default function App() {
   return (
@@ -38,7 +37,6 @@ export default function App() {
                   </Routes>
                 </main>
                 <Footer />
-                <DemoWidget />
               </div>
             }
           />
