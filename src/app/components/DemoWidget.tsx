@@ -12,27 +12,32 @@ const MOCK_USERS: User[] = [
 ];
 
 export function DemoWidget() {
-  const { currentUser, setCurrentUser } = useApp();
+  const { currentUser, setCurrentUser, ensureMockUserExists } = useApp();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleSwitch = (user: User) => {
-    setCurrentUser(user);
-    setOpen(false);
-    toast.success(`Berhasil berpindah ke akun: ${user.name}`, {
-      description: `Role Anda sekarang: ${user.role.toUpperCase()}`,
-      duration: 3000,
-    });
-    
-    // If user is on dashboard, refresh or stay. If not, ask to go to dashboard.
-    if (!location.pathname.startsWith("/dashboard")) {
-      toast.info("Ingin membuka dashboard peran ini?", {
-        action: {
-          label: "Buka Dashboard",
-          onClick: () => navigate("/dashboard")
-        }
+  const handleSwitch = async (user: User) => {
+    try {
+      await ensureMockUserExists(user);
+      setCurrentUser(user);
+      setOpen(false);
+      toast.success(`Berhasil berpindah ke akun: ${user.name.includes(" (") ? user.name.split(" (")[0] : user.name}`, {
+        description: `Role Anda sekarang: ${user.role.toUpperCase()}`,
+        duration: 3000,
       });
+      
+      // If user is on dashboard, refresh or stay. If not, ask to go to dashboard.
+      if (!location.pathname.startsWith("/dashboard")) {
+        toast.info("Ingin membuka dashboard peran ini?", {
+          action: {
+            label: "Buka Dashboard",
+            onClick: () => navigate("/dashboard")
+          }
+        });
+      }
+    } catch (err: any) {
+      toast.error("Gagal berpindah ke akun demo: " + err.message);
     }
   };
 

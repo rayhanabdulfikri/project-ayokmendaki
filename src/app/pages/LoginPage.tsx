@@ -22,16 +22,20 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
-  const { setCurrentUser } = useApp();
+  const { setCurrentUser, ensureMockUserExists } = useApp();
 
-  const handleQuickLogin = (user: User) => {
+  const handleQuickLogin = async (user: User) => {
     setLoading(true);
-    setTimeout(() => {
+    try {
+      await ensureMockUserExists(user);
       setCurrentUser(user);
-      setLoading(false);
-      toast.success(`Selamat datang kembali, ${user.name}!`);
+      toast.success(`Selamat datang kembali, ${user.name.includes(" (") ? user.name.split(" (")[0] : user.name}!`);
       navigate("/dashboard");
-    }, 800);
+    } catch (err: any) {
+      toast.error("Gagal melakukan login cepat: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {

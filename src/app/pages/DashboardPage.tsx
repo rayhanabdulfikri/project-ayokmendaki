@@ -51,6 +51,29 @@ import {
   Cell
 } from "recharts";
 
+const getFileNameFromUrl = (url: string, defaultName: string) => {
+  if (!url) return "";
+  try {
+    const decoded = decodeURIComponent(url);
+    const parts = decoded.split('/');
+    const lastPart = parts[parts.length - 1];
+    const questionIndex = lastPart.indexOf('?');
+    const cleanLastPart = questionIndex !== -1 ? lastPart.substring(0, questionIndex) : lastPart;
+    const underscoreIndex = cleanLastPart.indexOf('_');
+    if (underscoreIndex !== -1) {
+      const remaining = cleanLastPart.substring(underscoreIndex + 1);
+      const nextUnderscore = remaining.indexOf('_');
+      if (nextUnderscore !== -1) {
+        return remaining.substring(nextUnderscore + 1);
+      }
+      return remaining;
+    }
+    return cleanLastPart;
+  } catch (e) {
+    return defaultName;
+  }
+};
+
 export function DashboardPage() {
   const {
     currentUser,
@@ -179,9 +202,9 @@ export function DashboardPage() {
         name: currentUser.role !== "vendor" ? currentUser.name : "",
         phone: currentUser.phone || "",
         ktpNumber: currentUser.ktp_number || "",
-        ktpPhotoName: currentUser.ktp_image ? "ktp_identitas.jpg" : "",
+        ktpPhotoName: currentUser.ktp_image ? getFileNameFromUrl(currentUser.ktp_image, "ktp_identitas.jpg") : "",
         ktpPhotoUrl: currentUser.ktp_image || "",
-        selfiePhotoName: currentUser.selfie_image ? "selfie_wajah.jpg" : "",
+        selfiePhotoName: currentUser.selfie_image ? getFileNameFromUrl(currentUser.selfie_image, "selfie_wajah.jpg") : "",
         selfiePhotoUrl: currentUser.selfie_image || "",
         bank_name: currentUser.bank_name || "",
         bank_account: currentUser.bank_account || "",
@@ -222,36 +245,10 @@ export function DashboardPage() {
   };
 
   const isProfileIncomplete = useMemo(() => {
-    if (!currentUser) return false;
-    if (currentUser.role === "admin") return false;
-
-    // Check basic data diri
-    const hasBasicData =
-      currentUser.phone &&
-      currentUser.phone !== "08120000000" &&
-      currentUser.ktp_number &&
-      currentUser.ktp_image &&
-      currentUser.selfie_image;
-
-    if (!hasBasicData) return true;
-
-    // Check role-specific profile records
-    if (currentUser.role === "guide") {
-      const guideProfile = guides.find((g) => g.id === currentUser.id);
-      if (!guideProfile || !guideProfile.specialty || !guideProfile.experience) {
-        return true;
-      }
-    }
-
-    if (currentUser.role === "vendor") {
-      const vendorProfile = vendors.find((v) => v.id === currentUser.id);
-      if (!vendorProfile || !vendorProfile.location) {
-        return true;
-      }
-    }
-
+    // Diubah agar pengguna tidak langsung dipaksa mengisi data setelah daftar,
+    // melainkan dapat mengisinya nanti di menu profil saya.
     return false;
-  }, [currentUser, guides, vendors]);
+  }, []);
 
   // File Upload Handlers (Supabase Storage kyc-documents bucket)
   const handleFileUpload = async (file: File, type: "ktp" | "selfie" | "doc") => {
@@ -263,13 +260,13 @@ export function DashboardPage() {
     try {
       const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
       const path = `${currentUser.id}/${type}_${Date.now()}_${cleanName}`;
-      const { error } = await supabase.storage.from("kyc-documents").upload(path, file, {
+      const { error } = await supabase.storage.from("kyc_document").upload(path, file, {
         cacheControl: "3600",
         upsert: true
       });
       if (error) throw error;
 
-      const { data: { publicUrl } } = supabase.storage.from("kyc-documents").getPublicUrl(path);
+      const { data: { publicUrl } } = supabase.storage.from("kyc_document").getPublicUrl(path);
 
       setProfileForm((prev) => {
         if (type === "ktp") {
@@ -418,6 +415,9 @@ export function DashboardPage() {
       toast.error("Silakan lengkapi seluruh kolom yang wajib diisi.");
       return;
     }
+
+    const confirmSave = window.confirm("Apakah Anda yakin ingin menyimpan perubahan profil dan data verifikasi Anda?");
+    if (!confirmSave) return;
 
     setProfileLoading(true);
 
@@ -4960,9 +4960,9 @@ export function DashboardPage() {
                                   type="button"
                                   variant="outline"
                                   onClick={() => document.getElementById("profile-ktp-upload")?.click()}
-                                  className="w-full text-[10px] h-9 border-dashed border-emerald-300 text-emerald-850 hover:bg-emerald-50/20"
+                                  className="w-full text-[10px] h-9 border-dashed border-emerald-300 text-emerald-850 hover:bg-emerald-50/20 truncate"
                                 >
-                                  {isUploadingKtp ? "Unggah..." : profileForm.ktpPhotoUrl ? "KTP OK" : "Unggah KTP"}
+                                  {isUploadingKtp ? "Unggah..." : profileForm.ktpPhotoName || "Unggah KTP"}
                                 </Button>
                               </div>
                               <div>
@@ -4980,9 +4980,9 @@ export function DashboardPage() {
                                   type="button"
                                   variant="outline"
                                   onClick={() => document.getElementById("profile-selfie-upload")?.click()}
-                                  className="w-full text-[10px] h-9 border-dashed border-emerald-300 text-emerald-850 hover:bg-emerald-50/20"
+                                  className="w-full text-[10px] h-9 border-dashed border-emerald-300 text-emerald-850 hover:bg-emerald-50/20 truncate"
                                 >
-                                  {isUploadingSelfie ? "Unggah..." : profileForm.selfiePhotoUrl ? "Selfie OK" : "Unggah Selfie"}
+                                  {isUploadingSelfie ? "Unggah..." : profileForm.selfiePhotoName || "Unggah Selfie"}
                                 </Button>
                               </div>
                             </div>

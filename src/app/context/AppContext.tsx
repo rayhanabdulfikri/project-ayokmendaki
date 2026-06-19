@@ -301,6 +301,7 @@ interface AppContextType {
   updateTripPackageStatus: (id: string, status: "approved" | "rejected") => void;
   userActivities: UserActivity[];
   logUserActivity: (userId: string, userName: string, role: UserActivity["userRole"], action: string) => void;
+  ensureMockUserExists: (user: User) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -1140,26 +1141,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // ─── Admin Verification Actions ─────────────────────────────────────────────
-  const respondToVerification = (id: string, approve: boolean) => {
+  const respondToVerification = async (id: string, approve: boolean) => {
+    const req = verificationRequests.find((r) => r.id === id);
+    if (!req) {
+      console.error(`Verification request with ID ${id} not found in state!`);
+      return;
+    }
+
     setVerificationRequests((prev) =>
       prev.map((r) => (r.id === id ? { ...r, status: approve ? "approved" : "rejected" } : r))
     );
-
-    const req = verificationRequests.find((r) => r.id === id);
-    if (!req) return;
 
     if (req.role === "guide") {
       setGuides((prev) =>
         prev.map((g) => (g.id === req.userId ? { ...g, verified: approve, status: approve ? "Aktif" : g.status } : g))
       );
-      supabase.from("guides").update({ status: approve ? "Aktif" : "Non-Aktif" }).eq("id", req.userId);
+      const { error: guideErr } = await supabase.from("guides").update({ status: approve ? "Aktif" : "Non-Aktif" }).eq("id", req.userId);
+      if (guideErr) console.error("Error updating guide status in Supabase:", guideErr.message);
+    } else if (req.role === "vendor") {
+      setVendors((prev) =>
+        prev.map((v) => (v.id === req.userId ? { ...v, verified: approve } : v))
+      );
     }
+
     setUsers((prev) =>
       prev.map((u) => (u.id === req.userId ? { ...u, verified: approve } : u))
     );
-    supabase.from("users").update({ verified: approve }).eq("id", req.userId);
+    const { error: userErr } = await supabase.from("users").update({ verified: approve }).eq("id", req.userId);
+    if (userErr) console.error("Error updating user verified status in Supabase:", userErr.message);
 
-    supabase.from("verification_requests").update({ status: approve ? "approved" : "rejected" }).eq("id", id);
+    const { error: reqErr } = await supabase.from("verification_requests").update({ status: approve ? "approved" : "rejected" }).eq("id", id);
+    if (reqErr) console.error("Error updating verification request in Supabase:", reqErr.message);
   };
 
   const addVerificationRequest = (reqData: Omit<VerificationRequest, "id" | "status" | "createdAt">) => {
@@ -1919,36 +1931,230 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     supabase.from("users").update({ status }).eq("id", id);
   };
 
-  const toggleUserVerification = (id: string) => {
-    let oldVerified = false;
-    let uName = "";
-    let uRole = "";
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === id) {
-          oldVerified = !!u.verified;
-          uName = u.name;
-          uRole = u.role;
-          return { ...u, verified: !u.verified };
-        }
-        return u;
-      })
-    );
-    
-    const nextVerified = !oldVerified;
+  const toggleUserVerification = async (id: string) => {
+    const u = users.find(x => x.id === id);
+    if (!u) {
+      console.error(`User with ID ${id} not found in state!`);
+      return;
+    }
+
+    const nextVerified = !u.verified;
+    const uRole = u.role;
+    const uName = u.name;
 
     logUserActivity("admin1", "Super Admin", "admin", `Mengubah status verifikasi ${uName} menjadi ${nextVerified ? "Verified" : "Unverified"}`);
-    
+
+    setUsers((prev) =>
+      prev.map((user) => (user.id === id ? { ...user, verified: nextVerified } : user))
+    );
     setGuides((prev) => prev.map(g => g.id === id ? { ...g, verified: nextVerified } : g));
     setVendors((prev) => prev.map(v => v.id === id ? { ...v, verified: nextVerified } : v));
 
-    supabase.from("users").update({ verified: nextVerified }).eq("id", id).then(() => {
-      if (uRole === "guide") {
-        supabase.from("guides").update({ verified: nextVerified }).eq("id", id);
-      } else if (uRole === "vendor") {
-        supabase.from("vendors").update({ verified: nextVerified }).eq("id", id);
+    const { error: userErr } = await supabase.from("users").update({ verified: nextVerified }).eq("id", id);
+    if (userErr) {
+      console.error("Error updating user verification in Supabase:", userErr.message);
+    }
+  };
+
+  const ensureMockUserExists = async (user: User) => {
+    try {
+      const { data: existingUser } = await supabase
+        .from("users")
+        .select("id")
+        .eq("id", user.id)
+        .single();
+
+      if (existingUser) return;
+
+      console.log(`Auto-creating mock user: ${user.name} (${user.role})...`);
+
+      const { error: userErr } = await supabase.from("users").insert({
+        id: user.id,
+        name: user.name.includes(" (") ? user.name.split(" (")[0] : user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone || "08123456789",
+        verified: true,
+        avatar: user.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.name}`,
+        status: "active",
+        email_verified: true
+      });
+
+      if (userErr) throw userErr;
+
+      const balance = user.role === "vendor" ? 2000000 : (user.role === "guide" ? 1500000 : 500000);
+      await supabase.from("wallets").insert({
+        user_id: user.id,
+        balance: balance
+      });
+
+      if (user.role === "guide") {
+        await supabase.from("guides").insert({
+          id: user.id,
+          specialty: "Gunung Semeru & Bromo",
+          location: "Malang, Jawa Timur",
+          experience: "8 Tahun",
+          trips: 245,
+          rating: 4.9,
+          price: 500000,
+          certifications: ["APIGI", "Pertolongan Pertama"],
+          status: "Aktif",
+          specialty_mountains: ["Gunung Semeru", "Gunung Bromo"],
+          busy_dates: []
+        });
+      } else if (user.role === "vendor") {
+        await supabase.from("vendors").insert({
+          id: user.id,
+          location: "Malang, Jawa Timur",
+          distances: {
+            "Gunung Semeru": 3.5,
+            "Gunung Bromo": 8.0,
+            "Gunung Rinjani": 380,
+            "Gunung Prau": 350,
+            "Gunung Merbabu": 320,
+            "Gunung Gede Pangrango": 710,
+            "Gunung Slamet": 310,
+            "Gunung Sindoro": 280,
+            "Gunung Sumbing": 270,
+            "Gunung Lawu": 180,
+            "Gunung Papandayan": 610,
+            "Gunung Merapi": 290
+          }
+        });
+
+        await supabase.from("equipment_items").insert([
+          {
+            id: "eq1",
+            name: "Tenda Dome 4 Orang",
+            description: "Kapasitas 4 orang, waterproof, mudah dipasang",
+            price: 75000,
+            vendor_id: user.id,
+            rating: 4.8,
+            available: 5,
+            category: "tent",
+            group_discount_enabled: false,
+            damage_terms: null
+          },
+          {
+            id: "eq9",
+            name: "Cooking Set Nesting",
+            description: "Panci camping anti lengket, 1 set isi 4 item",
+            price: 20000,
+            vendor_id: user.id,
+            rating: 4.8,
+            available: 10,
+            category: "other",
+            group_discount_enabled: false,
+            damage_terms: null
+          },
+          {
+            id: "eq13",
+            name: "Flysheet 3x4 meter",
+            description: "Tenda peneduh anti air pelindung tenda utama",
+            price: 15000,
+            vendor_id: user.id,
+            rating: 4.7,
+            available: 8,
+            category: "other",
+            group_discount_enabled: false,
+            damage_terms: null
+          },
+          {
+            id: "eq18",
+            name: "Sepatu Trekking Size 42",
+            description: "Sepatu hiking grip kuat, anti selip & water resistant",
+            price: 50000,
+            vendor_id: user.id,
+            rating: 4.7,
+            available: 4,
+            category: "other",
+            group_discount_enabled: false,
+            damage_terms: null
+          }
+        ]);
       }
-    });
+
+      const { data: updatedUsers } = await supabase.from("users").select("*");
+      if (updatedUsers) setUsers(updatedUsers);
+
+      if (user.role === "guide") {
+        const { data: updatedGuides } = await supabase.from("guides").select("*");
+        if (updatedGuides && updatedUsers) {
+          setGuides(
+            updatedGuides.map((g: any) => {
+              const u = updatedUsers.find((x: any) => x.id === g.id);
+              return {
+                id: g.id,
+                name: u?.name || "Guide Name",
+                specialty: g.specialty,
+                location: g.location,
+                experience: g.experience,
+                trips: g.trips,
+                rating: Number(g.rating),
+                price: Number(g.price),
+                avatar: u?.avatar || "https://api.dicebear.com/7.x/avataaars/svg",
+                certifications: g.certifications || [],
+                status: g.status,
+                verified: u?.verified || false,
+                specialtyMountains: g.specialty_mountains || [],
+                busyDates: (g.busy_dates || []).map((d: any) => String(d)),
+                groupDiscountEnabled: g.group_discount_enabled || false,
+                discountPercentage: Number(g.discount_percentage || 0),
+                biodata: g.biodata || "",
+                ketentuan: g.ketentuan || "",
+                couponCode: g.coupon_code || "",
+                couponDiscount: Number(g.coupon_discount || 0),
+                couponDeadline: g.coupon_deadline || ""
+              };
+            })
+          );
+        }
+      } else if (user.role === "vendor") {
+        const { data: updatedVendors } = await supabase.from("vendors").select("*");
+        const { data: updatedEq } = await supabase.from("equipment_items").select("*");
+        if (updatedVendors && updatedUsers) {
+          setVendors(
+            updatedVendors.map((v: any) => {
+              const u = updatedUsers.find((x: any) => x.id === v.id);
+              return {
+                id: v.id,
+                name: u?.name || "Vendor Name",
+                location: v.location,
+                verified: u?.verified || false,
+                avatar: u?.avatar || "https://api.dicebear.com/7.x/identicon/svg",
+                distances: v.distances || {},
+                couponCode: v.coupon_code || "",
+                couponDiscount: Number(v.coupon_discount || 0),
+                couponDeadline: v.coupon_deadline || ""
+              };
+            })
+          );
+        }
+        if (updatedEq && updatedUsers) {
+          setEquipment(
+            updatedEq.map((eq: any) => {
+              const u = updatedUsers.find((x: any) => x.id === eq.vendor_id);
+              return {
+                id: eq.id,
+                name: eq.name,
+                description: eq.description,
+                price: Number(eq.price),
+                vendorId: eq.vendor_id,
+                vendorName: u?.name || "Vendor Name",
+                rating: Number(eq.rating),
+                available: eq.available,
+                category: eq.category,
+                groupDiscountEnabled: eq.group_discount_enabled || false,
+                damageTerms: eq.damage_terms,
+                discountPercentage: Number(eq.discount_percentage || 0)
+              };
+            })
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Error auto-creating mock user:", err);
+    }
   };
 
   return (
@@ -2008,6 +2214,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateTripPackageStatus,
         userActivities,
         logUserActivity,
+        ensureMockUserExists,
       }}
     >
       {children}
