@@ -1,5 +1,6 @@
 import { Mountain } from "lucide-react";
 import { Link } from "react-router";
+import logoIcon from "../../assets/logo_icon.jpeg";
 
 export function Footer() {
   return (
@@ -8,7 +9,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <Mountain className="size-8 text-emerald-400" />
+              <img src={logoIcon} alt="Logo" className="size-8 object-contain rounded-lg" />
               <span className="text-xl font-bold">AyokMendaki</span>
             </div>
             <p className="text-sm text-gray-400">

@@ -12,6 +12,7 @@ import {
   Phone,
   MapPin
 } from "lucide-react";
+import logoIcon from "../../assets/logo_icon.jpeg";
 
 export function TentangPage() {
   const stats = [
@@ -67,7 +68,7 @@ export function TentangPage() {
       {/* Hero Section */}
       <section className="bg-emerald-600 text-white py-20">
         <div className="container mx-auto px-4 sm:px-6 text-center">
-          <Mountain className="size-16 mx-auto mb-6 opacity-90" />
+          <img src={logoIcon} alt="Logo" className="size-16 mx-auto mb-6 opacity-90 object-contain rounded-2xl shadow-md bg-white p-2" />
           <h1 className="text-4xl sm:text-5xl font-bold mb-4">
             Tentang AyokMendaki
           </h1>

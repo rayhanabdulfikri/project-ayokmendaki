@@ -3,6 +3,7 @@ import { Mountain, Menu, X, LogOut, LayoutDashboard } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useApp } from "../context/AppContext";
+import logoIcon from "../../assets/logo_icon.jpeg";
 
 export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -23,7 +24,7 @@ export function Navbar() {
       <div className="container mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           <Link to="/" className="flex items-center gap-2">
-            <Mountain className="size-8 text-emerald-600" />
+            <img src={logoIcon} alt="Logo" className="size-8 object-contain rounded-lg" />
             <span className="text-xl font-bold text-foreground">AyokMendaki</span>
           </Link>
 

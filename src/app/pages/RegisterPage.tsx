@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../co
 import { Mountain, Eye, EyeOff, Lock, Mail, User, Phone, AlertCircle, CheckCircle2, Shield, Award } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import { useApp, UserRole } from "../context/AppContext";
+import logoIcon from "../../assets/logo_icon.jpeg";
 import { toast } from "sonner";
 import { supabase } from "../../supabase";
 
@@ -268,8 +269,8 @@ export function RegisterPage() {
       <div className="w-full max-w-lg relative">
         <div className="text-center mb-6">
           <Link to="/" className="inline-flex items-center gap-2 group">
-            <div className="size-12 rounded-2xl bg-emerald-600 flex items-center justify-center shadow-lg group-hover:bg-emerald-700 transition-colors">
-              <Mountain className="size-7 text-white" />
+            <div className="size-12 rounded-2xl overflow-hidden flex items-center justify-center shadow-lg transition-colors">
+              <img src={logoIcon} alt="Logo" className="size-full object-cover" />
             </div>
             <span className="text-2xl font-bold text-gray-900">AyokMendaki</span>
           </Link>

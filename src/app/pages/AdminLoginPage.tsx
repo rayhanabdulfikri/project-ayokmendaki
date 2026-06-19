@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../co
 import { Mountain, Eye, EyeOff, Lock, Mail, AlertCircle, ShieldAlert } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import { useApp, User } from "../context/AppContext";
+import logoIcon from "../../assets/logo_icon.jpeg";
 import { toast } from "sonner";
 import { supabase } from "../../supabase";
 
@@ -111,8 +112,8 @@ export function AdminLoginPage() {
         {/* Logo */}
         <div className="text-center mb-6">
           <Link to="/" className="inline-flex items-center gap-2 group">
-            <div className="size-12 rounded-2xl bg-emerald-600 flex items-center justify-center shadow-lg group-hover:bg-emerald-500 transition-colors">
-              <Mountain className="size-7 text-white" />
+            <div className="size-12 rounded-2xl overflow-hidden flex items-center justify-center shadow-lg transition-colors">
+              <img src={logoIcon} alt="Logo" className="size-full object-cover" />
             </div>
             <span className="text-2xl font-bold text-white font-mono tracking-wide">AyokMendaki <span className="text-emerald-500 text-xs uppercase bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800">Admin</span></span>
           </Link>
