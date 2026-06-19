@@ -19,6 +19,7 @@ import {
   DollarSign,
   Mountain as MountainIcon,
   ShieldAlert,
+  Shield,
   Plus,
   Trash2,
   Edit2,
