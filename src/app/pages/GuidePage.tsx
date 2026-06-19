@@ -42,6 +42,8 @@ export function GuidePage() {
   const [negoNotes, setNegoNotes] = useState("");
   const [climbersCount, setClimbersCount] = useState(1);
   const [selectedBasecamp, setSelectedBasecamp] = useState("");
+  const [couponInput, setCouponInput] = useState("");
+  const [checkoutNotes, setCheckoutNotes] = useState("");
 
   const filterOptions = ["Semua", "Rating Tertinggi", "Harga Terendah", "Paling Berpengalaman", "Jawa Timur", "Jawa Tengah"];
 
@@ -105,6 +107,8 @@ export function GuidePage() {
     setNegoNotes("");
     setClimbersCount(1);
     setSelectedBasecamp("");
+    setCouponInput("");
+    setCheckoutNotes("");
     setBookingModalOpen(true);
   };
 
@@ -134,9 +138,24 @@ export function GuidePage() {
     }
 
     const basePriceProposed = parseInt(proposedPrice) || bookingGuide.price;
-    const discountPercent = bookingGuide.groupDiscountEnabled ? (climbersCount >= 5 ? 30 : climbersCount >= 4 ? 20 : climbersCount >= 2 ? 10 : 0) : 0;
+    const discountPercent = bookingGuide.discountPercentage || 0;
     const finalPricePerPerson = Math.round(basePriceProposed * (1 - discountPercent / 100));
-    const finalTotalPrice = finalPricePerPerson * climbersCount;
+    let finalTotalPrice = finalPricePerPerson * climbersCount;
+
+    // Apply coupon if valid
+    if (couponInput.trim()) {
+      if (bookingGuide.couponCode && couponInput.trim().toUpperCase() === bookingGuide.couponCode.toUpperCase()) {
+        const deadline = bookingGuide.couponDeadline ? new Date(bookingGuide.couponDeadline) : null;
+        if (deadline && new Date() > deadline) {
+          toast.error("Kupon guide ini sudah kadaluwarsa!");
+        } else {
+          finalTotalPrice = Math.max(0, finalTotalPrice - (bookingGuide.couponDiscount || 0));
+          toast.success("Kupon diskon guide berhasil digunakan!");
+        }
+      } else {
+        toast.error("Kode kupon guide tidak valid.");
+      }
+    }
 
     // 1. Create Booking in Pending status
     const bookingId = addBooking({
@@ -149,7 +168,8 @@ export function GuidePage() {
       bookingDate,
       price: finalTotalPrice,
       bookingType: "mandiri",
-      climbersCount: climbersCount
+      climbersCount: climbersCount,
+      notes: checkoutNotes
     });
 
     // 2. If price is different, create negotiation entry
@@ -304,7 +324,17 @@ export function GuidePage() {
                         <p className="text-[10px] text-emerald-800 font-bold bg-emerald-50/50 border border-emerald-100 rounded px-1.5 py-0.5 mt-1 max-w-max">
                           🗻 Spesialisasi: {guide.specialtyMountains.join(", ")}
                         </p>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                        {guide.discountPercentage > 0 && (
+                          <Badge className="bg-red-500 text-white font-bold text-[9px] mt-1 mr-1.5 max-w-max">
+                            🔥 Diskon Jasa: {guide.discountPercentage}%
+                          </Badge>
+                        )}
+                        {guide.couponCode && (
+                          <Badge variant="outline" className="border-amber-400 text-amber-700 bg-amber-50 font-bold text-[9px] mt-1 max-w-max">
+                            🏷️ Kupon: {guide.couponCode} (S/D: {guide.couponDeadline || "N/A"})
+                          </Badge>
+                        )}
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1.5">
                           <MapPin className="size-3" />
                           {guide.location}
                         </div>
@@ -355,6 +385,31 @@ export function GuidePage() {
                         ))}
                       </div>
                     </div>
+
+                    {(guide.biodata || guide.ketentuan) && (
+                      <div className="pt-2.5 border-t border-border">
+                        <details className="group text-xs text-gray-700">
+                          <summary className="font-semibold text-emerald-700 cursor-pointer list-none flex items-center justify-between hover:text-emerald-800 transition-colors">
+                            <span>📖 Lihat Biodata & Ketentuan</span>
+                            <span className="transition-transform group-open:rotate-180">▼</span>
+                          </summary>
+                          <div className="mt-2 space-y-2 bg-gray-55/60 p-2.5 rounded-lg border border-gray-150 font-normal text-[11px] leading-relaxed">
+                            {guide.biodata && (
+                              <div>
+                                <p className="font-bold text-gray-800">Biodata:</p>
+                                <p className="text-gray-600 italic">"{guide.biodata}"</p>
+                              </div>
+                            )}
+                            {guide.ketentuan && (
+                              <div>
+                                <p className="font-bold text-gray-800">Ketentuan Pemanduan:</p>
+                                <p className="text-gray-600">{guide.ketentuan}</p>
+                              </div>
+                            )}
+                          </div>
+                        </details>
+                      </div>
+                    )}
                     
                     <div className="pt-3 border-t border-border">
                       <div className="flex items-center justify-between mb-3">
@@ -599,25 +654,69 @@ export function GuidePage() {
                 <p className="text-[10px] text-gray-400 mt-1">Isi sama dengan tarif normal jika tidak ingin melakukan negosiasi.</p>
               </div>
 
+              {/* Coupon Code Input */}
+              {bookingGuide.couponCode && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-1">
+                    Kupon Promo Pemandu (Diskon Rp {(bookingGuide.couponDiscount || 0).toLocaleString("id-ID")})
+                  </label>
+                  <Input
+                    placeholder="Masukkan kode kupon pemandu (misal: GUIDE10)"
+                    className="text-xs uppercase font-mono font-bold"
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value)}
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Aktif s/d: {bookingGuide.couponDeadline || "Selamanya"} &middot; Gunakan kode: <span className="font-bold text-emerald-700">{bookingGuide.couponCode}</span>
+                  </p>
+                </div>
+              )}
+
+              {/* Checkout Note (Shopee Style) */}
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Catatan Tambahan (Keterangan Khusus)</label>
+                <textarea
+                  className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 h-14 resize-none"
+                  placeholder="Masukkan keterangan (misal: ukuran kaos, riwayat asma, atau request logistik khusus)."
+                  value={checkoutNotes}
+                  onChange={(e) => setCheckoutNotes(e.target.value)}
+                />
+              </div>
+
               {/* Discount and Deposit Calculation Breakdown */}
               {(() => {
                 const base = parseInt(proposedPrice) || bookingGuide.price;
-                const isDiscEnabled = bookingGuide.groupDiscountEnabled;
-                const disc = isDiscEnabled ? (climbersCount >= 5 ? 30 : climbersCount >= 4 ? 20 : climbersCount >= 2 ? 10 : 0) : 0;
-                const ratePerPerson = Math.round(base * (1 - disc / 100));
-                const subTotal = ratePerPerson * climbersCount;
+                const discPercent = bookingGuide.discountPercentage || 0;
+                const ratePerPerson = Math.round(base * (1 - discPercent / 100));
+                let subTotal = ratePerPerson * climbersCount;
+                
+                let couponDeduction = 0;
+                if (couponInput.trim() && bookingGuide.couponCode && couponInput.trim().toUpperCase() === bookingGuide.couponCode.toUpperCase()) {
+                  const deadline = bookingGuide.couponDeadline ? new Date(bookingGuide.couponDeadline) : null;
+                  if (!deadline || new Date() <= deadline) {
+                    couponDeduction = bookingGuide.couponDiscount || 0;
+                  }
+                }
+                
+                const finalSubTotal = Math.max(0, subTotal - couponDeduction);
                 const deposit = 100000;
 
                 return (
                   <div className="p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 text-xs space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Subtotal Sewa ({climbersCount} Orang):</span>
+                      <span className="text-gray-500">Subtotal Jasa ({climbersCount} Orang):</span>
                       <span className="font-bold text-gray-700">Rp {subTotal.toLocaleString("id-ID")}</span>
                     </div>
-                    {isDiscEnabled && disc > 0 && (
+                    {discPercent > 0 && (
                       <div className="flex justify-between items-center text-emerald-700 font-semibold text-[11px]">
-                        <span>Diskon Rombongan ({disc}%):</span>
-                        <span>- Rp {Math.round(base * disc / 100 * climbersCount).toLocaleString("id-ID")}</span>
+                        <span>Diskon Custom Pemandu ({discPercent}%):</span>
+                        <span>- Rp {Math.round(base * discPercent / 100 * climbersCount).toLocaleString("id-ID")}</span>
+                      </div>
+                    )}
+                    {couponDeduction > 0 && (
+                      <div className="flex justify-between items-center text-red-650 font-semibold text-[11px]">
+                        <span>Kupon Promo Pemandu:</span>
+                        <span>- Rp {couponDeduction.toLocaleString("id-ID")}</span>
                       </div>
                     )}
                     <div className="flex justify-between items-center text-blue-700">
@@ -625,18 +724,18 @@ export function GuidePage() {
                       <span className="font-bold">Rp {deposit.toLocaleString("id-ID")}</span>
                     </div>
                     <div className="border-t border-emerald-200/50 pt-2 flex justify-between items-center text-sm font-extrabold text-emerald-800">
-                      <span>Total Bayar (Simulasi):</span>
-                      <span>Rp {(subTotal + deposit).toLocaleString("id-ID")}</span>
+                      <span>Total Bayar:</span>
+                      <span>Rp {(finalSubTotal + deposit).toLocaleString("id-ID")}</span>
                     </div>
                   </div>
                 );
               })()}
 
               <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1">Catatan / Pesan Negosiasi</label>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Catatan / Pesan Negosiasi Harga</label>
                 <textarea 
-                  className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 h-16 resize-none"
-                  placeholder="Contoh: Pendakian 2 hari 1 malam, rombongan 4 orang. Nego ya mas..."
+                  className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-55 focus:bg-white focus:outline-emerald-500 h-16 resize-none"
+                  placeholder="Contoh: Nego tipis ya mas..."
                   value={negoNotes}
                   onChange={(e) => setNegoNotes(e.target.value)}
                 />

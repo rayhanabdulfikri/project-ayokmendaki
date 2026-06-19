@@ -25,7 +25,7 @@ import { useApp, TripPackage } from "../context/AppContext";
 import { toast } from "sonner";
 
 export function HomePage() {
-  const { tripPackages, addBooking, currentUser } = useApp();
+  const { tripPackages, addBooking, currentUser, guides, vendors } = useApp();
   const navigate = useNavigate();
 
   // Booking Package Modal States
@@ -136,8 +136,28 @@ export function HomePage() {
     navigate("/dashboard");
   };
 
+  // Find all active coupons from guides and vendors to show in marquee
+  const activeGuideCoupons = guides ? guides.filter(g => g.couponCode && g.couponDiscount).map(g => `${g.couponCode} (Diskon Rp ${g.couponDiscount?.toLocaleString("id-ID")})`) : [];
+  const activeVendorCoupons = vendors ? vendors.filter(v => v.couponCode && v.couponDiscount).map(v => `${v.couponCode} (Diskon Rp ${v.couponDiscount?.toLocaleString("id-ID")})`) : [];
+  const allCoupons = [...activeGuideCoupons, ...activeVendorCoupons];
+
   return (
     <>
+      {/* Promo Marquee Banner */}
+      <div className="bg-amber-500 text-white py-2 text-xs font-extrabold shadow-sm border-b border-amber-600">
+        <marquee behavior="scroll" direction="left" scrollamount="4">
+          <span className="mx-4">🔥 PROMO AKTIF:</span>
+          {allCoupons.length > 0 ? (
+            allCoupons.map((c, idx) => (
+              <span key={idx} className="mx-6">🎟️ Gunakan Kupon "{c}" untuk potongan langsung!</span>
+            ))
+          ) : (
+            <span className="mx-6">🎟️ Belum ada kupon aktif hari ini. Hubungi Guide/Vendor favorit Anda!</span>
+          )}
+          <span className="mx-6">⛰️ Booking paket trip kolaborasi Guide & Vendor untuk kemudahan pendakian tanpa ribet!</span>
+        </marquee>
+      </div>
+
       {/* Hero Section */}
       <section className="relative h-[600px] flex items-center justify-center overflow-hidden">
         <div
@@ -224,58 +244,66 @@ export function HomePage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
-            {tripPackages.map((pkg) => (
-              <Card key={pkg.id} className="overflow-hidden bg-white border border-gray-150 hover:shadow-xl transition-all flex flex-col md:flex-row">
-                <div className="relative md:w-2/5 h-48 md:h-auto shrink-0">
-                  <img src={pkg.image} alt={pkg.title} className="w-full h-full object-cover" />
-                  <span className="absolute top-3 left-3 bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5 rounded shadow-sm">
-                    {pkg.duration}
-                  </span>
-                </div>
-                <CardContent className="p-5 flex-1 flex flex-col justify-between">
-                  <div>
-                    <h3 className="font-bold text-gray-800 text-base leading-tight hover:text-emerald-700 transition-colors">
-                      {pkg.title}
-                    </h3>
-                    <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-1">
-                      ⛰️ Destinasi: <span className="font-bold text-gray-700">{pkg.targetMountain}</span>
-                    </p>
-                    
-                    <div className="mt-2.5 p-2 bg-emerald-50/50 rounded-lg border border-emerald-100/50 text-[10px] space-y-1">
-                      <p className="font-semibold text-emerald-800">🤝 Mitra Kolaborasi:</p>
-                      <p className="text-gray-650">🙋 Guide: **{pkg.guideName}**</p>
-                      {pkg.vendorName && <p className="text-gray-650">⛺ Vendor: **{pkg.vendorName}**</p>}
-                    </div>
+          {tripPackages.filter(pkg => pkg.status === "approved").length === 0 ? (
+            <div className="col-span-2 text-center py-12 text-gray-500 text-xs font-semibold bg-white rounded-2xl border border-gray-150 p-6 shadow-xs max-w-lg mx-auto">
+              <Award className="size-8 mx-auto mb-2 text-gray-400 opacity-50" />
+              <p>Belum ada paket trip kemitraan berbayar yang aktif saat ini.</p>
+              <p className="text-[10px] text-gray-400 mt-1 font-medium">Mitra guide/vendor sedang menyusun paket petualangan baru.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 max-w-5xl mx-auto">
+              {tripPackages.filter(pkg => pkg.status === "approved").map((pkg) => (
+                <Card key={pkg.id} className="overflow-hidden bg-white border border-gray-150 hover:shadow-xl transition-all flex flex-col md:flex-row">
+                  <div className="relative md:w-2/5 h-48 md:h-auto shrink-0">
+                    <img src={pkg.image} alt={pkg.title} className="w-full h-full object-cover" />
+                    <span className="absolute top-3 left-3 bg-emerald-600 text-white font-bold text-[10px] px-2 py-0.5 rounded shadow-sm">
+                      {pkg.duration}
+                    </span>
+                  </div>
+                  <CardContent className="p-5 flex-1 flex flex-col justify-between">
+                    <div>
+                      <h3 className="font-bold text-gray-800 text-base leading-tight hover:text-emerald-700 transition-colors">
+                        {pkg.title}
+                      </h3>
+                      <p className="text-[10px] text-gray-400 mt-1 flex items-center gap-1">
+                        ⛰️ Destinasi: <span className="font-bold text-gray-700">{pkg.targetMountain}</span>
+                      </p>
+                      
+                      <div className="mt-2.5 p-2 bg-emerald-50/50 rounded-lg border border-emerald-100/50 text-[10px] space-y-1">
+                        <p className="font-semibold text-emerald-800">🤝 Mitra Kolaborasi:</p>
+                        <p className="text-gray-650">🙋 Guide: **{pkg.guideName}**</p>
+                        {pkg.vendorName && <p className="text-gray-650">⛺ Vendor: **{pkg.vendorName}**</p>}
+                      </div>
 
-                    <p className="text-xs text-gray-500 mt-2.5 line-clamp-2 leading-relaxed">
-                      {pkg.description}
-                    </p>
+                      <p className="text-xs text-gray-500 mt-2.5 line-clamp-2 leading-relaxed">
+                        {pkg.description}
+                      </p>
 
-                    <div className="mt-3">
-                      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Fasilitas Termasuk:</p>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {pkg.services.slice(0, 3).map((serv, idx) => (
-                          <span key={idx} className="bg-gray-100 text-gray-750 text-[9px] px-2 py-0.5 rounded font-medium">{serv}</span>
-                        ))}
-                        {pkg.services.length > 3 && <span className="bg-gray-100 text-gray-750 text-[9px] px-2 py-0.5 rounded font-medium">+{pkg.services.length - 3} lainnya</span>}
+                      <div className="mt-3">
+                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">Fasilitas Termasuk:</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {pkg.services.slice(0, 3).map((serv, idx) => (
+                            <span key={idx} className="bg-gray-100 text-gray-750 text-[9px] px-2 py-0.5 rounded font-medium">{serv}</span>
+                          ))}
+                          {pkg.services.length > 3 && <span className="bg-gray-100 text-gray-750 text-[9px] px-2 py-0.5 rounded font-medium">+{pkg.services.length - 3} lainnya</span>}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="border-t border-gray-100 pt-3 mt-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-[9px] text-gray-400 leading-none">Mulai Dari</p>
-                      <p className="font-extrabold text-emerald-600 text-base">Rp {pkg.price.toLocaleString("id-ID")}<span className="text-[9px] text-gray-400 font-normal">/pax</span></p>
+                    <div className="border-t border-gray-100 pt-3 mt-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-[9px] text-gray-400 leading-none">Mulai Dari</p>
+                        <p className="font-extrabold text-emerald-600 text-base">Rp {pkg.price.toLocaleString("id-ID")}<span className="text-[9px] text-gray-400 font-normal">/pax</span></p>
+                      </div>
+                      <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] h-8 px-3 font-bold" onClick={() => handleOpenBookingPkg(pkg)}>
+                        Booking Paket
+                      </Button>
                     </div>
-                    <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] h-8 px-3 font-bold" onClick={() => handleOpenBookingPkg(pkg)}>
-                      Booking Paket
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

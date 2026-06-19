@@ -31,7 +31,8 @@ import {
   TrendingUp,
   Award,
   Package,
-  Wallet
+  Wallet,
+  User as UserIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router";
@@ -120,6 +121,9 @@ export function DashboardPage() {
     ktpPhotoUrl: "https://images.unsplash.com/photo-1554774853-aae0a22c8aa4?w=400&q=80",
     selfiePhotoName: "selfie_wajah.jpg",
     selfiePhotoUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&q=80",
+    bank_name: "",
+    bank_account: "",
+    bank_holder: "",
     // Guide specific
     specialty: "",
     experience: "",
@@ -127,24 +131,83 @@ export function DashboardPage() {
     certifications: [] as string[],
     docName: "Sertifikat APIGI",
     docImage: "https://images.unsplash.com/photo-1586075010923-2dd4570fb338?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400",
+    biodata: "",
+    ketentuan: "",
     // Vendor specific
     storeName: "",
     nib: "",
-    address: ""
+    address: "",
+    // Common partner coupons
+    couponCode: "",
+    couponDiscount: "0",
+    couponDeadline: ""
   });
   const [profileErrors, setProfileErrors] = useState<Record<string, string>>({});
+
+  // Additional States for KYC Uploads, Bank Details, and Manual User
+  const [isUploadingKtp, setIsUploadingKtp] = useState(false);
+  const [isUploadingSelfie, setIsUploadingSelfie] = useState(false);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [isProcessingWd, setIsProcessingWd] = useState(false);
+
+  const [isEditingBank, setIsEditingBank] = useState(false);
+  const [bankForm, setBankForm] = useState({
+    bank_name: "",
+    bank_account: "",
+    bank_holder: ""
+  });
+
+  const [manualUserModalOpen, setManualUserModalOpen] = useState(false);
+  const [manualUserForm, setManualUserForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    role: "pendaki" as UserRole,
+    verified: false,
+    password: ""
+  });
 
   // Prefill the form when user details are fetched
   useEffect(() => {
     if (currentUser) {
+      const guideObj = guides.find(g => g.id === currentUser.id);
+      const vendorObj = vendors.find(v => v.id === currentUser.id);
+      
       setProfileForm(prev => ({
         ...prev,
-        phone: prev.phone || currentUser.phone || "",
-        storeName: prev.storeName || (currentUser.role === "vendor" ? currentUser.name : ""),
-        name: prev.name || (currentUser.role !== "vendor" ? currentUser.name : "")
+        name: currentUser.role !== "vendor" ? currentUser.name : "",
+        phone: currentUser.phone || "",
+        ktpNumber: currentUser.ktp_number || "",
+        ktpPhotoName: currentUser.ktp_image ? "ktp_identitas.jpg" : "",
+        ktpPhotoUrl: currentUser.ktp_image || "",
+        selfiePhotoName: currentUser.selfie_image ? "selfie_wajah.jpg" : "",
+        selfiePhotoUrl: currentUser.selfie_image || "",
+        bank_name: currentUser.bank_name || "",
+        bank_account: currentUser.bank_account || "",
+        bank_holder: currentUser.bank_holder || "",
+        // Guide spec
+        specialty: guideObj?.specialty || "",
+        experience: guideObj?.experience ? guideObj.experience.replace(" Tahun", "") : "",
+        price: guideObj?.price ? guideObj.price.toString() : "450000",
+        certifications: guideObj?.certifications || [],
+        biodata: guideObj?.biodata || "",
+        ketentuan: guideObj?.ketentuan || "",
+        couponCode: guideObj?.couponCode || vendorObj?.couponCode || "",
+        couponDiscount: guideObj?.couponDiscount ? guideObj.couponDiscount.toString() : vendorObj?.couponDiscount ? vendorObj.couponDiscount.toString() : "0",
+        couponDeadline: guideObj?.couponDeadline || vendorObj?.couponDeadline || "",
+        // Vendor spec
+        storeName: currentUser.role === "vendor" ? currentUser.name : "",
+        nib: "",
+        address: vendorObj?.location || ""
       }));
+
+      setBankForm({
+        bank_name: currentUser.bank_name || "",
+        bank_account: currentUser.bank_account || "",
+        bank_holder: currentUser.bank_holder || ""
+      });
     }
-  }, [currentUser]);
+  }, [currentUser, guides, vendors]);
 
   const handleProfileCheckboxChange = (cert: string, checked: boolean) => {
     const current = [...profileForm.certifications];
@@ -189,6 +252,128 @@ export function DashboardPage() {
     return false;
   }, [currentUser, guides, vendors]);
 
+  // File Upload Handlers (Supabase Storage kyc-documents bucket)
+  const handleFileUpload = async (file: File, type: "ktp" | "selfie" | "doc") => {
+    if (!currentUser) return;
+    if (type === "ktp") setIsUploadingKtp(true);
+    else if (type === "selfie") setIsUploadingSelfie(true);
+    else if (type === "doc") setIsUploadingDoc(true);
+
+    try {
+      const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
+      const path = `${currentUser.id}/${type}_${Date.now()}_${cleanName}`;
+      const { error } = await supabase.storage.from("kyc-documents").upload(path, file, {
+        cacheControl: "3600",
+        upsert: true
+      });
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage.from("kyc-documents").getPublicUrl(path);
+
+      setProfileForm((prev) => {
+        if (type === "ktp") {
+          return { ...prev, ktpPhotoName: file.name, ktpPhotoUrl: publicUrl };
+        } else if (type === "selfie") {
+          return { ...prev, selfiePhotoName: file.name, selfiePhotoUrl: publicUrl };
+        } else {
+          return { ...prev, docName: file.name, docImage: publicUrl };
+        }
+      });
+      toast.success(`Berhasil mengunggah berkas ${type.toUpperCase()}`);
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      toast.error(`Gagal mengunggah berkas: ${err.message}`);
+    } finally {
+      if (type === "ktp") setIsUploadingKtp(false);
+      else if (type === "selfie") setIsUploadingSelfie(false);
+      else if (type === "doc") setIsUploadingDoc(false);
+    }
+  };
+
+  const handleSaveBank = async () => {
+    if (!currentUser) return;
+    if (!bankForm.bank_name.trim() || !bankForm.bank_account.trim() || !bankForm.bank_holder.trim()) {
+      toast.error("Semua kolom informasi rekening bank wajib diisi.");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("users")
+        .update({
+          bank_name: bankForm.bank_name,
+          bank_account: bankForm.bank_account,
+          bank_holder: bankForm.bank_holder
+        })
+        .eq("id", currentUser.id);
+
+      if (error) throw error;
+
+      setCurrentUser({
+        ...currentUser,
+        bank_name: bankForm.bank_name,
+        bank_account: bankForm.bank_account,
+        bank_holder: bankForm.bank_holder
+      });
+
+      setIsEditingBank(false);
+      toast.success("Berhasil memperbarui rekening bank!");
+    } catch (err: any) {
+      console.error("Error saving bank details:", err);
+      toast.error("Gagal menyimpan rekening: " + err.message);
+    }
+  };
+
+  const handleDeleteBank = async () => {
+    if (!currentUser) return;
+    try {
+      const { error } = await supabase
+        .from("users")
+        .update({
+          bank_name: null,
+          bank_account: null,
+          bank_holder: null
+        })
+        .eq("id", currentUser.id);
+
+      if (error) throw error;
+
+      setCurrentUser({
+        ...currentUser,
+        bank_name: undefined,
+        bank_account: undefined,
+        bank_holder: undefined
+      });
+
+      setBankForm({ bank_name: "", bank_account: "", bank_holder: "" });
+      toast.success("Berhasil menghapus rekening bank!");
+    } catch (err: any) {
+      console.error("Error deleting bank details:", err);
+      toast.error("Gagal menghapus rekening: " + err.message);
+    }
+  };
+
+  const handleCreateManualUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualUserForm.name.trim() || !manualUserForm.email.trim() || !manualUserForm.phone.trim()) {
+      toast.error("Semua kolom wajib diisi.");
+      return;
+    }
+
+    try {
+      await addManualUser(manualUserForm);
+      setManualUserModalOpen(false);
+      setManualUserForm({ name: "", email: "", phone: "", role: "pendaki", verified: false, password: "" });
+      toast.success("Berhasil menambahkan pengguna baru secara manual!");
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    } catch (err: any) {
+      console.error("Error manual user creation:", err);
+      toast.error("Gagal menambahkan pengguna: " + err.message);
+    }
+  };
+
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
@@ -224,7 +409,6 @@ export function DashboardPage() {
 
     if (currentUser.role === "vendor") {
       if (!profileForm.storeName.trim()) errs.storeName = "Nama toko wajib diisi.";
-      if (!profileForm.nib.trim()) errs.nib = "NIB wajib diisi.";
       if (!profileForm.address.trim()) errs.address = "Alamat toko wajib diisi.";
     }
 
@@ -243,8 +427,15 @@ export function DashboardPage() {
         if (pwdErr) throw pwdErr;
       }
 
+      // Determine if KYC changed
+      const isKycChanged = profileForm.ktpNumber !== (currentUser.ktp_number || "") ||
+                           profileForm.ktpPhotoUrl !== (currentUser.ktp_image || "") ||
+                           profileForm.selfiePhotoUrl !== (currentUser.selfie_image || "");
+
       // 2. Update users table
       const updatedName = currentUser.role === "vendor" ? profileForm.storeName : profileForm.name;
+      const nextVerified = isKycChanged ? false : (currentUser.verified || false);
+
       const { error: userErr } = await supabase
         .from("users")
         .update({
@@ -252,93 +443,107 @@ export function DashboardPage() {
           ktp_number: profileForm.ktpNumber,
           ktp_image: profileForm.ktpPhotoUrl,
           selfie_image: profileForm.selfiePhotoUrl,
-          verified: false,
-          name: updatedName
+          verified: nextVerified,
+          name: updatedName,
+          bank_name: profileForm.bank_name || null,
+          bank_account: profileForm.bank_account || null,
+          bank_holder: profileForm.bank_holder || null
         })
         .eq("id", currentUser.id);
 
       if (userErr) throw userErr;
 
-      // 2. Insert role profile
+      // 3. Upsert role profile
       if (currentUser.role === "guide") {
-        const { error: guideErr } = await supabase.from("guides").insert({
+        const { error: guideErr } = await supabase.from("guides").upsert({
           id: currentUser.id,
           specialty: profileForm.specialty,
           location: "Kota Malang, Jawa Timur",
           experience: profileForm.experience + " Tahun",
-          trips: 0,
-          rating: 5.0,
           price: parseInt(profileForm.price) || 450000,
           certifications: profileForm.certifications,
-          status: "Non-Aktif",
+          status: nextVerified ? "Aktif" : "Non-Aktif",
           specialty_mountains: [profileForm.specialty],
-          busy_dates: [],
-          group_discount_enabled: false
+          biodata: profileForm.biodata,
+          ketentuan: profileForm.ketentuan,
+          coupon_code: profileForm.couponCode || null,
+          coupon_discount: parseInt(profileForm.couponDiscount) || 0,
+          coupon_deadline: profileForm.couponDeadline || null
         });
         if (guideErr) throw guideErr;
 
-        // submit verification request
-        addVerificationRequest({
-          userId: currentUser.id,
-          userName: currentUser.name,
-          role: "guide",
-          documentName: `Sertifikasi ${profileForm.certifications.join(" & ")}`,
-          documentImage: profileForm.docImage,
-          ktpNumber: profileForm.ktpNumber,
-          ktpPhoto: profileForm.ktpPhotoUrl,
-          selfiePhoto: profileForm.selfiePhotoUrl
-        });
+        if (isKycChanged) {
+          addVerificationRequest({
+            userId: currentUser.id,
+            userName: updatedName,
+            role: "guide",
+            documentName: `Sertifikasi ${profileForm.certifications.join(" & ")}`,
+            documentImage: profileForm.docImage,
+            ktpNumber: profileForm.ktpNumber,
+            ktpPhoto: profileForm.ktpPhotoUrl,
+            selfiePhoto: profileForm.selfiePhotoUrl
+          });
+        }
 
       } else if (currentUser.role === "vendor") {
-        const { error: vendorErr } = await supabase.from("vendors").insert({
+        const { error: vendorErr } = await supabase.from("vendors").upsert({
           id: currentUser.id,
           location: profileForm.address,
-          distances: {}
+          coupon_code: profileForm.couponCode || null,
+          coupon_discount: parseInt(profileForm.couponDiscount) || 0,
+          coupon_deadline: profileForm.couponDeadline || null
         });
         if (vendorErr) throw vendorErr;
 
-        addVerificationRequest({
-          userId: currentUser.id,
-          userName: profileForm.storeName,
-          role: "vendor",
-          documentName: `NIB / Izin Usaha UKM: ${profileForm.nib}`,
-          documentImage: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400",
-          ktpNumber: profileForm.ktpNumber,
-          ktpPhoto: profileForm.ktpPhotoUrl,
-          selfiePhoto: profileForm.selfiePhotoUrl
-        });
+        if (isKycChanged) {
+          addVerificationRequest({
+            userId: currentUser.id,
+            userName: profileForm.storeName,
+            role: "vendor",
+            documentName: `NIB / Izin Usaha UKM: ${profileForm.nib || 'N/A'}`,
+            documentImage: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400",
+            ktpNumber: profileForm.ktpNumber,
+            ktpPhoto: profileForm.ktpPhotoUrl,
+            selfiePhoto: profileForm.selfiePhotoUrl
+          });
+        }
 
       } else if (currentUser.role === "pendaki") {
-        addVerificationRequest({
-          userId: currentUser.id,
-          userName: currentUser.name,
-          role: "pendaki",
-          documentName: `KYC Pendaki: KTP ${profileForm.ktpNumber}`,
-          documentImage: profileForm.ktpPhotoUrl,
-          ktpNumber: profileForm.ktpNumber,
-          ktpPhoto: profileForm.ktpPhotoUrl,
-          selfiePhoto: profileForm.selfiePhotoUrl
-        });
+        if (isKycChanged) {
+          addVerificationRequest({
+            userId: currentUser.id,
+            userName: currentUser.name,
+            role: "pendaki",
+            documentName: `KYC Pendaki: KTP ${profileForm.ktpNumber}`,
+            documentImage: profileForm.ktpPhotoUrl,
+            ktpNumber: profileForm.ktpNumber,
+            ktpPhoto: profileForm.ktpPhotoUrl,
+            selfiePhoto: profileForm.selfiePhotoUrl
+          });
+        }
       }
 
-      // 3. Update local user context
+      // 4. Update local user context
       setCurrentUser({
         ...currentUser,
         phone: profileForm.phone,
         ktp_number: profileForm.ktpNumber,
         ktp_image: profileForm.ktpPhotoUrl,
         selfie_image: profileForm.selfiePhotoUrl,
-        verified: false,
-        name: updatedName
+        verified: nextVerified,
+        name: updatedName,
+        bank_name: profileForm.bank_name || undefined,
+        bank_account: profileForm.bank_account || undefined,
+        bank_holder: profileForm.bank_holder || undefined
       });
 
-      toast.success("Data diri berhasil disimpan! Menunggu verifikasi admin.");
+      toast.success("Profil berhasil diperbarui!");
       setTimeout(() => {
         window.location.reload();
       }, 1000);
     } catch (err: any) {
       console.error("Error saving profile details:", err);
-      toast.error("Gagal menyimpan data diri: " + err.message);
+      toast.error("Gagal menyimpan profil: " + err.message);
     } finally {
       setProfileLoading(false);
     }
@@ -1092,10 +1297,24 @@ export function DashboardPage() {
       toast.error("Saldo tidak mencukupi!");
       return;
     }
-    withdrawWallet(currentUser?.role as any, amount);
-    setWithdrawModalOpen(false);
-    setDepositAmountInput("");
-    toast.success(`Berhasil menarik dana sebesar Rp ${amount.toLocaleString("id-ID")}!`);
+
+    if (!currentUser?.bank_account) {
+      toast.error("Anda belum mengatur rekening bank penarikan dana!");
+      return;
+    }
+
+    setIsProcessingWd(true);
+    toast.info("Menghubungkan ke gateway pembayaran (Dummy Midtrans/Xendit payout)...");
+
+    setTimeout(() => {
+      withdrawWallet(currentUser?.role as any, amount, `Penarikan Dana ke Rekening ${currentUser.bank_name} (${currentUser.bank_account})`);
+      setIsProcessingWd(false);
+      setWithdrawModalOpen(false);
+      setDepositAmountInput("");
+      toast.success(`Berhasil menarik dana sebesar Rp ${amount.toLocaleString("id-ID")}!`, {
+        description: `Dana ditransfer ke ${currentUser.bank_name} No. Rek ${currentUser.bank_account} a.n. ${currentUser.bank_holder}.`
+      });
+    }, 2000);
   };
 
   // Submit Partnership Verification Document
@@ -1287,18 +1506,48 @@ export function DashboardPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[11px] font-semibold text-gray-650">Foto KTP Asli</label>
-                    <div className="border border-dashed border-emerald-300 rounded-lg p-2.5 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors">
+                    <input 
+                      type="file" 
+                      id="ktp-upload" 
+                      className="hidden" 
+                      accept="image/*" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileUpload(file, "ktp");
+                      }} 
+                    />
+                    <div 
+                      onClick={() => document.getElementById("ktp-upload")?.click()}
+                      className="border border-dashed border-emerald-300 rounded-lg p-2.5 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors"
+                    >
                       <Award className="size-5 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-[10px] text-emerald-700 font-semibold">{profileForm.ktpPhotoName}</p>
-                      <p className="text-[8px] text-gray-400">File KTP terdeteksi otomatis</p>
+                      <p className="text-[10px] text-emerald-700 font-semibold">
+                        {isUploadingKtp ? "Mengunggah..." : profileForm.ktpPhotoName || "Pilih foto KTP"}
+                      </p>
+                      <p className="text-[8px] text-gray-400">Format JPG/PNG, klik untuk unggah</p>
                     </div>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[11px] font-semibold text-gray-655">Foto Selfie dengan KTP</label>
-                    <div className="border border-dashed border-emerald-300 rounded-lg p-2.5 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors">
+                    <input 
+                      type="file" 
+                      id="selfie-upload" 
+                      className="hidden" 
+                      accept="image/*" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileUpload(file, "selfie");
+                      }} 
+                    />
+                    <div 
+                      onClick={() => document.getElementById("selfie-upload")?.click()}
+                      className="border border-dashed border-emerald-300 rounded-lg p-2.5 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors"
+                    >
                       <Award className="size-5 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-[10px] text-emerald-700 font-semibold">{profileForm.selfiePhotoName}</p>
-                      <p className="text-[8px] text-gray-400">Foto wajah verified</p>
+                      <p className="text-[10px] text-emerald-700 font-semibold">
+                        {isUploadingSelfie ? "Mengunggah..." : profileForm.selfiePhotoName || "Pilih foto selfie"}
+                      </p>
+                      <p className="text-[8px] text-gray-400">Foto wajah verified, klik untuk unggah</p>
                     </div>
                   </div>
                 </div>
@@ -1361,10 +1610,25 @@ export function DashboardPage() {
                   </div>
                   <div className="space-y-1 pt-1">
                     <label className="text-[11px] font-semibold text-gray-600">Upload Dokumen Sertifikat Resmi</label>
-                    <div className="border border-dashed border-emerald-300 rounded-lg p-3 text-center bg-white">
+                    <input 
+                      type="file" 
+                      id="doc-upload" 
+                      className="hidden" 
+                      accept="image/*,application/pdf" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileUpload(file, "doc");
+                      }} 
+                    />
+                    <div 
+                      onClick={() => document.getElementById("doc-upload")?.click()}
+                      className="border border-dashed border-emerald-300 rounded-lg p-3 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors"
+                    >
                       <Award className="size-5 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-[10px] text-emerald-700 font-semibold">{profileForm.docName}</p>
-                      <p className="text-[8px] text-gray-400 mt-0.5">Format PDF/JPG, maks. 5MB (Disimulasikan)</p>
+                      <p className="text-[10px] text-emerald-700 font-semibold truncate">
+                        {isUploadingDoc ? "Mengunggah..." : profileForm.docName || "Pilih dokumen sertifikat"}
+                      </p>
+                      <p className="text-[8px] text-gray-400 mt-0.5">Format PDF/JPG, klik untuk unggah</p>
                     </div>
                   </div>
                 </div>
@@ -1489,7 +1753,8 @@ export function DashboardPage() {
                   { id: "rentals", label: "Penyewaan Alat", icon: <Package className="size-4" /> },
                   { id: "negos", label: "Negosiasi Harga", icon: <DollarSign className="size-4" /> },
                   { id: "deposit_wallet", label: "Deposit & Dompet", icon: <Wallet className="size-4" /> },
-                  { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> }
+                  { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> },
+                  { id: "profile", label: "Profil Saya", icon: <UserIcon className="size-4" /> }
                 ].map(t => (
                   <button
                     key={t.id}
@@ -1516,7 +1781,8 @@ export function DashboardPage() {
                   { id: "packages", label: "Iklan Paket (Ads)", icon: <Award className="size-4" /> },
                   { id: "vendor_catalog", label: "Katalog Vendor & Kolaborasi", icon: <Building className="size-4" /> },
                   { id: "deposit_wallet", label: "Dompet Penghasilan", icon: <Wallet className="size-4" /> },
-                  { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> }
+                  { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> },
+                  { id: "profile", label: "Profil Saya", icon: <UserIcon className="size-4" /> }
                 ].map(t => (
                   <button
                     key={t.id}
@@ -1552,7 +1818,8 @@ export function DashboardPage() {
                   { id: "bookings", label: "Penyewaan Masuk", icon: <FileText className="size-4" /> },
                   { id: "collaborations", label: "Kolaborasi Guide", icon: <Users className="size-4" /> },
                   { id: "deposit_wallet", label: "Dompet Penghasilan", icon: <Wallet className="size-4" /> },
-                  { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> }
+                  { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> },
+                  { id: "profile", label: "Profil Saya", icon: <UserIcon className="size-4" /> }
                 ].map(t => (
                   <button
                     key={t.id}
@@ -1585,11 +1852,13 @@ export function DashboardPage() {
                  {[
                    { id: "user_control", label: "Aktivitas & Kontrol User", icon: <Users className="size-4" /> },
                    { id: "verify", label: "Verifikasi Berkas", icon: <UserCheck className="size-4" /> },
+                   { id: "manage_ads", label: "Kelola Iklan/Ads", icon: <Award className="size-4" /> },
                    { id: "escrow", label: "Monitoring Transaksi", icon: <DollarSign className="size-4" /> },
                    { id: "disputes", label: "Penyelesaian Dispute", icon: <ShieldAlert className="size-4" /> },
                    { id: "manage_mountains", label: "Kontak Tiket Gunung", icon: <MountainIcon className="size-4" /> },
                    { id: "warnings", label: "Sanksi & Warning", icon: <AlertTriangle className="size-4" /> },
-                   { id: "reports", label: "Laporan Keuangan", icon: <TrendingUp className="size-4" /> }
+                   { id: "reports", label: "Laporan Keuangan", icon: <TrendingUp className="size-4" /> },
+                   { id: "profile", label: "Profil Saya", icon: <UserIcon className="size-4" /> }
                  ].map(t => (
                   <button
                     key={t.id}
@@ -2190,6 +2459,31 @@ export function DashboardPage() {
                       <CardDescription className="text-xs">Tinjau pesanan pendakian dan lakukan tawar-menawar tarif.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      {/* ERP Service Console Summary Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-100 font-sans">
+                        <div className="bg-white p-3 rounded-xl border border-gray-150/80 shadow-xs text-center">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Job Order</p>
+                          <p className="text-lg font-black text-gray-800 mt-1">{bookings.filter(b => b.guideId === currentUser.id).length} Pesanan</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-gray-150/80 shadow-xs text-center">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Pekerjaan Aktif</p>
+                          <p className="text-lg font-black text-emerald-700 mt-1">
+                            {bookings.filter(b => b.guideId === currentUser.id && b.status !== "cancelled" && b.status !== "done").length} Aktif
+                          </p>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-gray-150/80 shadow-xs text-center">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Negosiasi Deal</p>
+                          <p className="text-lg font-black text-amber-700 mt-1">
+                            {negotiations.filter(n => n.recipientId === currentUser.id && n.status === "pending").length} Progres
+                          </p>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-gray-150/80 shadow-xs text-center">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total Omzet (ERP)</p>
+                          <p className="text-lg font-black text-emerald-850 mt-1 font-mono">
+                            Rp {bookings.filter(b => b.guideId === currentUser.id).reduce((sum, b) => sum + (b.price || 0), 0).toLocaleString("id-ID")}
+                          </p>
+                        </div>
+                      </div>
                       {bookings.filter(b => b.guideId === currentUser.id).length === 0 ? (
                         <div className="text-center py-12 text-gray-400 text-sm">Belum ada booking masuk.</div>
                       ) : (
@@ -2535,9 +2829,12 @@ export function DashboardPage() {
                         tripPackages.filter(p => p.guideId === currentUser.id).map((p) => (
                           <div key={p.id} className="p-4 rounded-xl border border-gray-150 bg-white flex justify-between items-center gap-4 hover:shadow-sm transition-all">
                             <div>
-                              <div className="flex items-center gap-2 mb-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
                                 <h4 className="font-bold text-gray-800">{p.title}</h4>
                                 <Badge variant="outline" className="text-[9px] uppercase">{p.duration}</Badge>
+                                {p.status === "approved" && <Badge className="bg-emerald-100 text-emerald-800 text-[8px] border border-emerald-250 py-0.5 px-1.5 font-bold">Approved</Badge>}
+                                {(p.status === "pending" || !p.status) && <Badge className="bg-amber-100 text-amber-800 text-[8px] border border-amber-250 py-0.5 px-1.5 font-bold">Pending Approval</Badge>}
+                                {p.status === "rejected" && <Badge className="bg-red-100 text-red-800 text-[8px] border border-red-250 py-0.5 px-1.5 font-bold">Ditolak</Badge>}
                               </div>
                               <p className="text-xs text-gray-500">Gunung Target: <b>{p.targetMountain}</b></p>
                               {p.vendorName && <p className="text-xs text-emerald-800">⛺ Mitra Vendor: <b>{p.vendorName}</b></p>}
@@ -2545,8 +2842,9 @@ export function DashboardPage() {
                             </div>
                             
                             <div className="flex gap-2 shrink-0">
-                              <Button variant="outline" size="sm" className="text-xs border-red-200 text-red-600 hover:bg-red-50" onClick={() => {
+                              <Button variant="outline" size="sm" className="text-xs border-red-200 text-red-650 hover:bg-red-50" onClick={async () => {
                                 setTripPackages(prev => prev.filter(pk => pk.id !== p.id));
+                                await supabase.from("trip_packages").delete().eq("id", p.id);
                                 toast.success("Paket pendakian dihapus!");
                               }}>
                                 Hapus
@@ -2824,6 +3122,31 @@ export function DashboardPage() {
                       <CardDescription className="text-xs">Konfirmasi persetujuan unit dan selesaikan tawar-menawar harga sewa alat.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      {/* ERP Service Console Summary Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-100 font-sans">
+                        <div className="bg-white p-3 rounded-xl border border-gray-150/80 shadow-xs text-center">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Job Order (Sewa)</p>
+                          <p className="text-lg font-black text-gray-800 mt-1">{rentalOrders.filter(r => r.vendorId === currentUser.id).length} Pesanan</p>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-gray-150/80 shadow-xs text-center">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Unit Disewakan</p>
+                          <p className="text-lg font-black text-emerald-700 mt-1">
+                            {rentalOrders.filter(r => r.vendorId === currentUser.id && r.status === "approved").reduce((sum, r) => sum + (r.qty || 0), 0)} Unit
+                          </p>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-gray-150/80 shadow-xs text-center">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Tawaran Masuk</p>
+                          <p className="text-lg font-black text-amber-700 mt-1">
+                            {negotiations.filter(n => n.recipientId === currentUser.id && n.status === "pending").length} Progres
+                          </p>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-gray-150/80 shadow-xs text-center">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Turnover Rental (ERP)</p>
+                          <p className="text-lg font-black text-emerald-850 mt-1 font-mono">
+                            Rp {rentalOrders.filter(r => r.vendorId === currentUser.id).reduce((sum, r) => sum + (r.totalPrice || 0), 0).toLocaleString("id-ID")}
+                          </p>
+                        </div>
+                      </div>
                       {rentalOrders.filter(r => r.vendorId === currentUser.id).length === 0 ? (
                         <div className="text-center py-12 text-gray-400 text-sm">Belum ada pesanan sewa masuk.</div>
                       ) : (
@@ -3109,9 +3432,19 @@ export function DashboardPage() {
 
                     {/* Lower Table: Account controls */}
                     <Card className="border border-gray-150 shadow-sm bg-white">
-                      <CardHeader className="pb-3 border-b border-gray-100">
-                        <CardTitle className="text-base font-bold text-gray-800">Direktori & Pengontrolan Akun Pengguna</CardTitle>
-                        <CardDescription className="text-xs">Kelola status aktifasi, verifikasi berkas, dan kirim sanksi warning ke seluruh pengguna.</CardDescription>
+                      <CardHeader className="pb-3 border-b border-gray-100 flex flex-row items-center justify-between flex-wrap gap-4">
+                        <div>
+                          <CardTitle className="text-base font-bold text-gray-800">Direktori & Pengontrolan Akun Pengguna</CardTitle>
+                          <CardDescription className="text-xs">Kelola status aktifasi, verifikasi berkas, dan kirim sanksi warning ke seluruh pengguna.</CardDescription>
+                        </div>
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl h-9 flex items-center gap-1.5"
+                          onClick={() => setManualUserModalOpen(true)}
+                        >
+                          <Plus className="size-4" />
+                          Tambah Pengguna Baru
+                        </Button>
                       </CardHeader>
                       <CardContent className="pt-4 p-0 overflow-x-auto">
                         <table className="w-full text-left text-xs font-semibold text-gray-700">
@@ -3290,6 +3623,107 @@ export function DashboardPage() {
                             </div>
                           </div>
                         ))
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Tab Kelola Iklan/Ads (Moderation) */}
+                {activeTab === "manage_ads" && (
+                  <Card className="border border-gray-150 shadow-sm font-sans bg-white">
+                    <CardHeader className="py-4 border-b border-gray-100">
+                      <CardTitle className="text-base font-bold text-gray-800">Moderasi Iklan & Paket Pendakian (Ads)</CardTitle>
+                      <CardDescription className="text-xs text-gray-500">
+                        Setujui atau tolak iklan paket pendakian yang dibuat oleh Guide. Paket yang disetujui akan tayang di Halaman Beranda.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-6 space-y-4">
+                      {tripPackages.length === 0 ? (
+                        <p className="text-xs text-gray-400 text-center py-8">Belum ada iklan paket yang didaftarkan.</p>
+                      ) : (
+                        <div className="space-y-4">
+                          {tripPackages.map((pkg) => {
+                            const isPending = pkg.status === "pending" || !pkg.status;
+                            const isApproved = pkg.status === "approved";
+                            const isRejected = pkg.status === "rejected";
+
+                            return (
+                              <div key={pkg.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col md:flex-row justify-between items-start gap-4">
+                                <div className="flex-1 flex gap-4 items-start flex-wrap sm:flex-nowrap">
+                                  <img src={pkg.image} alt={pkg.title} className="w-20 h-20 object-cover rounded-lg border border-gray-100 shrink-0" />
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 className="font-bold text-gray-850 text-xs sm:text-sm">{pkg.title}</h4>
+                                      {isPending && <Badge className="bg-amber-100 text-amber-800 text-[8px] border border-amber-250 py-0.5 px-1.5 font-bold">Pending Approval</Badge>}
+                                      {isApproved && <Badge className="bg-emerald-100 text-emerald-800 text-[8px] border border-emerald-250 py-0.5 px-1.5 font-bold">Tayang / Approved</Badge>}
+                                      {isRejected && <Badge className="bg-red-100 text-red-800 text-[8px] border border-red-250 py-0.5 px-1.5 font-bold">Ditolak / Rejected</Badge>}
+                                    </div>
+                                    <p className="text-[10px] text-gray-400 font-semibold">⛰️ Gunung: <span className="text-gray-750 font-bold">{pkg.targetMountain}</span> | ⏱️ Durasi: <span className="text-gray-750 font-bold">{pkg.duration}</span></p>
+                                    <p className="text-[10px] text-gray-450 leading-relaxed font-normal">{pkg.description}</p>
+                                    <div className="flex gap-4 pt-1 text-[10px] font-semibold text-gray-500 flex-wrap">
+                                      <p>🙋 Guide: <span className="text-gray-800 font-bold">{pkg.guideName}</span></p>
+                                      {pkg.vendorName && <p>⛺ Vendor: <span className="text-gray-800 font-bold">{pkg.vendorName}</span></p>}
+                                      <p>💰 Harga: <span className="text-emerald-700 font-bold font-mono">Rp {pkg.price.toLocaleString("id-ID")}</span></p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-row md:flex-col gap-2 shrink-0 w-full md:w-auto justify-end md:justify-center border-t md:border-t-0 pt-2.5 md:pt-0">
+                                  {isPending && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-[10px] font-bold h-8 px-3 text-white rounded-lg"
+                                        onClick={() => {
+                                          updateTripPackageStatus(pkg.id, "approved");
+                                          toast.success(`Paket "${pkg.title}" berhasil disetujui & ditayangkan!`);
+                                        }}
+                                      >
+                                        Setujui Iklan
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-[10px] font-bold h-8 px-3 border-red-200 text-red-650 hover:bg-red-50 rounded-lg"
+                                        onClick={() => {
+                                          updateTripPackageStatus(pkg.id, "rejected");
+                                          toast.error(`Paket "${pkg.title}" ditolak.`);
+                                        }}
+                                      >
+                                        Tolak Iklan
+                                      </Button>
+                                    </>
+                                  )}
+                                  {isApproved && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-[10px] font-bold h-8 px-3 border-red-250 text-red-650 hover:bg-red-50 rounded-lg"
+                                      onClick={() => {
+                                        updateTripPackageStatus(pkg.id, "rejected");
+                                        toast.warning(`Paket "${pkg.title}" diturunkan dari beranda.`);
+                                      }}
+                                    >
+                                      Tarik Tayangan
+                                    </Button>
+                                  )}
+                                  {isRejected && (
+                                    <Button
+                                      size="sm"
+                                      className="bg-emerald-600 hover:bg-emerald-700 text-[10px] font-bold h-8 px-3 text-white rounded-lg"
+                                      onClick={() => {
+                                        updateTripPackageStatus(pkg.id, "approved");
+                                        toast.success(`Paket "${pkg.title}" berhasil disetujui kembali!`);
+                                      }}
+                                    >
+                                      Setujui & Tayangkan
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </CardContent>
                   </Card>
@@ -4240,12 +4674,128 @@ export function DashboardPage() {
                            <li>Batas minimal penarikan adalah <b>Rp 50.000</b>.</li>
                            <li>Pendapatan dipotong fee administrasi bank Rp 0 (Gratis).</li>
                            <li>Pastikan status rekening bank Anda sudah diverifikasi oleh Super Admin.</li>
-                         </ul>
-                       </div>
-                     )}
-                  </div>
-                </CardContent>
-              </Card>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bank Account Management Section */}
+                    <div className="mt-6 p-5 rounded-2xl border border-gray-150 bg-gray-55/40 space-y-4 font-sans text-left">
+                      <div className="flex justify-between items-center flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="size-5 text-emerald-600 shrink-0" />
+                          <h4 className="text-sm font-bold text-gray-800">
+                            Informasi Rekening Bank Penarikan (WD)
+                          </h4>
+                        </div>
+                        {currentUser?.bank_account && !isEditingBank && (
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="text-[10px] h-7 border-emerald-250 text-emerald-700 font-semibold hover:bg-emerald-50/30 animate-in fade-in"
+                              onClick={() => {
+                                setBankForm({
+                                  bank_name: currentUser.bank_name || "",
+                                  bank_account: currentUser.bank_account || "",
+                                  bank_holder: currentUser.bank_holder || ""
+                                });
+                                setIsEditingBank(true);
+                              }}
+                            >
+                              Edit Rekening
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="text-[10px] h-7 border-red-200 text-red-655 hover:bg-red-50 font-semibold animate-in fade-in"
+                              onClick={handleDeleteBank}
+                            >
+                              Hapus
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {!currentUser?.bank_account || isEditingBank ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 items-end p-4 rounded-xl bg-white border border-gray-150 animate-in fade-in duration-200">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-555 uppercase">Nama Bank</label>
+                            <Input
+                              placeholder="Contoh: BCA, Mandiri, BNI"
+                              className="text-xs h-9 bg-gray-50"
+                              value={bankForm.bank_name}
+                              onChange={(e) => setBankForm({ ...bankForm, bank_name: e.target.value })}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-555 uppercase">Nomor Rekening</label>
+                            <Input
+                              placeholder="Masukkan nomor rekening"
+                              className="text-xs h-9 bg-gray-50"
+                              value={bankForm.bank_account}
+                              onChange={(e) => setBankForm({ ...bankForm, bank_account: e.target.value.replace(/[^0-9]/g, "") })}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-gray-555 uppercase">Nama Pemilik Rekening</label>
+                            <Input
+                              placeholder="Sesuai buku tabungan"
+                              className="text-xs h-9 bg-gray-50"
+                              value={bankForm.bank_holder}
+                              onChange={(e) => setBankForm({ ...bankForm, bank_holder: e.target.value })}
+                            />
+                          </div>
+                          <div className="sm:col-span-3 flex justify-end gap-2 pt-2 border-t border-gray-100 mt-2">
+                            {isEditingBank && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="text-xs h-8 rounded-xl"
+                                onClick={() => {
+                                  setIsEditingBank(false);
+                                  setBankForm({
+                                    bank_name: currentUser.bank_name || "",
+                                    bank_account: currentUser.bank_account || "",
+                                    bank_holder: currentUser.bank_holder || ""
+                                  });
+                                }}
+                              >
+                                Batal
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8 font-semibold rounded-xl"
+                              onClick={handleSaveBank}
+                            >
+                              Simpan Rekening
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-4 rounded-xl bg-white border border-gray-150 grid grid-cols-3 gap-4 text-xs font-normal animate-in fade-in duration-200">
+                          <div>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Nama Bank</p>
+                            <p className="font-extrabold text-gray-800 mt-1">{currentUser.bank_name}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Nomor Rekening</p>
+                            <p className="font-mono font-extrabold text-gray-800 mt-1">{currentUser.bank_account}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Nama Pemilik</p>
+                            <p className="font-extrabold text-gray-800 mt-1">{currentUser.bank_holder}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
             )}
 
             {/* ════════════════════ IN-APP CHAT WORKSPACE (COMMON TAB) ════════════════════ */}
@@ -4342,6 +4892,369 @@ export function DashboardPage() {
                     )}
                   </div>
                 </div>
+              </Card>
+            )}
+
+            {/* Profile Tab */}
+            {activeTab === "profile" && (
+              <Card className="border border-gray-150 shadow-sm overflow-hidden font-sans bg-white">
+                <CardHeader className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border-b border-gray-100 py-5">
+                  <CardTitle className="text-lg font-bold">Profil & Pengaturan Akun</CardTitle>
+                  <CardDescription className="text-xs text-gray-500">
+                    Kelola data diri, verifikasi berkas KYC identitas, dan rekening bank penarikan dana.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-6">
+                  <form onSubmit={handleProfileSubmit} className="space-y-6">
+                    {/* Verification Status Card */}
+                    <div className="p-5 rounded-2xl border border-gray-150 bg-gray-50/35 space-y-4">
+                      <h4 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+                        <UserCheck className="size-5 text-emerald-655 animate-pulse" />
+                        Status Verifikasi Identitas & Dokumen
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="md:col-span-2 space-y-2">
+                          <p className="text-xs text-gray-600 leading-relaxed font-medium">
+                            Untuk keamanan ekosistem AyokMendaki, seluruh penyedia jasa wajib mengunggah NIK KTP dan Selfie identitas.
+                          </p>
+                          <div className="flex items-center gap-2 mt-2">
+                            {currentUser.verified ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs py-1 px-3 rounded-full flex items-center gap-1">
+                                <CheckCircle2 className="size-4 text-emerald-600" />
+                                Terverifikasi (Aktif)
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-amber-100 text-amber-800 border border-amber-250 text-xs py-1 px-3 rounded-full flex items-center gap-1">
+                                <AlertTriangle className="size-4 text-amber-600 animate-pulse" />
+                                Pending Verifikasi / Belum Terverifikasi
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        {/* KYC upload display */}
+                        {currentUser.role !== "admin" && (
+                          <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-xs space-y-3">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-bold text-gray-500 uppercase">Nomor NIK KTP</label>
+                              <Input
+                                placeholder="16 digit NIK"
+                                className="text-xs h-9"
+                                value={profileForm.ktpNumber}
+                                onChange={(e) => setProfileForm({ ...profileForm, ktpNumber: e.target.value.replace(/[^0-9]/g, "") })}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <input
+                                  type="file"
+                                  id="profile-ktp-upload"
+                                  className="hidden"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleFileUpload(file, "ktp");
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => document.getElementById("profile-ktp-upload")?.click()}
+                                  className="w-full text-[10px] h-9 border-dashed border-emerald-300 text-emerald-850 hover:bg-emerald-50/20"
+                                >
+                                  {isUploadingKtp ? "Unggah..." : profileForm.ktpPhotoUrl ? "KTP OK" : "Unggah KTP"}
+                                </Button>
+                              </div>
+                              <div>
+                                <input
+                                  type="file"
+                                  id="profile-selfie-upload"
+                                  className="hidden"
+                                  accept="image/*"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) handleFileUpload(file, "selfie");
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => document.getElementById("profile-selfie-upload")?.click()}
+                                  className="w-full text-[10px] h-9 border-dashed border-emerald-300 text-emerald-850 hover:bg-emerald-50/20"
+                                >
+                                  {isUploadingSelfie ? "Unggah..." : profileForm.selfiePhotoUrl ? "Selfie OK" : "Unggah Selfie"}
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Left Column: Personal Info & Passwords */}
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-bold text-gray-800 border-b border-gray-100 pb-2">Informasi Akun</h4>
+                        
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-gray-700">Nama Lengkap</label>
+                          <Input
+                            placeholder="Nama Lengkap"
+                            className="text-xs h-9"
+                            value={profileForm.name}
+                            onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-gray-700">Alamat Email (Read-Only)</label>
+                          <Input
+                            disabled
+                            className="text-xs h-9 bg-gray-50 text-gray-400"
+                            value={currentUser.email}
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-gray-700">Nomor Telepon (WhatsApp)</label>
+                          <Input
+                            placeholder="08123456789"
+                            className="text-xs h-9"
+                            value={profileForm.phone}
+                            onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-semibold text-gray-750">Ubah Kata Sandi (Opsional)</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input
+                              type="password"
+                              placeholder="Password Baru"
+                              className="text-xs h-9"
+                              value={profileForm.password}
+                              onChange={(e) => setProfileForm({ ...profileForm, password: e.target.value })}
+                            />
+                            <Input
+                              type="password"
+                              placeholder="Konfirmasi"
+                              className="text-xs h-9"
+                              value={profileForm.confirmPassword}
+                              onChange={(e) => setProfileForm({ ...profileForm, confirmPassword: e.target.value })}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Bank Details section */}
+                        <div className="pt-2">
+                          <label className="text-xs font-bold text-gray-700 block mb-2">Informasi Rekening Bank Penarikan</label>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-gray-55/65 rounded-xl border border-gray-150">
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-bold text-gray-450 uppercase">Bank</span>
+                              <Input
+                                placeholder="BCA/Mandiri"
+                                className="text-[10px] h-8"
+                                value={profileForm.bank_name}
+                                onChange={(e) => setProfileForm({ ...profileForm, bank_name: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-bold text-gray-450 uppercase">No. Rekening</span>
+                              <Input
+                                placeholder="1234567"
+                                className="text-[10px] h-8"
+                                value={profileForm.bank_account}
+                                onChange={(e) => setProfileForm({ ...profileForm, bank_account: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-bold text-gray-450 uppercase">Pemilik</span>
+                              <Input
+                                placeholder="Nama Pemilik"
+                                className="text-[10px] h-8"
+                                value={profileForm.bank_holder}
+                                onChange={(e) => setProfileForm({ ...profileForm, bank_holder: e.target.value })}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Column: Custom Guide / Vendor settings */}
+                      <div className="space-y-4">
+                        {currentUser.role === "guide" && (
+                          <>
+                            <h4 className="text-sm font-bold text-gray-800 border-b border-gray-100 pb-2">Pengaturan Profesional Guide</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <label className="text-xs font-semibold text-gray-700">Gunung Spesialisasi</label>
+                                <Input
+                                  placeholder="Contoh: Gn. Semeru"
+                                  className="text-xs h-9"
+                                  value={profileForm.specialty}
+                                  onChange={(e) => setProfileForm({ ...profileForm, specialty: e.target.value })}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <label className="text-xs font-semibold text-gray-700">Pengalaman (Tahun)</label>
+                                <Input
+                                  type="number"
+                                  placeholder="Contoh: 5"
+                                  className="text-xs h-9"
+                                  value={profileForm.experience}
+                                  onChange={(e) => setProfileForm({ ...profileForm, experience: e.target.value })}
+                                />
+                              </div>
+                              <div className="space-y-1 col-span-2">
+                                <label className="text-xs font-semibold text-gray-700">Tarif Layanan Harian (Rp)</label>
+                                <Input
+                                  type="number"
+                                  placeholder="Contoh: 400000"
+                                  className="text-xs h-9"
+                                  value={profileForm.price}
+                                  onChange={(e) => setProfileForm({ ...profileForm, price: e.target.value })}
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-semibold text-gray-700">Biodata Singkat</label>
+                              <textarea
+                                placeholder="Tuliskan perkenalan singkat Anda..."
+                                className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 h-20 resize-none"
+                                value={profileForm.biodata}
+                                onChange={(e) => setProfileForm({ ...profileForm, biodata: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-semibold text-gray-700">Ketentuan Layanan Jasa</label>
+                              <textarea
+                                placeholder="Contoh: Maksimal rombongan 5 orang, sewa minimal 2 hari..."
+                                className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 h-20 resize-none"
+                                value={profileForm.ketentuan}
+                                onChange={(e) => setProfileForm({ ...profileForm, ketentuan: e.target.value })}
+                              />
+                            </div>
+                            {/* Coupon Setup */}
+                            <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/15 space-y-3">
+                              <h5 className="text-xs font-extrabold text-emerald-850">Manajemen Kupon Diskon Layanan</h5>
+                              <div className="grid grid-cols-2 gap-2.5">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-500 uppercase">Kode Kupon</label>
+                                  <Input
+                                    placeholder="Contoh: GUIDEMURAH"
+                                    className="text-xs h-8 font-mono font-bold"
+                                    value={profileForm.couponCode}
+                                    onChange={(e) => setProfileForm({ ...profileForm, couponCode: e.target.value.toUpperCase().replace(/\s/g, "") })}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-500 uppercase">Potongan Diskon (Rp)</label>
+                                  <Input
+                                    type="number"
+                                    placeholder="Contoh: 50000"
+                                    className="text-xs h-8"
+                                    value={profileForm.couponDiscount}
+                                    onChange={(e) => setProfileForm({ ...profileForm, couponDiscount: e.target.value })}
+                                  />
+                                </div>
+                                <div className="space-y-1 col-span-2">
+                                  <label className="text-[10px] font-bold text-gray-500 uppercase">Tanggal Kedaluwarsa Kupon</label>
+                                  <Input
+                                    type="date"
+                                    className="text-xs h-8"
+                                    value={profileForm.couponDeadline}
+                                    onChange={(e) => setProfileForm({ ...profileForm, couponDeadline: e.target.value })}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {currentUser.role === "vendor" && (
+                          <>
+                            <h4 className="text-sm font-bold text-gray-800 border-b border-gray-100 pb-2">Informasi Toko Vendor</h4>
+                            <div className="space-y-1">
+                              <label className="text-xs font-semibold text-gray-700">Nama Toko Rental</label>
+                              <Input
+                                placeholder="Nama Toko"
+                                className="text-xs h-9"
+                                value={profileForm.storeName}
+                                onChange={(e) => setProfileForm({ ...profileForm, storeName: e.target.value })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-semibold text-gray-700">Alamat Fisik Toko</label>
+                              <Input
+                                placeholder="Kota Malang, Jawa Timur"
+                                className="text-xs h-9"
+                                value={profileForm.address}
+                                onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
+                              />
+                            </div>
+                            {/* Coupon Setup */}
+                            <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/15 space-y-3 pt-4">
+                              <h5 className="text-xs font-extrabold text-emerald-850">Manajemen Kupon Diskon Sewa</h5>
+                              <div className="grid grid-cols-2 gap-2.5">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-500 uppercase">Kode Kupon Toko</label>
+                                  <Input
+                                    placeholder="Contoh: SEWAHEMAT"
+                                    className="text-xs h-8 font-mono font-bold"
+                                    value={profileForm.couponCode}
+                                    onChange={(e) => setProfileForm({ ...profileForm, couponCode: e.target.value.toUpperCase().replace(/\s/g, "") })}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-gray-500 uppercase">Potongan Diskon (Rp)</label>
+                                  <Input
+                                    type="number"
+                                    placeholder="Contoh: 20000"
+                                    className="text-xs h-8"
+                                    value={profileForm.couponDiscount}
+                                    onChange={(e) => setProfileForm({ ...profileForm, couponDiscount: e.target.value })}
+                                  />
+                                </div>
+                                <div className="space-y-1 col-span-2">
+                                  <label className="text-[10px] font-bold text-gray-500 uppercase">Tanggal Kedaluwarsa Kupon</label>
+                                  <Input
+                                    type="date"
+                                    className="text-xs h-8"
+                                    value={profileForm.couponDeadline}
+                                    onChange={(e) => setProfileForm({ ...profileForm, couponDeadline: e.target.value })}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                        {currentUser.role === "pendaki" && (
+                          <div className="p-4 rounded-2xl bg-blue-50/20 border border-blue-100 text-xs text-blue-900 space-y-2">
+                            <h5 className="font-extrabold flex items-center gap-1"><Shield className="size-4 shrink-0 text-blue-650 animate-pulse" /> Perlindungan Data & KYC Pendaki</h5>
+                            <p className="font-medium leading-relaxed">Data KTP dan selfie wajah Anda dienkripsi secara aman dan hanya dapat diakses oleh Super Admin untuk keperluan validasi asuransi pendakian dan pencocokan basecamp gunung.</p>
+                          </div>
+                        )}
+                        
+                        {currentUser.role === "admin" && (
+                          <div className="p-4 rounded-2xl bg-purple-50/20 border border-purple-100 text-xs text-purple-900 space-y-2">
+                            <h5 className="font-extrabold flex items-center gap-1"><Shield className="size-4 shrink-0 text-purple-650" /> Pengamanan Super Admin</h5>
+                            <p className="font-medium leading-relaxed">Sebagai administrator utama platform, Anda memiliki akses penuh ke seluruh direktori database. Pastikan untuk selalu menjaga keamanan kredensial akun Anda.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                      <Button
+                        type="submit"
+                        disabled={profileLoading}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-6 h-9 rounded-xl shadow-sm"
+                      >
+                        {profileLoading ? "Menyimpan Perubahan..." : "Simpan Profil Saya"}
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
               </Card>
             )}
           </div>
@@ -4917,44 +5830,62 @@ export function DashboardPage() {
       )}
 
       {/* 9. Withdraw Deposit Modal */}
-      {withdrawModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200">
-            <button onClick={() => setWithdrawModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400">
-              <X className="size-5" />
-            </button>
-            <div className="flex items-center gap-2 text-emerald-800 font-bold mb-3">
-              <Wallet className="size-6 text-emerald-600 shrink-0" />
-              <h3 className="text-lg">Tarik Dana Deposit</h3>
-            </div>
-            <p className="text-xs text-gray-500 mb-4 leading-relaxed font-normal">
-              Tarik dana deposit jaminan Anda kembali ke rekening/e-wallet Anda. Maksimal penarikan: <b>Rp {climberDeposit.toLocaleString("id-ID")}</b>.
-            </p>
-            <form onSubmit={handleWithdrawSubmit} className="space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-gray-700 block mb-1">Nominal Penarikan (Rp)</label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-emerald-600 font-bold" />
-                  <Input
-                    type="number"
-                    className="pl-9 text-xs font-bold text-emerald-700 bg-gray-50 rounded-xl"
-                    value={depositAmountInput}
-                    onChange={(e) => setDepositAmountInput(e.target.value)}
-                    placeholder="Contoh: 50000"
-                    min={10000}
-                    max={climberDeposit}
-                    step={10000}
-                  />
+      {withdrawModalOpen && (() => {
+        const currentBalance = 
+          currentUser?.role === "pendaki" ? climberDeposit :
+          currentUser?.role === "guide" ? guideWallet : vendorWallet;
+        return (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200">
+              <button onClick={() => setWithdrawModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400">
+                <X className="size-5" />
+              </button>
+              <div className="flex items-center gap-2 text-emerald-800 font-bold mb-3">
+                <Wallet className="size-6 text-emerald-600 shrink-0" />
+                <h3 className="text-lg">Tarik Dana & Saldo</h3>
+              </div>
+              <p className="text-xs text-gray-500 mb-4 leading-relaxed font-normal">
+                Tarik dana deposit atau penghasilan Anda ke rekening bank terdaftar. Maksimal penarikan: <b>Rp {currentBalance.toLocaleString("id-ID")}</b>.
+              </p>
+
+              {!currentUser?.bank_account ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-amber-50 border border-amber-250 rounded-xl text-xs text-amber-800 space-y-1.5">
+                    <p className="font-extrabold flex items-center gap-1"><AlertTriangle className="size-4 shrink-0" /> Rekening Bank Belum Diatur</p>
+                    <p className="font-medium leading-relaxed">Anda harus mendaftarkan nomor rekening bank Anda terlebih dahulu di bagian **Informasi Rekening** sebelum dapat melakukan penarikan dana.</p>
+                  </div>
+                  <Button className="w-full text-xs bg-gray-100 text-gray-450 cursor-not-allowed" disabled>Penarikan Dinonaktifkan</Button>
                 </div>
-              </div>
-              <div className="flex gap-2.5 pt-2">
-                <Button type="button" variant="outline" className="flex-1 text-xs rounded-xl" onClick={() => setWithdrawModalOpen(false)}>Batal</Button>
-                <Button type="submit" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl">Konfirmasi Penarikan</Button>
-              </div>
-            </form>
+              ) : (
+                <form onSubmit={handleWithdrawSubmit} className="space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 block mb-1">Nominal Penarikan (Rp)</label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-emerald-600 font-bold" />
+                      <Input
+                        type="number"
+                        className="pl-9 text-xs font-bold text-emerald-700 bg-gray-50 rounded-xl"
+                        value={depositAmountInput}
+                        onChange={(e) => setDepositAmountInput(e.target.value)}
+                        placeholder="Contoh: 50000"
+                        min={10000}
+                        max={currentBalance}
+                        step={10000}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2.5 pt-2">
+                    <Button type="button" variant="outline" className="flex-1 text-xs rounded-xl" onClick={() => setWithdrawModalOpen(false)}>Batal</Button>
+                    <Button type="submit" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl" disabled={isProcessingWd}>
+                      {isProcessingWd ? "Memproses Transfer..." : "Konfirmasi Penarikan"}
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {/* 10. Collaboration Proposal Submission Modal */}
       {collabModalOpen && selectedCollabPartner && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-in fade-in duration-200">
@@ -5228,6 +6159,101 @@ export function DashboardPage() {
               </div>
 
             </div>
+          </div>
+        </div>
+      )}
+      {/* 12. Manual Add User Modal */}
+      {manualUserModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setManualUserModalOpen(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400"
+            >
+              <X className="size-5" />
+            </button>
+            <div className="flex items-center gap-2 text-emerald-800 font-bold mb-3">
+              <UserCheck className="size-6 text-emerald-600 shrink-0" />
+              <h3 className="text-lg">Tambah Pengguna Baru</h3>
+            </div>
+            <p className="text-xs text-gray-500 mb-4 leading-relaxed font-normal">
+              Buat akun pengguna baru (Pendaki, Tour Guide, atau Vendor) secara manual. Akun akan langsung aktif dan terdaftar di database.
+            </p>
+            <form onSubmit={handleCreateManualUserSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Nama Lengkap</label>
+                <Input
+                  type="text"
+                  required
+                  placeholder="Contoh: Budi Santoso"
+                  className="text-xs"
+                  value={manualUserForm.name}
+                  onChange={(e) => setManualUserForm({ ...manualUserForm, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Alamat Email</label>
+                <Input
+                  type="email"
+                  required
+                  placeholder="Contoh: budi@gmail.com"
+                  className="text-xs"
+                  value={manualUserForm.email}
+                  onChange={(e) => setManualUserForm({ ...manualUserForm, email: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Nomor Telepon / WA</label>
+                <Input
+                  type="tel"
+                  required
+                  placeholder="Contoh: 08123456789"
+                  className="text-xs"
+                  value={manualUserForm.phone}
+                  onChange={(e) => setManualUserForm({ ...manualUserForm, phone: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1">Pilih Peran (Role)</label>
+                <select
+                  className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500"
+                  value={manualUserForm.role}
+                  onChange={(e) => setManualUserForm({ ...manualUserForm, role: e.target.value as UserRole })}
+                >
+                  <option value="pendaki">Pendaki</option>
+                  <option value="guide">Tour Guide (Pemandu)</option>
+                  <option value="vendor">Vendor Rental Alat</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="manualVerified"
+                  checked={manualUserForm.verified}
+                  onChange={(e) => setManualUserForm({ ...manualUserForm, verified: e.target.checked })}
+                  className="size-4 rounded border-gray-300 accent-emerald-600"
+                />
+                <label htmlFor="manualVerified" className="text-xs text-gray-700 font-semibold cursor-pointer">
+                  Tandai Akun sebagai Terverifikasi Langsung (Verified)
+                </label>
+              </div>
+              <div className="flex gap-2.5 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 text-xs rounded-xl"
+                  onClick={() => setManualUserModalOpen(false)}
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl"
+                >
+                  Simpan Pengguna
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

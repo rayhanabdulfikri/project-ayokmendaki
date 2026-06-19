@@ -16,6 +16,10 @@ export interface User {
   ktp_number?: string;
   ktp_image?: string;
   selfie_image?: string;
+  email_verified?: boolean;
+  bank_name?: string;
+  bank_account?: string;
+  bank_holder?: string;
 }
 
 export interface UserActivity {
@@ -62,6 +66,12 @@ export interface Guide {
   specialtyMountains: string[];
   busyDates: string[];
   groupDiscountEnabled?: boolean;
+  discountPercentage?: number;
+  biodata?: string;
+  ketentuan?: string;
+  couponCode?: string;
+  couponDiscount?: number;
+  couponDeadline?: string;
 }
 
 export interface Vendor {
@@ -73,6 +83,9 @@ export interface Vendor {
   avatar: string;
   // distances in km from mountain basecamp
   distances: Record<string, number>;
+  couponCode?: string;
+  couponDiscount?: number;
+  couponDeadline?: string;
 }
 
 export interface EquipmentItem {
@@ -87,6 +100,7 @@ export interface EquipmentItem {
   category: "tent" | "carrier" | "other";
   groupDiscountEnabled?: boolean;
   damageTerms?: string;
+  discountPercentage?: number;
 }
 
 export interface TripPackage {
@@ -104,6 +118,7 @@ export interface TripPackage {
   rundown: string[];
   image: string;
   targetMountain: string;
+  status?: "pending" | "approved" | "rejected";
 }
 
 export interface Booking {
@@ -132,6 +147,7 @@ export interface Booking {
   fineNotes?: string;
   pendakiConfirmed?: boolean;
   partnerConfirmed?: boolean;
+  notes?: string;
 }
 
 export interface UserWarning {
@@ -162,6 +178,7 @@ export interface RentalOrder {
   fineNotes?: string;
   pendakiConfirmed?: boolean;
   partnerConfirmed?: boolean;
+  notes?: string;
 }
 
 export interface Negotiation {
@@ -280,6 +297,8 @@ interface AppContextType {
   users: User[];
   updateUserStatus: (id: string, status: "active" | "suspended") => void;
   toggleUserVerification: (id: string) => void;
+  addManualUser: (userData: Omit<User, "id" | "avatar" | "status"> & { password?: string }) => Promise<void>;
+  updateTripPackageStatus: (id: string, status: "approved" | "rejected") => void;
   userActivities: UserActivity[];
   logUserActivity: (userId: string, userName: string, role: UserActivity["userRole"], action: string) => void;
 }
@@ -356,7 +375,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const emailFromGoogle = session.user.email?.toLowerCase();
               const nameFromGoogle = session.user.user_metadata?.full_name || session.user.user_metadata?.name || emailFromGoogle?.split("@")[0] || "User Google";
 
-              // 1. Create user profile in public.users
               const newUserObj = {
                 id: userId,
                 name: pendingReg.role === "vendor" ? (pendingReg.storeName || nameFromGoogle) : (pendingReg.name || nameFromGoogle),
@@ -368,7 +386,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 status: "active",
                 ktp_number: pendingReg.ktpNumber || null,
                 ktp_image: pendingReg.ktpPhotoUrl || null,
-                selfie_image: pendingReg.selfiePhotoUrl || null
+                selfie_image: pendingReg.selfiePhotoUrl || null,
+                email_verified: true
               };
 
               await supabase.from("users").insert(newUserObj);
@@ -442,7 +461,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 phone: "08120000000",
                 verified: true,
                 avatar: session.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${defaultName}`,
-                status: "active"
+                status: "active",
+                email_verified: true
               };
 
               await supabase.from("users").insert(newUserObj);
@@ -513,6 +533,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 specialtyMountains: g.specialty_mountains || [],
                 busyDates: (g.busy_dates || []).map((d: any) => String(d)),
                 groupDiscountEnabled: g.group_discount_enabled || false,
+                discountPercentage: Number(g.discount_percentage || 0),
+                biodata: g.biodata || "",
+                ketentuan: g.ketentuan || "",
+                couponCode: g.coupon_code || "",
+                couponDiscount: Number(g.coupon_discount || 0),
+                couponDeadline: g.coupon_deadline || ""
               };
             })
           );
@@ -530,6 +556,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 verified: user?.verified || false,
                 avatar: user?.avatar || "https://api.dicebear.com/7.x/identicon/svg",
                 distances: v.distances || {},
+                couponCode: v.coupon_code || "",
+                couponDiscount: Number(v.coupon_discount || 0),
+                couponDeadline: v.coupon_deadline || ""
               };
             })
           );
@@ -552,6 +581,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 category: eq.category,
                 groupDiscountEnabled: eq.group_discount_enabled || false,
                 damageTerms: eq.damage_terms,
+                discountPercentage: Number(eq.discount_percentage || 0)
               };
             })
           );
@@ -578,6 +608,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 rundown: p.rundown || [],
                 image: p.image,
                 targetMountain: p.target_mountain,
+                status: p.status || "approved"
               };
             })
           );
@@ -615,6 +646,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 fineNotes: b.fine_notes,
                 pendakiConfirmed: b.pendaki_confirmed,
                 partnerConfirmed: b.partner_confirmed,
+                notes: b.notes || ""
               };
             })
           );
@@ -647,6 +679,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 fineNotes: r.fine_notes,
                 pendakiConfirmed: r.pendaki_confirmed,
                 partnerConfirmed: r.partner_confirmed,
+                notes: r.notes || ""
               };
             })
           );
@@ -1204,7 +1237,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const id = "pkg_" + Math.random().toString(36).substring(2, 9);
     const newPkg: TripPackage = {
       ...pkgData,
-      id
+      id,
+      status: pkgData.status || "pending"
     };
     setTripPackages((prev) => [newPkg, ...prev]);
 
@@ -1220,8 +1254,115 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       services: pkgData.services || [],
       rundown: pkgData.rundown || [],
       image: pkgData.image,
-      target_mountain: pkgData.targetMountain
+      target_mountain: pkgData.targetMountain,
+      status: pkgData.status || "pending"
     });
+  };
+
+  const updateTripPackageStatus = (id: string, status: "approved" | "rejected") => {
+    setTripPackages((prev) =>
+      prev.map((pkg) => (pkg.id === id ? { ...pkg, status } : pkg))
+    );
+    supabase.from("trip_packages").update({ status }).eq("id", id);
+    logUserActivity("admin1", "Super Admin", "admin", `Mengubah status iklan paket ID ${id} menjadi ${status.toUpperCase()}`);
+  };
+
+  const addManualUser = async (userData: Omit<User, "id" | "avatar" | "status"> & { password?: string }) => {
+    const newUserId = "user_" + Math.random().toString(36).substring(2, 9);
+    const newUserObj: User = {
+      id: newUserId,
+      name: userData.name,
+      email: userData.email,
+      role: userData.role,
+      phone: userData.phone || null,
+      verified: userData.verified || false,
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userData.name}`,
+      status: "active",
+      ktp_number: userData.ktp_number || null,
+      ktp_image: userData.ktp_image || null,
+      selfie_image: userData.selfie_image || null,
+      email_verified: true
+    };
+
+    // 1. Insert into users table
+    const { error: userErr } = await supabase.from("users").insert(newUserObj);
+    if (userErr) throw userErr;
+
+    // 2. Initialize wallet
+    const { error: walletErr } = await supabase.from("wallets").insert({
+      user_id: newUserId,
+      balance: 0
+    });
+    if (walletErr) throw walletErr;
+
+    // 3. Initialize role-specific profiles if guide/vendor
+    if (userData.role === "guide") {
+      await supabase.from("guides").insert({
+        id: newUserId,
+        specialty: "Gn. Semeru & Bromo",
+        location: "Malang, Jawa Timur",
+        experience: "3 Tahun",
+        trips: 0,
+        rating: 5.0,
+        price: 500000,
+        certifications: ["APIGI", "Pertolongan Pertama"],
+        status: "Aktif",
+        specialty_mountains: ["Gn. Semeru", "Gn. Bromo"],
+        busy_dates: [],
+        group_discount_enabled: false,
+        discount_percentage: 0,
+        biodata: "Halo, saya pemandu pendakian baru.",
+        ketentuan: "Rombongan maksimal 5 orang."
+      });
+      
+      setGuides(prev => [
+        ...prev,
+        {
+          id: newUserId,
+          name: userData.name,
+          specialty: "Gn. Semeru & Bromo",
+          location: "Malang, Jawa Timur",
+          experience: "3 Tahun",
+          trips: 0,
+          rating: 5.0,
+          price: 500000,
+          avatar: newUserObj.avatar!,
+          certifications: ["APIGI", "Pertolongan Pertama"],
+          status: "Aktif",
+          verified: userData.verified || false,
+          specialtyMountains: ["Gn. Semeru", "Gn. Bromo"],
+          busyDates: [],
+          discountPercentage: 0,
+          biodata: "Halo, saya pemandu pendakian baru.",
+          ketentuan: "Rombongan maksimal 5 orang."
+        }
+      ]);
+    } else if (userData.role === "vendor") {
+      await supabase.from("vendors").insert({
+        id: newUserId,
+        location: "Jawa Timur",
+        distances: {},
+        coupon_code: "SEWAOK",
+        coupon_discount: 10
+      });
+
+      setVendors(prev => [
+        ...prev,
+        {
+          id: newUserId,
+          name: userData.name,
+          location: "Jawa Timur",
+          verified: userData.verified || false,
+          avatar: `https://api.dicebear.com/7.x/identicon/svg?seed=${userData.name}`,
+          distances: {},
+          couponCode: "SEWAOK",
+          couponDiscount: 10
+        }
+      ]);
+    }
+
+    setUsers(prev => [newUserObj, ...prev]);
+    logUserActivity("admin1", "Super Admin", "admin", `Membuat akun pengguna baru secara manual: ${userData.name} (${userData.role.toUpperCase()})`);
   };
 
   // ─── Dispute Actions ────────────────────────────────────────────────────────
@@ -1863,6 +2004,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         users,
         updateUserStatus,
         toggleUserVerification,
+        addManualUser,
+        updateTripPackageStatus,
         userActivities,
         logUserActivity,
       }}

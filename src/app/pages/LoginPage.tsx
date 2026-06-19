@@ -13,7 +13,6 @@ const DEMO_ACCOUNTS: User[] = [
   { id: "pendaki1", name: "Zaki Firdaus", email: "zaki@ayokmendaki.com", role: "pendaki", phone: "08123456789", verified: true, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Zaki" },
   { id: "guide1", name: "Ahmad Hidayat", email: "ahmad@ayokmendaki.com", role: "guide", phone: "08234567890", verified: true, avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmad" },
   { id: "vendor1", name: "Outdoor Store", email: "outdoor@ayokmendaki.com", role: "vendor", phone: "08345678901", verified: true, avatar: "https://api.dicebear.com/7.x/identicon/svg?seed=outdoor" },
-  { id: "admin1", name: "Super Admin", email: "admin@ayokmendaki.com", role: "admin", phone: "08567890123", verified: true, avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=admin" },
 ];
 
 export function LoginPage() {
@@ -60,8 +59,18 @@ export function LoginPage() {
         }
 
         if (matchedUser) {
+          if (matchedUser.role === "admin") {
+            setError("Admin harus masuk melalui halaman login khusus admin (/admin).");
+            setLoading(false);
+            return;
+          }
           if (matchedUser.status === "suspended") {
             setError("Akun Anda ditangguhkan. Silakan hubungi admin.");
+            setLoading(false);
+            return;
+          }
+          if (matchedUser.role !== "admin" && matchedUser.email_verified === false) {
+            setError("Email Anda belum terverifikasi. Silakan daftarkan ulang akun Anda.");
             setLoading(false);
             return;
           }
@@ -73,7 +82,11 @@ export function LoginPage() {
             phone: matchedUser.phone,
             verified: matchedUser.verified,
             avatar: matchedUser.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${matchedUser.name}`,
-            status: matchedUser.status
+            status: matchedUser.status,
+            email_verified: matchedUser.email_verified,
+            bank_name: matchedUser.bank_name,
+            bank_account: matchedUser.bank_account,
+            bank_holder: matchedUser.bank_holder
           });
           setLoading(false);
           toast.success(`Selamat datang kembali, ${matchedUser.name}!`);

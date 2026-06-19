@@ -2,12 +2,11 @@ import { useState } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
-import { Mountain, Eye, EyeOff, Lock, Mail, User, Phone, AlertCircle, CheckCircle2, Shield, Award, MapPin } from "lucide-react";
+import { Mountain, Eye, EyeOff, Lock, Mail, User, Phone, AlertCircle, CheckCircle2, Shield, Award } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import { useApp, UserRole } from "../context/AppContext";
 import { toast } from "sonner";
 import { supabase } from "../../supabase";
-
 
 interface PasswordStrength {
   score: number;
@@ -40,6 +39,12 @@ export function RegisterPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [success, setSuccess] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>("pendaki");
+  
+  // OTP Verification States
+  const [showVerificationScreen, setShowVerificationScreen] = useState(false);
+  const [sentCode, setSentCode] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  
   const navigate = useNavigate();
 
   const [form, setForm] = useState({
@@ -83,20 +88,49 @@ export function RegisterPage() {
     if (!validate()) return;
     setLoading(true);
 
+    setTimeout(() => {
+      // Check if email already registered in standard user table
+      supabase.from("users").select("email").eq("email", form.email.toLowerCase()).single().then(({ data }) => {
+        if (data) {
+          setLoading(false);
+          setErrors({ email: "Email sudah terdaftar. Silakan masuk atau gunakan email lain." });
+          toast.error("Email sudah terdaftar!");
+          return;
+        }
+
+        // Generate OTP
+        const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
+        setSentCode(randomCode);
+        setLoading(false);
+        setShowVerificationScreen(true);
+        toast.success("Kode verifikasi OTP dikirim ke email!");
+      });
+    }, 1000);
+  };
+
+  const handleVerifyAndRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (verificationCode !== sentCode) {
+      toast.error("Kode verifikasi salah! Cek kembali email Anda.");
+      return;
+    }
+
+    setLoading(true);
+    const newUserId = "user_" + Math.random().toString(36).substring(2, 9);
+    
     setTimeout(async () => {
-      const newUserId = "user_" + Math.random().toString(36).substring(2, 9);
-      
       try {
-        // 1. Create User in Supabase with basic columns (KYC is null initially)
+        // 1. Create User in Supabase with email_verified: true
         const { error: userErr } = await supabase.from("users").insert({
           id: newUserId,
           name: form.name,
-          email: form.email,
+          email: form.email.toLowerCase(),
           role: selectedRole,
           phone: form.phone,
-          verified: false, // All start as unverified until they fill KYC and admin approves
+          verified: false,
           avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${form.name}`,
           status: "active",
+          email_verified: true,
           ktp_number: null,
           ktp_image: null,
           selfie_image: null
@@ -112,13 +146,13 @@ export function RegisterPage() {
 
         setLoading(false);
         setSuccess(true);
-        toast.success("Registrasi berhasil!");
+        toast.success("Verifikasi email berhasil & akun terdaftar!");
       } catch (err: any) {
         setLoading(false);
         console.error("Error registering user:", err);
         toast.error("Gagal mendaftarkan akun: " + err.message);
       }
-    }, 1500);
+    }, 1200);
   };
 
   const handleGoogleRegister = async () => {
@@ -147,14 +181,14 @@ export function RegisterPage() {
   if (success) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-50 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md text-center bg-white p-8 rounded-2xl shadow-xl">
+        <div className="w-full max-w-md text-center bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
           <div className="size-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-6 animate-bounce">
             <CheckCircle2 className="size-10 text-emerald-600" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Pendaftaran Berhasil!</h2>
           
           <p className="text-gray-500 mb-6 text-sm">
-            Akun Anda (**{selectedRole.toUpperCase()}**) telah berhasil dibuat. Silakan login ke dashboard untuk melengkapi data diri Anda terlebih dahulu agar akun dapat diaktifkan dan digunakan.
+            Akun Anda (**{selectedRole.toUpperCase()}**) telah berhasil dibuat dan email terverifikasi. Silakan login ke dashboard untuk melengkapi data diri Anda terlebih dahulu agar akun dapat diaktifkan dan digunakan.
           </p>
 
           <div className="space-y-3">
@@ -165,6 +199,61 @@ export function RegisterPage() {
             </Link>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (showVerificationScreen) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-emerald-50 flex items-center justify-center px-4 py-12">
+        <Card className="w-full max-w-md shadow-xl border-0 bg-white font-sans rounded-2xl overflow-hidden">
+          <div className="bg-emerald-800 text-white p-6">
+            <h2 className="text-xl font-bold flex items-center justify-center gap-2">
+              <Mail className="size-5 text-emerald-300" />
+              Verifikasi Email Anda
+            </h2>
+            <p className="text-xs opacity-80 mt-1 text-center">
+              Kode OTP telah dikirimkan ke <span className="font-bold text-emerald-200">{form.email}</span>.
+            </p>
+          </div>
+          <CardContent className="p-6 space-y-4">
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl text-center">
+              <p className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider">Simulasi Kotak Masuk Email</p>
+              <p className="text-xs text-gray-650 mt-1 font-medium">Platform mendeteksi kode verifikasi berikut:</p>
+              <p className="text-xl font-mono font-black text-emerald-750 bg-emerald-200/40 px-3 py-1 mt-1.5 rounded-lg inline-block tracking-wider">
+                {sentCode}
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyAndRegister} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-gray-700">Masukkan 6 Digit OTP</label>
+                <Input
+                  maxLength={6}
+                  placeholder="••••••"
+                  className="text-center font-mono font-bold text-lg tracking-widest h-11 bg-gray-50 border-gray-200 focus:bg-white"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ""))}
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-11 text-base font-semibold shadow-sm transition-all"
+                disabled={loading}
+              >
+                {loading ? "Memproses Verifikasi..." : "Verifikasi & Daftarkan Akun"}
+              </Button>
+            </form>
+
+            <button
+              onClick={() => setShowVerificationScreen(false)}
+              className="w-full text-center text-xs text-gray-500 hover:text-emerald-600 transition-colors pt-2"
+            >
+              ← Kembali ke Form Registrasi
+            </button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -209,7 +298,7 @@ export function RegisterPage() {
                   className={`flex flex-col items-center p-3 rounded-xl border text-center transition-all ${
                     selectedRole === role.id
                       ? "bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm"
-                      : "bg-gray-50 border-gray-150 hover:bg-gray-100/50 text-gray-600"
+                      : "bg-gray-55 border-gray-150 hover:bg-gray-100/50 text-gray-650"
                   }`}
                 >
                   <div className={`p-1.5 rounded-lg mb-1.5 ${selectedRole === role.id ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-500"}`}>
@@ -350,8 +439,23 @@ export function RegisterPage() {
                 </div>
               </div>
 
+              {/* Scrollable Terms & Conditions Box */}
+              <div className="space-y-1.5 pt-2">
+                <label className="text-xs font-bold text-gray-700">Syarat & Ketentuan Layanan</label>
+                <div className="h-28 overflow-y-auto p-2.5 border border-gray-200 bg-gray-50 rounded-lg text-[10px] text-gray-500 leading-normal font-medium space-y-1.5 scrollbar-thin">
+                  <p className="font-extrabold text-gray-700">1. Ketentuan Umum Penggunaan Platform</p>
+                  <p>AyokMendaki adalah platform aggregator independen yang menghubungkan Pendaki dengan Tour Guide (Pemandu Gunung) dan Vendor Persewaan Alat Gunung. Seluruh pengguna wajib berusia minimal 17 tahun dan memiliki KTP resmi yang valid.</p>
+                  <p className="font-extrabold text-gray-700">2. Verifikasi Data & Keamanan Akun</p>
+                  <p>Mitra Tour Guide dan Vendor wajib melampirkan berkas identitas asli (KTP, Selfie Wajah, Sertifikat APIGI/HPI, NIB) untuk ditinjau oleh Admin. Platform berhak membatalkan status verifikasi atau menangguhkan akun jika terbukti melanggar aturan.</p>
+                  <p className="font-extrabold text-gray-700">3. Ketentuan Pemesanan & Pembayaran Escrow</p>
+                  <p>Seluruh transaksi pembayaran booking guide dan rental alat wajib melalui rekening penampung aman (Escrow) AyokMendaki. Dana baru diteruskan ke mitra setelah trip selesai dilaksanakan atau barang dikembalikan dengan aman.</p>
+                  <p className="font-extrabold text-gray-700">4. Kebijakan Sanksi, Dispute, & Denda</p>
+                  <p>Pelanggaran aturan keselamatan pendakian, vandalisme, atau pembatalan sepihak tanpa alasan mendesak akan dikenai sanksi peringatan hingga pembekuan saldo jaminan oleh admin melalui sidang penyelesaian sengketa (Dispute).</p>
+                </div>
+              </div>
+
               {/* Terms Checkbox */}
-              <div className="flex items-start gap-2 pt-2">
+              <div className="flex items-start gap-2 pt-1">
                 <input
                   type="checkbox"
                   id="agreeTerms"
@@ -359,12 +463,8 @@ export function RegisterPage() {
                   onChange={(e) => handleChange("agreeTerms", e.target.checked)}
                   className="size-4 mt-0.5 rounded border-gray-300 accent-emerald-600"
                 />
-                <label htmlFor="agreeTerms" className="text-xs text-gray-600 leading-relaxed">
-                  Saya menyetujui{" "}
-                  <a href="#" className="text-emerald-600 hover:text-emerald-700 font-medium">Syarat & Ketentuan</a>{" "}
-                  dan{" "}
-                  <a href="#" className="text-emerald-600 hover:text-emerald-700 font-medium">Kebijakan Privasi</a>{" "}
-                  AyokMendaki
+                <label htmlFor="agreeTerms" className="text-xs text-gray-650 leading-relaxed">
+                  Saya menyetujui Syarat & Ketentuan serta Kebijakan Privasi AyokMendaki di atas.
                 </label>
               </div>
               {errors.agreeTerms && <p className="text-[10px] text-red-500">{errors.agreeTerms}</p>}
@@ -375,7 +475,7 @@ export function RegisterPage() {
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-11 text-base font-semibold shadow-sm transition-all"
                 disabled={loading}
               >
-                {loading ? "Mendaftarkan Akun..." : "Buat Akun Gratis"}
+                {loading ? "Mendaftarkan Akun..." : "Buat Akun & Verifikasi Email"}
               </Button>
 
               {/* Divider */}
@@ -402,11 +502,11 @@ export function RegisterPage() {
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
                 </svg>
-                Daftar dengan Google
+                Daftar dengan Google (Bypass Verifikasi)
               </Button>
             </form>
 
-            <p className="mt-6 text-center text-sm text-gray-600">
+            <p className="mt-6 text-center text-sm text-gray-650">
               Sudah punya akun?{" "}
               <Link to="/login" className="font-semibold text-emerald-600 hover:text-emerald-700">
                 Masuk di sini
@@ -418,4 +518,3 @@ export function RegisterPage() {
     </div>
   );
 }
-

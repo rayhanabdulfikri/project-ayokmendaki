@@ -48,6 +48,8 @@ export function RentalPage() {
   const [quantity, setQuantity] = useState(1);
   const [proposedPrice, setProposedPrice] = useState("");
   const [negoNotes, setNegoNotes] = useState("");
+  const [couponInput, setCouponInput] = useState("");
+  const [checkoutNotes, setCheckoutNotes] = useState("");
 
   const currentPage = pages[activeTab] || 1;
 
@@ -108,6 +110,8 @@ export function RentalPage() {
     setQuantity(1);
     setProposedPrice(item.price.toString());
     setNegoNotes("");
+    setCouponInput("");
+    setCheckoutNotes("");
     setRentalModalOpen(true);
   };
 
@@ -144,14 +148,35 @@ export function RentalPage() {
 
     const days = getDaysDiff(startDate, endDate);
     const isDiscEnabled = selectedItem.groupDiscountEnabled;
-    const disc = isDiscEnabled ? (quantity >= 5 ? 30 : quantity >= 4 ? 20 : quantity >= 2 ? 10 : 0) : 0;
+    const groupDisc = isDiscEnabled ? (quantity >= 5 ? 30 : quantity >= 4 ? 20 : quantity >= 2 ? 10 : 0) : 0;
+    const itemDisc = selectedItem.discountPercentage || 0;
     
-    const priceProposedPerDay = parseInt(proposedPrice) || selectedItem.price;
-    const ratePerUnitPerDay = Math.round(priceProposedPerDay * (1 - disc / 100));
-    const proposedPriceTotal = ratePerUnitPerDay * quantity * days;
+    // Base price per unit per day after custom item discount
+    const normalPricePerUnitPerDay = Math.round(selectedItem.price * (1 - itemDisc / 100));
     
-    const originalRatePerUnitPerDay = Math.round(selectedItem.price * (1 - disc / 100));
+    // Rate after group discount
+    const priceProposedPerDay = parseInt(proposedPrice) || normalPricePerUnitPerDay;
+    const ratePerUnitPerDay = Math.round(priceProposedPerDay * (1 - groupDisc / 100));
+    let proposedPriceTotal = ratePerUnitPerDay * quantity * days;
+    
+    const originalRatePerUnitPerDay = Math.round(selectedItem.price * (1 - groupDisc / 100));
     const originalPriceTotal = originalRatePerUnitPerDay * quantity * days;
+
+    // Apply vendor coupon if present
+    if (couponInput.trim()) {
+      const vendorObj = vendors.find(v => v.id === selectedItem.vendorId);
+      if (vendorObj && vendorObj.couponCode && couponInput.trim().toUpperCase() === vendorObj.couponCode.toUpperCase()) {
+        const deadline = vendorObj.couponDeadline ? new Date(vendorObj.couponDeadline) : null;
+        if (deadline && new Date() > deadline) {
+          toast.error("Kupon vendor ini sudah kadaluwarsa!");
+        } else {
+          proposedPriceTotal = Math.max(0, proposedPriceTotal - (vendorObj.couponDiscount || 0));
+          toast.success("Kupon diskon vendor berhasil digunakan!");
+        }
+      } else {
+        toast.error("Kode kupon vendor tidak valid.");
+      }
+    }
 
     // 1. Create Rental Order in Pending status
     const orderId = addRentalOrder({
@@ -164,11 +189,12 @@ export function RentalPage() {
       qty: quantity,
       startDate,
       endDate,
-      totalPrice: proposedPriceTotal
+      totalPrice: proposedPriceTotal,
+      notes: checkoutNotes
     });
 
     // 2. If price is negotiated, submit negotiation entry
-    if (priceProposedPerDay !== selectedItem.price) {
+    if (priceProposedPerDay !== normalPricePerUnitPerDay) {
       createNegotiation({
         type: "rental",
         orderId,
@@ -232,8 +258,18 @@ export function RentalPage() {
           <div className="flex-1 w-full min-w-0">
             <div className="flex items-start justify-between gap-4 mb-1">
               <div>
-                <h4 className="font-bold text-gray-800 text-lg leading-tight">{item.name}</h4>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="font-bold text-gray-800 text-lg leading-tight">{item.name}</h4>
+                  {item.discountPercentage !== undefined && item.discountPercentage > 0 && (
+                    <Badge className="bg-red-500 text-white text-[9px] py-0">Diskon {item.discountPercentage}%</Badge>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground mt-1">{item.description}</p>
+                {vendor?.couponCode && (
+                  <div className="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-150 font-semibold mt-1">
+                    🎟️ Kupon Toko: <b>{vendor.couponCode}</b> (Potongan Rp {vendor.couponDiscount?.toLocaleString("id-ID")}){vendor.couponDeadline ? ` s/d ${vendor.couponDeadline}` : ""}
+                  </div>
+                )}
               </div>
             </div>
             
@@ -267,7 +303,14 @@ export function RentalPage() {
             <div className="flex items-center justify-between gap-4 border-t border-gray-50 pt-3">
               <div>
                 <p className="text-[10px] text-gray-400 leading-none mb-1">Tarif Sewa</p>
-                <span className="font-bold text-emerald-600 text-lg">Rp {item.price.toLocaleString("id-ID")}<span className="text-xs font-normal text-gray-400">/hari</span></span>
+                {item.discountPercentage !== undefined && item.discountPercentage > 0 ? (
+                  <div className="flex items-center gap-2">
+                    <span className="line-through text-xs text-gray-400">Rp {item.price.toLocaleString("id-ID")}</span>
+                    <span className="font-bold text-emerald-600 text-lg">Rp {Math.round(item.price * (1 - item.discountPercentage / 100)).toLocaleString("id-ID")}<span className="text-xs font-normal text-gray-400">/hari</span></span>
+                  </div>
+                ) : (
+                  <span className="font-bold text-emerald-600 text-lg">Rp {item.price.toLocaleString("id-ID")}<span className="text-xs font-normal text-gray-400">/hari</span></span>
+                )}
               </div>
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" className="text-xs" onClick={() => handleChatVendor(item.vendorId, item.vendorName)}>
@@ -527,6 +570,27 @@ export function RentalPage() {
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-1">Kupon Diskon Vendor</label>
+                  <Input 
+                    placeholder="Contoh: SEWAOK"
+                    className="text-xs h-9" 
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 block mb-1">Catatan Rental/Kirim</label>
+                  <Input 
+                    placeholder="Catatan tambahan sewa"
+                    className="text-xs h-9" 
+                    value={checkoutNotes}
+                    onChange={(e) => setCheckoutNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+
               {selectedItem.damageTerms && (
                 <div className="text-[10px] text-red-700 bg-red-50 p-2.5 rounded-lg border border-red-100/50 leading-tight">
                   ⚠️ <b>Kebijakan Kerusakan/Kehilangan Vendor:</b>
@@ -535,13 +599,25 @@ export function RentalPage() {
               )}
 
               {(() => {
-                const basePricePerDay = parseInt(proposedPrice) || selectedItem.price;
+                const basePricePerDay = parseInt(proposedPrice) || Math.round(selectedItem.price * (1 - (selectedItem.discountPercentage || 0) / 100));
                 const days = startDate && endDate ? getDaysDiff(startDate, endDate) : 1;
                 const isDiscEnabled = selectedItem.groupDiscountEnabled;
-                const disc = isDiscEnabled ? (quantity >= 5 ? 30 : quantity >= 4 ? 20 : quantity >= 2 ? 10 : 0) : 0;
+                const groupDisc = isDiscEnabled ? (quantity >= 5 ? 30 : quantity >= 4 ? 20 : quantity >= 2 ? 10 : 0) : 0;
                 
-                const ratePerUnitPerDay = Math.round(basePricePerDay * (1 - disc / 100));
-                const subTotal = ratePerUnitPerDay * quantity * days;
+                const ratePerUnitPerDay = Math.round(basePricePerDay * (1 - groupDisc / 100));
+                let subTotal = ratePerUnitPerDay * quantity * days;
+                
+                // Coupon discount checking in preview
+                let couponDisc = 0;
+                if (couponInput.trim()) {
+                  const vendorObj = vendors.find(v => v.id === selectedItem.vendorId);
+                  if (vendorObj && vendorObj.couponCode && couponInput.trim().toUpperCase() === vendorObj.couponCode.toUpperCase()) {
+                    const deadline = vendorObj.couponDeadline ? new Date(vendorObj.couponDeadline) : null;
+                    if (!deadline || new Date() <= deadline) {
+                      couponDisc = vendorObj.couponDiscount || 0;
+                    }
+                  }
+                }
                 const deposit = 100000;
 
                 return (
@@ -550,10 +626,16 @@ export function RentalPage() {
                       <span>Subtotal Sewa ({quantity} Unit &times; {days} Hari):</span>
                       <span className="font-bold text-gray-700">Rp {subTotal.toLocaleString("id-ID")}</span>
                     </div>
-                    {isDiscEnabled && disc > 0 && (
+                    {isDiscEnabled && groupDisc > 0 && (
                       <div className="flex justify-between items-center text-emerald-700 font-semibold text-[11px]">
-                        <span>Diskon Rombongan ({disc}%):</span>
-                        <span>- Rp {Math.round(basePricePerDay * disc / 100 * quantity * days).toLocaleString("id-ID")}</span>
+                        <span>Diskon Rombongan ({groupDisc}%):</span>
+                        <span>- Rp {Math.round(basePricePerDay * groupDisc / 100 * quantity * days).toLocaleString("id-ID")}</span>
+                      </div>
+                    )}
+                    {couponDisc > 0 && (
+                      <div className="flex justify-between items-center text-amber-700 font-semibold text-[11px]">
+                        <span>Kupon Diskon Vendor:</span>
+                        <span>- Rp {couponDisc.toLocaleString("id-ID")}</span>
                       </div>
                     )}
                     <div className="flex justify-between items-center text-blue-700">
@@ -562,7 +644,7 @@ export function RentalPage() {
                     </div>
                     <div className="border-t border-emerald-200/50 pt-2 flex justify-between items-center text-sm font-extrabold text-emerald-800">
                       <span>Total Bayar (Simulasi):</span>
-                      <span>Rp {(subTotal + deposit).toLocaleString("id-ID")}</span>
+                      <span>Rp {Math.max(0, subTotal - couponDisc + deposit).toLocaleString("id-ID")}</span>
                     </div>
                   </div>
                 );
@@ -570,7 +652,7 @@ export function RentalPage() {
               
               <div className="flex gap-2.5 pt-2">
                 <Button variant="outline" className="flex-1 text-xs" onClick={() => setRentalModalOpen(false)}>Batal</Button>
-                <Button className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" onClick={handleConfirmRental}>Kirim Booking & Nego</Button>
+                <Button className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" onClick={handleConfirmRental}>Kirim Booking & Sewa</Button>
               </div>
             </div>
           </div>

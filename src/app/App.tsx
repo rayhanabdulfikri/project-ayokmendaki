@@ -9,6 +9,7 @@ import { TentangPage } from "./pages/TentangPage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { AdminLoginPage } from "./pages/AdminLoginPage";
 import { AppProvider } from "./context/AppContext";
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
           {/* Auth pages — no Navbar/Footer */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/admin" element={<AdminLoginPage />} />
 
           {/* Main pages — with Navbar/Footer */}
           <Route
@@ -45,4 +47,5 @@ export default function App() {
     </AppProvider>
   );
 }
+
 
