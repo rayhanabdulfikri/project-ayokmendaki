@@ -385,9 +385,17 @@ export function DashboardPage() {
     else if (!/^(\+62|0)[0-9]{8,12}$/.test(profileForm.phone.replace(/\s/g, "")))
       errs.phone = "Nomor telepon tidak valid.";
 
-    if (!profileForm.ktpNumber.trim()) errs.ktpNumber = "Nomor NIK KTP wajib diisi.";
-    else if (!/^[0-9]{16}$/.test(profileForm.ktpNumber.trim()))
-      errs.ktpNumber = "Nomor NIK KTP harus 16 digit.";
+    if (currentUser.role === "guide" || currentUser.role === "vendor") {
+      if (!profileForm.ktpNumber.trim()) {
+        errs.ktpNumber = "Nomor NIK KTP wajib diisi.";
+      } else if (!/^[0-9]{16}$/.test(profileForm.ktpNumber.trim())) {
+        errs.ktpNumber = "Nomor NIK KTP harus 16 digit.";
+      }
+    } else {
+      if (profileForm.ktpNumber.trim() && !/^[0-9]{16}$/.test(profileForm.ktpNumber.trim())) {
+        errs.ktpNumber = "Nomor NIK KTP harus 16 digit.";
+      }
+    }
 
     if (profileForm.password) {
       if (profileForm.password.length < 8) {

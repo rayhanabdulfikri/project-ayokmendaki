@@ -1190,7 +1190,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       user_name: reqData.userName,
       role: reqData.role,
       document_name: reqData.documentName,
-      document_image: reqData.documentImage,
+      document_image: reqData.documentImage || "https://images.unsplash.com/photo-1554774853-aae0a22c8aa4?w=400&q=80",
       status: "pending",
       ktp_number: reqData.ktpNumber || null,
       ktp_image: reqData.ktpPhoto || null,
