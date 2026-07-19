@@ -158,6 +158,16 @@ export interface UserWarning {
   date: string;
 }
 
+export interface AdminMessage {
+  id: string;
+  senderId: string | null;
+  recipientId: string | null;
+  title: string;
+  content: string;
+  createdAt: string;
+  isRead: boolean;
+}
+
 export interface RentalOrder {
   id: string;
   itemId: string;
@@ -288,6 +298,10 @@ interface AppContextType {
   vendorWallet: number;
   depositTransactions: DepositTransaction[];
   userWarnings: UserWarning[];
+  adminMessages: AdminMessage[];
+  sendAdminMessage: (recipientId: string | null, title: string, content: string) => Promise<void>;
+  deleteAdminMessage: (id: string) => Promise<void>;
+  markAdminMessageAsRead: (id: string) => Promise<void>;
   topUpWallet: (role: "pendaki" | "guide" | "vendor", amount: number) => void;
   withdrawWallet: (role: "pendaki" | "guide" | "vendor", amount: number, description?: string) => void;
   addWarning: (userId: string, text: string) => void;
@@ -345,6 +359,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [users, setUsers] = useState<User[]>([]);
   const [userActivities, setUserActivities] = useState<UserActivity[]>([]);
   const [userWarnings, setUserWarnings] = useState<UserWarning[]>([]);
+  const [adminMessages, setAdminMessages] = useState<AdminMessage[]>([]);
   const [collaborationProposals, setCollaborationProposals] = useState<CollaborationProposal[]>([]);
   const [depositTransactions, setDepositTransactions] = useState<DepositTransaction[]>([]);
   
@@ -832,6 +847,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               timestamp: a.timestamp ? new Date(a.timestamp).toISOString().replace("T", " ").substring(0, 16) : "",
             }))
           );
+        }
+
+        try {
+          const { data: adminMsgData, error: adminMsgErr } = await supabase
+            .from("admin_messages")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (adminMsgErr) {
+            console.warn("Table 'admin_messages' does not exist yet. Using empty initial state.");
+          } else if (adminMsgData) {
+            setAdminMessages(
+              adminMsgData.map((m: any) => ({
+                id: m.id,
+                senderId: m.sender_id,
+                recipientId: m.recipient_id,
+                title: m.title,
+                content: m.content,
+                createdAt: m.created_at ? new Date(m.created_at).toISOString().split("T")[0] : "",
+                isRead: m.is_read
+              }))
+            );
+          }
+        } catch (msgErr) {
+          console.warn("Failed to load admin messages:", msgErr);
         }
       } catch (err) {
         console.error("Error loading data from Supabase:", err);
@@ -1917,6 +1956,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
   };
 
+  const sendAdminMessage = async (recipientId: string | null, title: string, content: string) => {
+    const id = "msg_" + Math.random().toString(36).substring(2, 9);
+    const dateStr = new Date().toISOString().split("T")[0];
+    const newMsg: AdminMessage = {
+      id,
+      senderId: currentUser?.id || "admin1",
+      recipientId,
+      title,
+      content,
+      createdAt: dateStr,
+      isRead: false
+    };
+
+    setAdminMessages((prev) => [newMsg, ...prev]);
+
+    const { error } = await supabase.from("admin_messages").insert({
+      id,
+      sender_id: currentUser?.id || "admin1",
+      recipient_id: recipientId,
+      title,
+      content,
+      is_read: false
+    });
+
+    if (error) {
+      console.error("Failed to insert admin message in Supabase:", error.message);
+      toast.error(`Gagal mengirim pesan di database: ${error.message}`);
+    } else {
+      toast.success(recipientId ? "Pesan personal berhasil dikirim!" : "Pesan pengumuman (blast) berhasil dikirim!");
+    }
+  };
+
+  const deleteAdminMessage = async (id: string) => {
+    setAdminMessages((prev) => prev.filter((m) => m.id !== id));
+    
+    const { error } = await supabase.from("admin_messages").delete().eq("id", id);
+    if (error) {
+      console.error("Failed to delete admin message in Supabase:", error.message);
+      toast.error(`Gagal menghapus pesan di database: ${error.message}`);
+    } else {
+      toast.success("Pesan berhasil dihapus!");
+    }
+  };
+
+  const markAdminMessageAsRead = async (id: string) => {
+    setAdminMessages((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, isRead: true } : m))
+    );
+
+    const { error } = await supabase.from("admin_messages").update({ is_read: true }).eq("id", id);
+    if (error) {
+      console.error("Failed to update message read status in Supabase:", error.message);
+    }
+  };
+
   const addCollaborationProposal = (propData: Omit<CollaborationProposal, "id" | "status" | "createdAt">) => {
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
@@ -2317,6 +2411,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         userActivities,
         logUserActivity,
         ensureMockUserExists,
+        adminMessages,
+        sendAdminMessage,
+        deleteAdminMessage,
+        markAdminMessageAsRead,
       }}
     >
       {children}

@@ -34,7 +34,8 @@ import {
   Package,
   Wallet,
   User as UserIcon,
-  Loader2
+  Loader2,
+  Mail
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router";
@@ -129,7 +130,11 @@ export function DashboardPage() {
     updateUserStatus,
     toggleUserVerification,
     userActivities,
-    logUserActivity
+    logUserActivity,
+    adminMessages,
+    sendAdminMessage,
+    deleteAdminMessage,
+    markAdminMessageAsRead
   } = useApp();
 
   const location = useLocation();
@@ -188,6 +193,13 @@ export function DashboardPage() {
 
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [selectedUserForWarning, setSelectedUserForWarning] = useState<any>(null);
+  const [selectedAdminMessageForView, setSelectedAdminMessageForView] = useState<any>(null);
+  const [blastTargetType, setBlastTargetType] = useState<"all" | "individual">("all");
+  const [selectedInboxUserForBroadcast, setSelectedInboxUserForBroadcast] = useState<any>(null);
+  const [broadcastUserSearchQuery, setBroadcastUserSearchQuery] = useState("");
+  const [isBroadcastSearchDropdownOpen, setIsBroadcastSearchDropdownOpen] = useState(false);
+  const [broadcastTitle, setBroadcastTitle] = useState("");
+  const [broadcastContent, setBroadcastContent] = useState("");
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const [searchIdentitas, setSearchIdentitas] = useState("");
   const [searchKhusus, setSearchKhusus] = useState("");
@@ -1920,6 +1932,7 @@ export function DashboardPage() {
                   { id: "negos", label: "Negosiasi Harga", icon: <DollarSign className="size-4" /> },
                   { id: "deposit_wallet", label: "Deposit & Dompet", icon: <Wallet className="size-4" /> },
                   { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> },
+                  { id: "inbox", label: "Kotak Pesan", icon: <Mail className="size-4" /> },
                   { id: "profile", label: "Profil Saya", icon: <UserIcon className="size-4" /> }
                 ].map(t => (
                   <button
@@ -1933,6 +1946,11 @@ export function DashboardPage() {
                     <span>{t.label}</span>
                     {t.id === "negos" && negotiations.filter(n => n.senderName === currentUser.name && n.status === "countered").length > 0 && (
                       <span className="ml-auto bg-amber-500 text-white size-5 rounded-full flex items-center justify-center text-[10px] animate-pulse">!</span>
+                    )}
+                    {t.id === "inbox" && adminMessages.filter(m => (m.recipientId === currentUser.id || m.recipientId === null) && !m.isRead).length > 0 && (
+                      <span className="ml-auto bg-red-500 text-white size-5 rounded-full flex items-center justify-center text-[10px] font-bold animate-pulse">
+                        {adminMessages.filter(m => (m.recipientId === currentUser.id || m.recipientId === null) && !m.isRead).length}
+                      </span>
                     )}
                   </button>
                 ))}
@@ -1948,6 +1966,7 @@ export function DashboardPage() {
                   { id: "vendor_catalog", label: "Katalog Vendor & Kolaborasi", icon: <Building className="size-4" /> },
                   { id: "deposit_wallet", label: "Dompet Penghasilan", icon: <Wallet className="size-4" /> },
                   { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> },
+                  { id: "inbox", label: "Kotak Pesan", icon: <Mail className="size-4" /> },
                   { id: "profile", label: "Profil Saya", icon: <UserIcon className="size-4" /> }
                 ].map(t => (
                   <button
@@ -1962,6 +1981,11 @@ export function DashboardPage() {
                     {t.id === "bookings" && negotiations.filter(n => n.recipientId === currentUser.id && n.status === "pending").length > 0 && (
                       <span className="ml-auto bg-amber-500 text-white size-5 rounded-full flex items-center justify-center text-[10px] animate-pulse">
                         {negotiations.filter(n => n.recipientId === currentUser.id && n.status === "pending").length}
+                      </span>
+                    )}
+                    {t.id === "inbox" && adminMessages.filter(m => (m.recipientId === currentUser.id || m.recipientId === null) && !m.isRead).length > 0 && (
+                      <span className="ml-auto bg-red-500 text-white size-5 rounded-full flex items-center justify-center text-[10px] font-bold animate-pulse">
+                        {adminMessages.filter(m => (m.recipientId === currentUser.id || m.recipientId === null) && !m.isRead).length}
                       </span>
                     )}
                   </button>
@@ -1985,6 +2009,7 @@ export function DashboardPage() {
                   { id: "collaborations", label: "Kolaborasi Guide", icon: <Users className="size-4" /> },
                   { id: "deposit_wallet", label: "Dompet Penghasilan", icon: <Wallet className="size-4" /> },
                   { id: "chat", label: "In-App Chat", icon: <MessageSquare className="size-4" /> },
+                  { id: "inbox", label: "Kotak Pesan", icon: <Mail className="size-4" /> },
                   { id: "profile", label: "Profil Saya", icon: <UserIcon className="size-4" /> }
                 ].map(t => (
                   <button
@@ -1999,6 +2024,11 @@ export function DashboardPage() {
                     {t.id === "bookings" && negotiations.filter(n => n.recipientId === currentUser.id && n.status === "pending").length > 0 && (
                       <span className="ml-auto bg-amber-500 text-white size-5 rounded-full flex items-center justify-center text-[10px] animate-pulse">
                         {negotiations.filter(n => n.recipientId === currentUser.id && n.status === "pending").length}
+                      </span>
+                    )}
+                    {t.id === "inbox" && adminMessages.filter(m => (m.recipientId === currentUser.id || m.recipientId === null) && !m.isRead).length > 0 && (
+                      <span className="ml-auto bg-red-500 text-white size-5 rounded-full flex items-center justify-center text-[10px] font-bold animate-pulse">
+                        {adminMessages.filter(m => (m.recipientId === currentUser.id || m.recipientId === null) && !m.isRead).length}
                       </span>
                     )}
                   </button>
@@ -2023,6 +2053,7 @@ export function DashboardPage() {
                    { id: "disputes", label: "Penyelesaian Dispute", icon: <ShieldAlert className="size-4" /> },
                    { id: "manage_mountains", label: "Kontak Tiket Gunung", icon: <MountainIcon className="size-4" /> },
                    { id: "warnings", label: "Sanksi & Warning", icon: <AlertTriangle className="size-4" /> },
+                   { id: "broadcasts", label: "Pesan & Pengumuman", icon: <Mail className="size-4" /> },
                    { id: "reports", label: "Laporan Keuangan", icon: <TrendingUp className="size-4" /> },
                    { id: "profile", label: "Profil Saya", icon: <UserIcon className="size-4" /> }
                  ].map(t => (
@@ -4513,6 +4544,228 @@ export function DashboardPage() {
                   </Card>
                 )}
 
+                {/* Tab Pesan & Pengumuman Admin (Super Admin) */}
+                {activeTab === "broadcasts" && (
+                  <Card className="border border-gray-150 shadow-sm bg-white font-sans">
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Mail className="size-5 text-emerald-650" />
+                        Pesan & Pengumuman Admin (Blast)
+                      </CardTitle>
+                      <CardDescription className="text-xs text-gray-500">
+                        Kirim pesan pengumuman resmi ke seluruh pengguna platform sekaligus (blast) atau kirim pesan pribadi langsung ke satu pengguna spesifik.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        
+                        {/* Send Message Form */}
+                        <div className="space-y-4">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider block border-b border-gray-100 pb-2">Buat Pesan Baru</h3>
+                          
+                          <div className="space-y-2">
+                            <label className="text-xs font-bold text-gray-700 block">Metode Penerima</label>
+                            <div className="flex gap-4">
+                              <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer font-semibold">
+                                <input
+                                  type="radio"
+                                  name="broadcastTargetType"
+                                  checked={blastTargetType === "all"}
+                                  onChange={() => {
+                                    setBlastTargetType("all");
+                                    setSelectedInboxUserForBroadcast(null);
+                                    setBroadcastUserSearchQuery("");
+                                  }}
+                                  className="accent-emerald-600 size-4"
+                                />
+                                📢 Semua Pengguna (Blast)
+                              </label>
+                              <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer font-semibold">
+                                <input
+                                  type="radio"
+                                  name="broadcastTargetType"
+                                  checked={blastTargetType === "individual"}
+                                  onChange={() => setBlastTargetType("individual")}
+                                  className="accent-emerald-600 size-4"
+                                />
+                                👤 Pengguna Spesifik (Personal)
+                              </label>
+                            </div>
+                          </div>
+
+                          {blastTargetType === "individual" && (
+                            <div className="relative">
+                              <label className="text-xs font-semibold text-gray-700 block mb-1">Cari Target Pengguna</label>
+                              <div className="relative">
+                                <input
+                                  type="text"
+                                  placeholder="Ketik nama / email untuk mencari..."
+                                  value={broadcastUserSearchQuery}
+                                  onFocus={() => setIsBroadcastSearchDropdownOpen(true)}
+                                  onChange={(e) => {
+                                    setBroadcastUserSearchQuery(e.target.value);
+                                    setIsBroadcastSearchDropdownOpen(true);
+                                    if (selectedInboxUserForBroadcast && e.target.value !== selectedInboxUserForBroadcast.name) {
+                                      setSelectedInboxUserForBroadcast(null);
+                                    }
+                                  }}
+                                  className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 font-medium"
+                                />
+                                {selectedInboxUserForBroadcast && (
+                                  <span className="absolute right-3 top-2.5 text-[9px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-extrabold uppercase">
+                                    {selectedInboxUserForBroadcast.role}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Autocomplete Dropdown List */}
+                              {isBroadcastSearchDropdownOpen && broadcastUserSearchQuery.trim() !== "" && (
+                                <>
+                                  <div 
+                                    className="fixed inset-0 z-40 bg-transparent" 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setIsBroadcastSearchDropdownOpen(false);
+                                    }} 
+                                  />
+                                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-150 rounded-xl shadow-lg max-h-60 overflow-y-auto divide-y divide-gray-100 font-sans">
+                                    {users.filter(u =>
+                                      u.role !== "admin" && (
+                                        u.name.toLowerCase().includes(broadcastUserSearchQuery.toLowerCase()) ||
+                                        (u.email || "").toLowerCase().includes(broadcastUserSearchQuery.toLowerCase())
+                                      )
+                                    ).length === 0 ? (
+                                      <div className="p-3 text-xs text-gray-400 italic text-center">Tidak ada pengguna ditemukan.</div>
+                                    ) : (
+                                      users.filter(u =>
+                                        u.role !== "admin" && (
+                                          u.name.toLowerCase().includes(broadcastUserSearchQuery.toLowerCase()) ||
+                                          (u.email || "").toLowerCase().includes(broadcastUserSearchQuery.toLowerCase())
+                                        )
+                                      ).map(u => (
+                                        <button
+                                          key={u.id}
+                                          type="button"
+                                          onClick={() => {
+                                            setSelectedInboxUserForBroadcast(u);
+                                            setBroadcastUserSearchQuery(u.name);
+                                            setIsBroadcastSearchDropdownOpen(false);
+                                          }}
+                                          className="w-full text-left p-3 hover:bg-gray-50/50 flex justify-between items-center transition-colors border-none"
+                                        >
+                                          <div>
+                                            <p className="text-xs font-bold text-gray-800">{u.name}</p>
+                                            <p className="text-[10px] text-gray-450 font-normal">{u.email}</p>
+                                          </div>
+                                          <Badge className="bg-gray-100 text-gray-700 uppercase text-[8px] font-bold shrink-0">{u.role}</Badge>
+                                        </button>
+                                      ))
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-gray-700 block">Subjek / Judul Pesan</label>
+                            <Input
+                              type="text"
+                              placeholder="Masukkan subjek/judul pesan..."
+                              className="text-xs h-10"
+                              value={broadcastTitle}
+                              onChange={(e) => setBroadcastTitle(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-gray-700 block">Isi Pesan Lengkap</label>
+                            <textarea
+                              rows={5}
+                              placeholder="Ketik isi pesan atau pengumuman penting di sini secara lengkap..."
+                              className="w-full p-3 text-xs border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-emerald-500 font-sans"
+                              value={broadcastContent}
+                              onChange={(e) => setBroadcastContent(e.target.value)}
+                            />
+                          </div>
+
+                          <Button
+                            onClick={async () => {
+                              if (blastTargetType === "individual" && !selectedInboxUserForBroadcast) {
+                                toast.error("Penerima personal wajib dicari & dipilih dari rekomendasi.");
+                                return;
+                              }
+                              if (!broadcastTitle.trim() || !broadcastContent.trim()) {
+                                toast.error("Wajib mengisi judul dan isi pesan.");
+                                return;
+                              }
+                              await sendAdminMessage(
+                                blastTargetType === "individual" ? selectedInboxUserForBroadcast.id : null,
+                                broadcastTitle,
+                                broadcastContent
+                              );
+                              setBroadcastTitle("");
+                              setBroadcastContent("");
+                              setSelectedInboxUserForBroadcast(null);
+                              setBroadcastUserSearchQuery("");
+                            }}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl w-full h-10"
+                          >
+                            <Send className="size-4 mr-1.5" /> Kirim Pesan Sekarang
+                          </Button>
+                        </div>
+
+                        {/* Sent Messages History */}
+                        <div className="space-y-4">
+                          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider block border-b border-gray-100 pb-2">Riwayat Pengiriman</h3>
+                          <div className="border border-gray-150 rounded-xl overflow-hidden divide-y divide-gray-100 max-h-[460px] overflow-y-auto bg-gray-50/15">
+                            {adminMessages.length === 0 ? (
+                              <div className="p-8 text-center text-xs text-gray-400 italic">Belum ada riwayat pesan dikirim.</div>
+                            ) : (
+                              adminMessages.map(m => {
+                                const isBlast = m.recipientId === null;
+                                let recipientName = "Semua Pengguna (Blast)";
+                                if (!isBlast) {
+                                  const targetU = users.find(u => u.id === m.recipientId);
+                                  recipientName = targetU ? targetU.name : "Pengguna";
+                                }
+                                return (
+                                  <div key={m.id} className="p-3.5 space-y-2 hover:bg-gray-50/40 transition-colors bg-white">
+                                    <div className="flex justify-between items-start">
+                                      <div className="space-y-0.5">
+                                        <h4 className="text-xs font-bold text-gray-800 line-clamp-1">{m.title}</h4>
+                                        <p className="text-[10px] text-gray-450">Kepada: <b>{recipientName}</b></p>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        <Badge className={`text-[8px] uppercase tracking-wider font-extrabold h-5 ${isBlast ? "bg-emerald-50 text-emerald-750" : "bg-blue-50 text-blue-750"}`}>
+                                          {isBlast ? "Blast" : "Personal"}
+                                        </Badge>
+                                        <button
+                                          onClick={async () => {
+                                            if (confirm("Apakah Anda yakin ingin menghapus pesan ini?")) {
+                                              await deleteAdminMessage(m.id);
+                                            }
+                                          }}
+                                          className="p-1 hover:bg-red-50 rounded text-red-500 transition-colors"
+                                        >
+                                          <Trash2 className="size-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <p className="text-[11px] text-gray-500 line-clamp-2 leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                                    <p className="text-[9px] text-gray-405 text-right">{m.createdAt}</p>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* 4. Tab Reports & Analytical Charts (Recharts) */}
                 {activeTab === "reports" && (() => {
                   const completedBookingsPrice = bookings.filter((b) => b.status === "Selesai").reduce((a, c) => a + c.price, 0);
@@ -5260,6 +5513,76 @@ export function DashboardPage() {
                     )}
                   </div>
                 </div>
+              </Card>
+            )}
+
+            {/* User Inbox Tab (Kotak Pesan) */}
+            {activeTab === "inbox" && (
+              <Card className="border border-gray-150 shadow-sm font-sans bg-white">
+                <CardHeader className="border-b border-gray-100 bg-gray-50/30 py-5">
+                  <CardTitle className="text-lg flex items-center gap-2 font-bold text-gray-800">
+                    <Mail className="size-5 text-emerald-600 animate-pulse" />
+                    Kotak Pesan & Pengumuman
+                  </CardTitle>
+                  <CardDescription className="text-xs text-gray-500">
+                    Dapatkan informasi terbaru, info pemeliharaan sistem, dan pesan bantuan langsung dari tim Admin AyokMendaki.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-6">
+                  {adminMessages.filter(
+                    (m) => m.recipientId === currentUser.id || m.recipientId === null
+                  ).length === 0 ? (
+                    <div className="text-center py-12 text-gray-400 text-sm italic">
+                      Tidak ada pesan masuk atau pengumuman dari Admin saat ini.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100 border border-gray-150 rounded-xl overflow-hidden shadow-sm bg-white">
+                      {adminMessages
+                        .filter((m) => m.recipientId === currentUser.id || m.recipientId === null)
+                        .map((m) => {
+                          const isBlast = m.recipientId === null;
+                          return (
+                            <div
+                              key={m.id}
+                              onClick={async () => {
+                                setSelectedAdminMessageForView(m);
+                                if (!m.isRead) {
+                                  await markAdminMessageAsRead(m.id);
+                                }
+                              }}
+                              className={`p-4 cursor-pointer hover:bg-emerald-50/5 transition-colors flex justify-between items-start gap-4 ${
+                                !m.isRead ? "bg-emerald-50/20 font-medium" : "bg-white"
+                              }`}
+                            >
+                              <div className="space-y-1.5 flex-1">
+                                <div className="flex items-center gap-2">
+                                  {!m.isRead && (
+                                    <span className="size-2 rounded-full bg-emerald-600 shrink-0" />
+                                  )}
+                                  <h4 className={`text-sm ${!m.isRead ? "font-bold text-gray-900" : "text-gray-800"}`}>
+                                    {m.title}
+                                  </h4>
+                                  {isBlast ? (
+                                    <Badge className="bg-emerald-100 text-emerald-700 font-extrabold text-[8px] uppercase tracking-wider h-5">
+                                      PENGUMUMAN
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="bg-blue-100 text-blue-700 font-extrabold text-[8px] uppercase tracking-wider h-5">
+                                      PERSONAL
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">{m.content}</p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="text-[10px] text-gray-400">{m.createdAt}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </CardContent>
               </Card>
             )}
 
@@ -6672,6 +6995,52 @@ export function DashboardPage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Modal View Admin Message */}
+      {selectedAdminMessageForView && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 font-sans animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg border border-gray-150 overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-5 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Mail className="size-5 text-emerald-600 animate-pulse" />
+                <span className="font-bold text-sm text-gray-850">Detail Pesan Masuk</span>
+              </div>
+              <button
+                onClick={() => setSelectedAdminMessageForView(null)}
+                className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <X className="size-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-extrabold text-gray-900">{selectedAdminMessageForView.title}</h3>
+                  {selectedAdminMessageForView.recipientId === null ? (
+                    <Badge className="bg-emerald-100 text-emerald-700 text-[8px] font-extrabold">PENGUMUMAN (ALL)</Badge>
+                  ) : (
+                    <Badge className="bg-blue-100 text-blue-700 text-[8px] font-extrabold">PESAN PRIBADI</Badge>
+                  )}
+                </div>
+                <div className="text-[10px] text-gray-400">
+                  Dikirim pada: <b>{selectedAdminMessageForView.createdAt}</b> · Pengirim: <b>Super Admin</b>
+                </div>
+              </div>
+              
+              <div className="p-4 rounded-xl bg-gray-50 text-xs text-gray-700 leading-relaxed border border-gray-100 whitespace-pre-wrap font-medium">
+                {selectedAdminMessageForView.content}
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-100 bg-gray-50/50 flex justify-end">
+              <Button
+                onClick={() => setSelectedAdminMessageForView(null)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl"
+              >
+                Tutup Pesan
+              </Button>
+            </div>
           </div>
         </div>
       )}
