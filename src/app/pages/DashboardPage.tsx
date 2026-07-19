@@ -3652,7 +3652,7 @@ export function DashboardPage() {
                                         </Button>
 
                                         {/* Verification Toggle Button */}
-                                        {(u.role === "guide" || u.role === "vendor") && (
+                                        {(u.role === "guide" || u.role === "vendor" || u.role === "pendaki") && (
                                           <Button
                                             size="sm"
                                             variant="outline"
