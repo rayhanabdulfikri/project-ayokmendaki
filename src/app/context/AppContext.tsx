@@ -879,7 +879,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadData();
   }, []);
 
-  // Realtime subscription and 5-second polling fallback for admin_messages and user_warnings
+  // Realtime subscription and 5-second polling fallback for messages, warnings, catalog, rentals, and collaborations
   useEffect(() => {
     const fetchMsgs = async () => {
       try {
@@ -926,14 +926,112 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
+    const fetchEquipment = async () => {
+      try {
+        const { data: eqData } = await supabase.from("equipment_items").select("*");
+        const { data: uData } = await supabase.from("users").select("*");
+        if (eqData && uData) {
+          setEquipment(
+            eqData.map((eq: any) => {
+              const user = uData.find((u: any) => u.id === eq.vendor_id);
+              return {
+                id: eq.id,
+                name: eq.name,
+                description: eq.description,
+                price: Number(eq.price),
+                vendorId: eq.vendor_id,
+                vendorName: user?.name || "Vendor Name",
+                rating: Number(eq.rating),
+                available: eq.available,
+                category: eq.category,
+                groupDiscountEnabled: eq.group_discount_enabled || false,
+                damageTerms: eq.damage_terms,
+                discountPercentage: Number(eq.discount_percentage || 0)
+              };
+            })
+          );
+        }
+      } catch (err) {
+        console.warn("Error fetching equipment items:", err);
+      }
+    };
+
+    const fetchRentals = async () => {
+      try {
+        const { data: rentalsData } = await supabase.from("rental_orders").select("*");
+        const { data: eqData } = await supabase.from("equipment_items").select("*");
+        const { data: uData } = await supabase.from("users").select("*");
+        if (rentalsData && eqData && uData) {
+          setRentalOrders(
+            rentalsData.map((r: any) => {
+              const eqItem = eqData.find((eq: any) => eq.id === r.item_id);
+              const vendorUser = uData.find((u: any) => u.id === r.vendor_id);
+              const pendakiUser = uData.find((u: any) => u.id === r.pendaki_id);
+              return {
+                id: r.id,
+                itemId: r.item_id,
+                itemName: eqItem?.name || "Equipment Item",
+                vendorId: r.vendor_id,
+                vendorName: vendorUser?.name || "Vendor Name",
+                pendakiId: r.pendaki_id,
+                pendakiName: pendakiUser?.name || "Pendaki Name",
+                qty: r.qty,
+                startDate: r.start_date,
+                endDate: r.end_date,
+                totalPrice: Number(r.total_price),
+                status: r.status,
+                disputeNotes: r.dispute_notes,
+                depositAmount: Number(r.deposit_amount),
+                depositStatus: r.deposit_status,
+                fineAmount: Number(r.fine_amount),
+                fineNotes: r.fine_notes,
+                pendakiConfirmed: r.pendaki_confirmed,
+                partnerConfirmed: r.partner_confirmed,
+                notes: r.notes || ""
+              };
+            })
+          );
+        }
+      } catch (err) {
+        console.warn("Error fetching rental orders:", err);
+      }
+    };
+
+    const fetchProposals = async () => {
+      try {
+        const { data: propData } = await supabase.from("collaboration_proposals").select("*");
+        if (propData) {
+          setCollaborationProposals(
+            propData.map((p: any) => ({
+              id: p.id,
+              title: p.title,
+              guideId: p.guide_id,
+              guideName: p.guide_name,
+              vendorId: p.vendor_id,
+              vendorName: p.vendor_name,
+              description: p.description,
+              duration: p.duration,
+              price: Number(p.price),
+              targetMountain: p.target_mountain,
+              rentalMechanism: p.rental_mechanism,
+              bundledEquipmentIds: p.bundled_equipment_ids || [],
+              status: p.status,
+              senderId: p.sender_id,
+              createdAt: p.created_at ? new Date(p.created_at).toISOString().split("T")[0] : ""
+            }))
+          );
+        }
+      } catch (err) {
+        console.warn("Error fetching collaboration proposals:", err);
+      }
+    };
+
     const msgChannel = supabase
       .channel("realtime-admin-messages")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "admin_messages" },
-        () => {
-          fetchMsgs();
-        }
+        () => { fetchMsgs(); }
       )
       .subscribe();
 
@@ -942,20 +1040,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "user_warnings" },
-        () => {
-          fetchWarnings();
-        }
+        () => { fetchWarnings(); }
+      )
+      .subscribe();
+
+    const eqChannel = supabase
+      .channel("realtime-equipment-items")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "equipment_items" },
+        () => { fetchEquipment(); }
+      )
+      .subscribe();
+
+    const rentChannel = supabase
+      .channel("realtime-rental-orders")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "rental_orders" },
+        () => { fetchRentals(); }
+      )
+      .subscribe();
+
+    const propChannel = supabase
+      .channel("realtime-collaboration-proposals")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "collaboration_proposals" },
+        () => { fetchProposals(); }
       )
       .subscribe();
 
     const msgInterval = setInterval(fetchMsgs, 5000);
     const warnInterval = setInterval(fetchWarnings, 5000);
+    const eqInterval = setInterval(fetchEquipment, 5000);
+    const rentInterval = setInterval(fetchRentals, 5000);
+    const propInterval = setInterval(fetchProposals, 5000);
 
     return () => {
       supabase.removeChannel(msgChannel);
       supabase.removeChannel(warnChannel);
+      supabase.removeChannel(eqChannel);
+      supabase.removeChannel(rentChannel);
+      supabase.removeChannel(propChannel);
       clearInterval(msgInterval);
       clearInterval(warnInterval);
+      clearInterval(eqInterval);
+      clearInterval(rentInterval);
+      clearInterval(propInterval);
     };
   }, []);
 

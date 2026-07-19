@@ -3332,7 +3332,7 @@ export function DashboardPage() {
                                     {g.name}
                                     <Badge className="bg-emerald-100 text-emerald-800 text-[9px]">⭐ {g.rating}</Badge>
                                   </h4>
-                                  <p className="text-xs text-gray-500 mt-1">Spesialis Gunung: <b>{g.specialties.join(", ")}</b></p>
+                                  <p className="text-xs text-gray-500 mt-1">Spesialis Gunung: <b>{(g.specialtyMountains || []).join(", ")}</b></p>
                                   <p className="text-xs text-emerald-700 font-bold mt-0.5">Tarif Pemandu: Rp {g.price.toLocaleString("id-ID")}/hari &middot; Pengalaman: {g.experience}</p>
                                 </div>
                                 <div className="flex gap-2 w-full sm:w-auto">
