@@ -359,6 +359,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         let currentUsersList = usersData || [];
         if (usersData) setUsers(usersData);
 
+        // 1. Check if cached user in localStorage is suspended
+        const cachedUserStr = localStorage.getItem("currentUser");
+        if (cachedUserStr) {
+          const cachedUser = JSON.parse(cachedUserStr);
+          const freshUser = currentUsersList.find((u: any) => u.id === cachedUser.id);
+          if (freshUser && freshUser.status === "suspended") {
+            setCurrentUserState(null);
+            localStorage.removeItem("currentUser");
+            await supabase.auth.signOut();
+            toast.error("Akun Anda telah ditangguhkan oleh Admin.");
+            if (window.location.pathname.includes("/dashboard") || window.location.pathname.includes("/admin")) {
+              window.location.href = "/login";
+            }
+            return;
+          }
+        }
+
         // Check active Supabase Auth session
         const { data: { session } } = await supabase.auth.getSession();
         if (session && session.user) {
@@ -367,6 +384,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           // Find user in public.users
           let matchedUser = currentUsersList.find((u: any) => u.id === userId || u.email?.toLowerCase() === email);
+
+          if (matchedUser && matchedUser.status === "suspended") {
+            setCurrentUserState(null);
+            localStorage.removeItem("currentUser");
+            await supabase.auth.signOut();
+            toast.error("Akun Anda telah ditangguhkan oleh Admin.");
+            if (window.location.pathname.includes("/dashboard") || window.location.pathname.includes("/admin")) {
+              window.location.href = "/login";
+            }
+            return;
+          }
 
           if (!matchedUser) {
             // Check if there is a pending registration in localStorage
