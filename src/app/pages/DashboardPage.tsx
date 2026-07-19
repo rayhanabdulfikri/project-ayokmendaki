@@ -1466,19 +1466,30 @@ export function DashboardPage() {
   };
 
   if (!currentUser) {
+    const wasSuspended = localStorage.getItem("isSuspendedKicked") === "true";
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full text-center shadow-xl p-8 border border-gray-150">
-          <ShieldAlert className="size-16 text-amber-500 mx-auto mb-4 animate-bounce" />
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Akses Terbatas</h2>
-          <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-            Anda belum masuk ke akun pendaki, guide, vendor, atau admin. Silakan masuk terlebih dahulu atau gunakan Demo Role Switcher di pojok kanan bawah.
+        <Card className="max-w-md w-full text-center shadow-xl p-8 border border-gray-150 font-sans bg-white">
+          <ShieldAlert className={`size-16 mx-auto mb-4 animate-bounce ${wasSuspended ? "text-red-500" : "text-amber-500"}`} />
+          <h2 className="text-xl font-bold text-gray-800 mb-2">
+            {wasSuspended ? "Akun Ditangguhkan" : "Akses Terbatas"}
+          </h2>
+          <p className="text-sm text-gray-550 mb-6 leading-relaxed">
+            {wasSuspended 
+              ? "Akun Anda ditangguhkan. Silakan hubungi email admin@ayokmendaki.com."
+              : "Anda belum masuk ke akun pendaki, guide, vendor, atau admin. Silakan masuk terlebih dahulu atau gunakan Demo Role Switcher di pojok kanan bawah."}
           </p>
           <div className="flex gap-3">
-            <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={() => navigate("/login")}>
-              Masuk Akun
+            <Button className={`flex-1 ${wasSuspended ? "bg-red-600 hover:bg-red-700" : "bg-emerald-600 hover:bg-emerald-700"} text-white font-semibold text-xs`} onClick={() => {
+              localStorage.removeItem("isSuspendedKicked");
+              navigate("/login");
+            }}>
+              {wasSuspended ? "Kembali ke Login" : "Masuk Akun"}
             </Button>
-            <Button variant="outline" className="flex-1" onClick={() => navigate("/")}>
+            <Button variant="outline" className="flex-1 text-xs font-semibold" onClick={() => {
+              localStorage.removeItem("isSuspendedKicked");
+              navigate("/");
+            }}>
               Ke Beranda
             </Button>
           </div>

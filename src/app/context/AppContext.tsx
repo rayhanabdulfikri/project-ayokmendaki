@@ -368,6 +368,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (freshUser && freshUser.status === "suspended") {
             setCurrentUserState(null);
             localStorage.removeItem("currentUser");
+            localStorage.setItem("isSuspendedKicked", "true");
             await supabase.auth.signOut();
             toast.error("Akun Anda ditangguhkan. Silakan hubungi email admin@ayokmendaki.com");
             if (window.location.pathname.includes("/dashboard") || window.location.pathname.includes("/admin")) {
@@ -389,6 +390,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (matchedUser && matchedUser.status === "suspended") {
             setCurrentUserState(null);
             localStorage.removeItem("currentUser");
+            localStorage.setItem("isSuspendedKicked", "true");
             await supabase.auth.signOut();
             toast.error("Akun Anda ditangguhkan. Silakan hubungi email admin@ayokmendaki.com");
             if (window.location.pathname.includes("/dashboard") || window.location.pathname.includes("/admin")) {
