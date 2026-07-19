@@ -185,6 +185,8 @@ export function DashboardPage() {
     bank_holder: ""
   });
 
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+
   const [manualUserModalOpen, setManualUserModalOpen] = useState(false);
   const [manualUserForm, setManualUserForm] = useState({
     name: "",
@@ -4204,10 +4206,20 @@ export function DashboardPage() {
                         addWarning(targetUser, warnText);
                         toast.success("Surat peringatan berhasil dikirim!");
                         e.currentTarget.reset();
+                        setUserSearchQuery(""); // reset search
                       }} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="text-xs font-semibold text-gray-700 block mb-1">Target Pengguna</label>
+                            <div className="flex justify-between items-center mb-1">
+                              <label className="text-xs font-semibold text-gray-700 block">Target Pengguna</label>
+                              <input
+                                type="text"
+                                placeholder="Cari nama / email..."
+                                value={userSearchQuery}
+                                onChange={(e) => setUserSearchQuery(e.target.value)}
+                                className="p-1 px-2 text-[10px] border border-gray-200 rounded focus:outline-emerald-500 w-44 bg-gray-50 focus:bg-white"
+                              />
+                            </div>
                             <select
                               name="targetUser"
                               value={prefilledWarningUserId}
@@ -4216,17 +4228,26 @@ export function DashboardPage() {
                             >
                               <option value="">-- Pilih Pengguna --</option>
                               <optgroup label="Pendaki">
-                                {users.filter(u => u.role === "pendaki").map(u => (
+                                {users.filter(u => u.role === "pendaki" && (
+                                  u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                                  (u.email || "").toLowerCase().includes(userSearchQuery.toLowerCase())
+                                )).map(u => (
                                   <option key={u.id} value={u.id}>{u.name} (Pendaki)</option>
                                 ))}
                               </optgroup>
                               <optgroup label="Guides">
-                                {users.filter(u => u.role === "guide").map(u => (
+                                {users.filter(u => u.role === "guide" && (
+                                  u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                                  (u.email || "").toLowerCase().includes(userSearchQuery.toLowerCase())
+                                )).map(u => (
                                   <option key={u.id} value={u.id}>{u.name} (Guide)</option>
                                 ))}
                               </optgroup>
                               <optgroup label="Vendors">
-                                {users.filter(u => u.role === "vendor").map(u => (
+                                {users.filter(u => u.role === "vendor" && (
+                                  u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                                  (u.email || "").toLowerCase().includes(userSearchQuery.toLowerCase())
+                                )).map(u => (
                                   <option key={u.id} value={u.id}>{u.name} (Vendor)</option>
                                 ))}
                               </optgroup>
