@@ -1857,12 +1857,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     
     let uName = "Pengguna";
-    if (userId === "pendaki1") uName = "Zaki Firdaus";
-    else if (userId === "guide1") uName = "Ahmad Hidayat";
-    else if (userId === "vendor1") uName = "Outdoor Adventure Store";
-    else {
-      const g = guides.find((x) => x.id === userId);
-      if (g) uName = g.name;
+    const matchedUser = users.find((x) => x.id === userId);
+    if (matchedUser) {
+      uName = matchedUser.name;
+    } else if (userId === "pendaki1") {
+      uName = "Zaki Firdaus";
+    } else if (userId === "guide1") {
+      uName = "Ahmad Hidayat";
+    } else if (userId === "vendor1") {
+      uName = "Outdoor Adventure Store";
     }
 
     const newWarning: UserWarning = {
@@ -1879,12 +1882,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       user_id: userId,
       user_name: uName,
       text
+    }).then(({ error }) => {
+      if (error) {
+        console.error("Failed to insert warning:", error.message);
+        toast.error(`Gagal menyimpan sanksi di database: ${error.message}`);
+      }
     });
   };
 
   const removeWarning = (id: string) => {
     setUserWarnings((prev) => prev.filter((w) => w.id !== id));
-    supabase.from("user_warnings").delete().eq("id", id);
+    supabase.from("user_warnings")
+      .delete()
+      .eq("id", id)
+      .then(({ error }) => {
+        if (error) {
+          console.error("Failed to delete warning:", error.message);
+          toast.error(`Gagal mencabut sanksi di database: ${error.message}`);
+        }
+      });
   };
 
   const addCollaborationProposal = (propData: Omit<CollaborationProposal, "id" | "status" | "createdAt">) => {

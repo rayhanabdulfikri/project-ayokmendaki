@@ -4403,9 +4403,6 @@ export function DashboardPage() {
                                 placeholder="Ketik nama / email untuk mencari..."
                                 value={userSearchQuery}
                                 onFocus={() => setIsSearchDropdownOpen(true)}
-                                onBlur={() => {
-                                  setTimeout(() => setIsSearchDropdownOpen(false), 200);
-                                }}
                                 onChange={(e) => {
                                   setUserSearchQuery(e.target.value);
                                   setIsSearchDropdownOpen(true);
@@ -4424,7 +4421,16 @@ export function DashboardPage() {
 
                             {/* Autocomplete Dropdown List */}
                             {isSearchDropdownOpen && userSearchQuery.trim() !== "" && (
-                              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-150 rounded-xl shadow-lg max-h-60 overflow-y-auto divide-y divide-gray-100 font-sans">
+                              <>
+                                {/* Click-away overlay */}
+                                <div 
+                                  className="fixed inset-0 z-40 bg-transparent" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsSearchDropdownOpen(false);
+                                  }} 
+                                />
+                                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-150 rounded-xl shadow-lg max-h-60 overflow-y-auto divide-y divide-gray-100 font-sans">
                                 {users.filter(u =>
                                   u.role !== "admin" && (
                                     u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
@@ -4458,6 +4464,7 @@ export function DashboardPage() {
                                   ))
                                 )}
                               </div>
+                              </>
                             )}
                           </div>
                           <div>
