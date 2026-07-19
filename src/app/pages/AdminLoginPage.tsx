@@ -16,25 +16,30 @@ export function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
-  const { setCurrentUser } = useApp();
+  const { setCurrentUser, ensureMockUserExists } = useApp();
 
-  const handleQuickAdminLogin = () => {
+  const handleQuickAdminLogin = async () => {
     setLoading(true);
     const adminUser: User = {
-      id: "admin1",
-      name: "Super Admin",
-      email: "admin@ayokmendaki.com",
+      id: "demoadmin",
+      name: "Superadmin Demo",
+      email: "admin@demo.com",
       role: "admin",
       phone: "08567890123",
       verified: true,
       avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=admin"
     };
-    setTimeout(() => {
+    try {
+      await ensureMockUserExists(adminUser);
       setCurrentUser(adminUser);
-      setLoading(false);
       toast.success("Selamat datang di Konsol Super Admin!");
       navigate("/dashboard");
-    }, 800);
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Gagal Quick Login: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {

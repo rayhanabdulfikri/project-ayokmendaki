@@ -879,6 +879,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadData();
   }, []);
 
+  // Realtime subscription and 5-second polling fallback for admin_messages and user_warnings
+  useEffect(() => {
+    const fetchMsgs = async () => {
+      try {
+        const { data: adminMsgData } = await supabase
+          .from("admin_messages")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (adminMsgData) {
+          setAdminMessages(
+            adminMsgData.map((m: any) => ({
+              id: m.id,
+              senderId: m.sender_id,
+              recipientId: m.recipient_id,
+              title: m.title,
+              content: m.content,
+              createdAt: m.created_at ? new Date(m.created_at).toISOString().split("T")[0] : "",
+              isRead: m.is_read
+            }))
+          );
+        }
+      } catch (err) {
+        console.warn("Error fetching admin messages:", err);
+      }
+    };
+
+    const fetchWarnings = async () => {
+      try {
+        const { data: warnData } = await supabase
+          .from("user_warnings")
+          .select("*");
+        if (warnData) {
+          setUserWarnings(
+            warnData.map((w: any) => ({
+              id: w.id,
+              userId: w.user_id,
+              userName: w.user_name,
+              text: w.text,
+              date: w.created_at ? new Date(w.created_at).toISOString().split("T")[0] : "",
+            }))
+          );
+        }
+      } catch (err) {
+        console.warn("Error fetching user warnings:", err);
+      }
+    };
+
+    const msgChannel = supabase
+      .channel("realtime-admin-messages")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "admin_messages" },
+        () => {
+          fetchMsgs();
+        }
+      )
+      .subscribe();
+
+    const warnChannel = supabase
+      .channel("realtime-user-warnings")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "user_warnings" },
+        () => {
+          fetchWarnings();
+        }
+      )
+      .subscribe();
+
+    const msgInterval = setInterval(fetchMsgs, 5000);
+    const warnInterval = setInterval(fetchWarnings, 5000);
+
+    return () => {
+      supabase.removeChannel(msgChannel);
+      supabase.removeChannel(warnChannel);
+      clearInterval(msgInterval);
+      clearInterval(warnInterval);
+    };
+  }, []);
+
   // Fetch wallets on currentUser change
   useEffect(() => {
     if (!currentUser) return;
