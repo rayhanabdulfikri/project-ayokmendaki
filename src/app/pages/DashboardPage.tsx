@@ -472,6 +472,7 @@ export function DashboardPage() {
           ktp_number: profileForm.ktpNumber,
           ktp_image: profileForm.ktpPhotoUrl,
           selfie_image: profileForm.selfiePhotoUrl,
+          avatar: profileForm.selfiePhotoUrl || currentUser.avatar, // Gunakan foto selfie sebagai avatar
           verified: nextVerified,
           name: updatedName,
           bank_name: profileForm.bank_name || null,
@@ -559,6 +560,7 @@ export function DashboardPage() {
         ktp_number: profileForm.ktpNumber,
         ktp_image: profileForm.ktpPhotoUrl,
         selfie_image: profileForm.selfiePhotoUrl,
+        avatar: profileForm.selfiePhotoUrl || currentUser.avatar, // Gunakan foto selfie sebagai avatar
         verified: nextVerified,
         name: updatedName,
         bank_name: profileForm.bank_name || undefined,
