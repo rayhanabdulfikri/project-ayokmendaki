@@ -70,7 +70,7 @@ export function LoginPage() {
             return;
           }
           if (matchedUser.status === "suspended") {
-            setError("Akun Anda ditangguhkan. Silakan hubungi admin.");
+            setError("Akun Anda ditangguhkan. Silakan hubungi email admin@ayokmendaki.com");
             setLoading(false);
             return;
           }

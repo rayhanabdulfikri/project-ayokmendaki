@@ -368,7 +368,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setCurrentUserState(null);
             localStorage.removeItem("currentUser");
             await supabase.auth.signOut();
-            toast.error("Akun Anda telah ditangguhkan oleh Admin.");
+            toast.error("Akun Anda ditangguhkan. Silakan hubungi email admin@ayokmendaki.com");
             if (window.location.pathname.includes("/dashboard") || window.location.pathname.includes("/admin")) {
               window.location.href = "/login";
             }
@@ -389,7 +389,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setCurrentUserState(null);
             localStorage.removeItem("currentUser");
             await supabase.auth.signOut();
-            toast.error("Akun Anda telah ditangguhkan oleh Admin.");
+            toast.error("Akun Anda ditangguhkan. Silakan hubungi email admin@ayokmendaki.com");
             if (window.location.pathname.includes("/dashboard") || window.location.pathname.includes("/admin")) {
               window.location.href = "/login";
             }
@@ -1961,7 +1961,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       logUserActivity("admin1", "Super Admin", "admin", `Mengubah status akun ${u.name} (${u.role.toUpperCase()}) menjadi ${status === "active" ? "Aktif" : "Suspended"}`);
     }
 
-    supabase.from("users").update({ status }).eq("id", id);
+    supabase.from("users")
+      .update({ status })
+      .eq("id", id)
+      .then(({ error }) => {
+        if (error) {
+          console.error("Failed to update user status in Supabase:", error.message);
+          toast.error(`Gagal memperbarui status di database: ${error.message}`);
+        }
+      });
   };
 
   const toggleUserVerification = async (id: string) => {
