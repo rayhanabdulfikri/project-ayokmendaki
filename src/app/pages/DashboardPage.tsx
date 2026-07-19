@@ -33,7 +33,8 @@ import {
   Award,
   Package,
   Wallet,
-  User as UserIcon
+  User as UserIcon,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router";
@@ -172,6 +173,9 @@ export function DashboardPage() {
   const [isUploadingKtp, setIsUploadingKtp] = useState(false);
   const [isUploadingSelfie, setIsUploadingSelfie] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [ktpUploadError, setKtpUploadError] = useState(false);
+  const [selfieUploadError, setSelfieUploadError] = useState(false);
+  const [docUploadError, setDocUploadError] = useState(false);
   const [isProcessingWd, setIsProcessingWd] = useState(false);
 
   const [isEditingBank, setIsEditingBank] = useState(false);
@@ -253,9 +257,16 @@ export function DashboardPage() {
   // File Upload Handlers (Google Drive API via Supabase Edge Function)
   const handleFileUpload = async (file: File, type: "ktp" | "selfie" | "doc") => {
     if (!currentUser) return;
-    if (type === "ktp") setIsUploadingKtp(true);
-    else if (type === "selfie") setIsUploadingSelfie(true);
-    else if (type === "doc") setIsUploadingDoc(true);
+    if (type === "ktp") {
+      setIsUploadingKtp(true);
+      setKtpUploadError(false);
+    } else if (type === "selfie") {
+      setIsUploadingSelfie(true);
+      setSelfieUploadError(false);
+    } else if (type === "doc") {
+      setIsUploadingDoc(true);
+      setDocUploadError(false);
+    }
 
     try {
       const formData = new FormData();
@@ -287,6 +298,9 @@ export function DashboardPage() {
     } catch (err: any) {
       console.error("Upload error:", err);
       toast.error(`Gagal mengunggah berkas: ${err.message}`);
+      if (type === "ktp") setKtpUploadError(true);
+      else if (type === "selfie") setSelfieUploadError(true);
+      else if (type === "doc") setDocUploadError(true);
     } finally {
       if (type === "ktp") setIsUploadingKtp(false);
       else if (type === "selfie") setIsUploadingSelfie(false);
@@ -1533,13 +1547,41 @@ export function DashboardPage() {
                     />
                     <div 
                       onClick={() => document.getElementById("ktp-upload")?.click()}
-                      className="border border-dashed border-emerald-300 rounded-lg p-2.5 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors"
+                      className={`border border-dashed rounded-lg p-2.5 text-center cursor-pointer transition-all ${
+                        isUploadingKtp 
+                          ? "border-amber-300 bg-amber-50/10 text-amber-800" 
+                          : ktpUploadError
+                          ? "border-red-300 bg-red-50/10 text-red-800"
+                          : profileForm.ktpPhotoUrl
+                          ? "border-emerald-500 bg-emerald-50/20 text-emerald-900"
+                          : "border-emerald-300 bg-white hover:bg-emerald-50/20 text-emerald-700"
+                      }`}
                     >
-                      <Award className="size-5 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-[10px] text-emerald-700 font-semibold">
-                        {isUploadingKtp ? "Mengunggah..." : profileForm.ktpPhotoName || "Pilih foto KTP"}
-                      </p>
-                      <p className="text-[8px] text-gray-400">Format JPG/PNG, klik untuk unggah</p>
+                      {isUploadingKtp ? (
+                        <>
+                          <Loader2 className="size-5 text-amber-600 mx-auto mb-1 animate-spin" />
+                          <p className="text-[10px] font-bold text-amber-700">Diproses...</p>
+                          <p className="text-[8px] text-amber-600/70">Sedang mengunggah berkas ke Google Drive...</p>
+                        </>
+                      ) : ktpUploadError ? (
+                        <>
+                          <AlertTriangle className="size-5 text-red-650 mx-auto mb-1 animate-bounce" />
+                          <p className="text-[10px] font-bold text-red-700">Gagal Mengunggah</p>
+                          <p className="text-[8px] text-red-600/75">Klik untuk mencoba kembali</p>
+                        </>
+                      ) : profileForm.ktpPhotoUrl ? (
+                        <>
+                          <CheckCircle2 className="size-5 text-emerald-600 mx-auto mb-1" />
+                          <p className="text-[10px] font-bold text-emerald-800">Selesai</p>
+                          <p className="text-[8px] text-emerald-600 font-medium truncate max-w-full px-1">{profileForm.ktpPhotoName || "KTP Berhasil Diunggah"}</p>
+                        </>
+                      ) : (
+                        <>
+                          <Award className="size-5 text-emerald-600 mx-auto mb-1" />
+                          <p className="text-[10px] font-semibold">Pilih foto KTP</p>
+                          <p className="text-[8px] text-gray-400">Format JPG/PNG, klik untuk unggah</p>
+                        </>
+                      )}
                     </div>
                   </div>
                   <div className="space-y-1">
@@ -1556,13 +1598,41 @@ export function DashboardPage() {
                     />
                     <div 
                       onClick={() => document.getElementById("selfie-upload")?.click()}
-                      className="border border-dashed border-emerald-300 rounded-lg p-2.5 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors"
+                      className={`border border-dashed rounded-lg p-2.5 text-center cursor-pointer transition-all ${
+                        isUploadingSelfie 
+                          ? "border-amber-300 bg-amber-50/10 text-amber-800" 
+                          : selfieUploadError
+                          ? "border-red-300 bg-red-50/10 text-red-800"
+                          : profileForm.selfiePhotoUrl
+                          ? "border-emerald-500 bg-emerald-50/20 text-emerald-900"
+                          : "border-emerald-300 bg-white hover:bg-emerald-50/20 text-emerald-700"
+                      }`}
                     >
-                      <Award className="size-5 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-[10px] text-emerald-700 font-semibold">
-                        {isUploadingSelfie ? "Mengunggah..." : profileForm.selfiePhotoName || "Pilih foto selfie"}
-                      </p>
-                      <p className="text-[8px] text-gray-400">Foto wajah verified, klik untuk unggah</p>
+                      {isUploadingSelfie ? (
+                        <>
+                          <Loader2 className="size-5 text-amber-600 mx-auto mb-1 animate-spin" />
+                          <p className="text-[10px] font-bold text-amber-700">Diproses...</p>
+                          <p className="text-[8px] text-amber-600/70">Sedang mengunggah berkas ke Google Drive...</p>
+                        </>
+                      ) : selfieUploadError ? (
+                        <>
+                          <AlertTriangle className="size-5 text-red-650 mx-auto mb-1 animate-bounce" />
+                          <p className="text-[10px] font-bold text-red-700">Gagal Mengunggah</p>
+                          <p className="text-[8px] text-red-600/75">Klik untuk mencoba kembali</p>
+                        </>
+                      ) : profileForm.selfiePhotoUrl ? (
+                        <>
+                          <CheckCircle2 className="size-5 text-emerald-600 mx-auto mb-1" />
+                          <p className="text-[10px] font-bold text-emerald-800">Selesai</p>
+                          <p className="text-[8px] text-emerald-600 font-medium truncate max-w-full px-1">{profileForm.selfiePhotoName || "Selfie Berhasil Diunggah"}</p>
+                        </>
+                      ) : (
+                        <>
+                          <Award className="size-5 text-emerald-600 mx-auto mb-1" />
+                          <p className="text-[10px] font-semibold">Pilih foto selfie</p>
+                          <p className="text-[8px] text-gray-400">Foto wajah verified, klik untuk unggah</p>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1637,13 +1707,41 @@ export function DashboardPage() {
                     />
                     <div 
                       onClick={() => document.getElementById("doc-upload")?.click()}
-                      className="border border-dashed border-emerald-300 rounded-lg p-3 text-center bg-white cursor-pointer hover:bg-emerald-50/20 transition-colors"
+                      className={`border border-dashed rounded-lg p-3 text-center cursor-pointer transition-all ${
+                        isUploadingDoc 
+                          ? "border-amber-300 bg-amber-50/10 text-amber-800" 
+                          : docUploadError
+                          ? "border-red-300 bg-red-50/10 text-red-800"
+                          : (profileForm.docImage && !profileForm.docImage.includes("unsplash.com"))
+                          ? "border-emerald-500 bg-emerald-50/20 text-emerald-900"
+                          : "border-emerald-300 bg-white hover:bg-emerald-50/20 text-emerald-700"
+                      }`}
                     >
-                      <Award className="size-5 text-emerald-600 mx-auto mb-1" />
-                      <p className="text-[10px] text-emerald-700 font-semibold truncate">
-                        {isUploadingDoc ? "Mengunggah..." : profileForm.docName || "Pilih dokumen sertifikat"}
-                      </p>
-                      <p className="text-[8px] text-gray-400 mt-0.5">Format PDF/JPG, klik untuk unggah</p>
+                      {isUploadingDoc ? (
+                        <>
+                          <Loader2 className="size-5 text-amber-600 mx-auto mb-1 animate-spin" />
+                          <p className="text-[10px] font-bold text-amber-700">Diproses...</p>
+                          <p className="text-[8px] text-amber-600/70">Sedang mengunggah berkas ke Google Drive...</p>
+                        </>
+                      ) : docUploadError ? (
+                        <>
+                          <AlertTriangle className="size-5 text-red-650 mx-auto mb-1 animate-bounce" />
+                          <p className="text-[10px] font-bold text-red-700">Gagal Mengunggah</p>
+                          <p className="text-[8px] text-red-600/75">Klik untuk mencoba kembali</p>
+                        </>
+                      ) : (profileForm.docImage && !profileForm.docImage.includes("unsplash.com")) ? (
+                        <>
+                          <CheckCircle2 className="size-5 text-emerald-600 mx-auto mb-1" />
+                          <p className="text-[10px] font-bold text-emerald-800">Selesai</p>
+                          <p className="text-[8px] text-emerald-600 font-medium truncate max-w-full px-1">{profileForm.docName || "Dokumen Berhasil Diunggah"}</p>
+                        </>
+                      ) : (
+                        <>
+                          <Award className="size-5 text-emerald-600 mx-auto mb-1" />
+                          <p className="text-[10px] font-semibold">Pilih dokumen sertifikat</p>
+                          <p className="text-[8px] text-gray-400 mt-0.5">Format PDF/JPG, klik untuk unggah</p>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -4974,9 +5072,34 @@ export function DashboardPage() {
                                   type="button"
                                   variant="outline"
                                   onClick={() => document.getElementById("profile-ktp-upload")?.click()}
-                                  className="w-full text-[10px] h-9 border-dashed border-emerald-300 text-emerald-850 hover:bg-emerald-50/20 truncate"
+                                  className={`w-full text-[10px] h-9 border-dashed flex items-center justify-center gap-1 truncate ${
+                                    isUploadingKtp 
+                                      ? "border-amber-300 text-amber-800 bg-amber-50/30" 
+                                      : ktpUploadError
+                                      ? "border-red-300 text-red-800 bg-red-50/30"
+                                      : profileForm.ktpPhotoUrl
+                                      ? "border-emerald-500 text-emerald-800 bg-emerald-50/30 font-semibold"
+                                      : "border-emerald-300 text-emerald-850 hover:bg-emerald-50/20"
+                                  }`}
                                 >
-                                  {isUploadingKtp ? "Unggah..." : profileForm.ktpPhotoName || "Unggah KTP"}
+                                  {isUploadingKtp ? (
+                                    <>
+                                      <Loader2 className="size-3.5 animate-spin text-amber-600 animate-duration-1000" />
+                                      <span>Diproses...</span>
+                                    </>
+                                  ) : ktpUploadError ? (
+                                    <>
+                                      <AlertTriangle className="size-3.5 text-red-650" />
+                                      <span>Gagal</span>
+                                    </>
+                                  ) : profileForm.ktpPhotoUrl ? (
+                                    <>
+                                      <CheckCircle2 className="size-3.5 text-emerald-600" />
+                                      <span>Selesai</span>
+                                    </>
+                                  ) : (
+                                    <span>Unggah KTP</span>
+                                  )}
                                 </Button>
                               </div>
                               <div>
@@ -4994,9 +5117,34 @@ export function DashboardPage() {
                                   type="button"
                                   variant="outline"
                                   onClick={() => document.getElementById("profile-selfie-upload")?.click()}
-                                  className="w-full text-[10px] h-9 border-dashed border-emerald-300 text-emerald-850 hover:bg-emerald-50/20 truncate"
+                                  className={`w-full text-[10px] h-9 border-dashed flex items-center justify-center gap-1 truncate ${
+                                    isUploadingSelfie 
+                                      ? "border-amber-300 text-amber-800 bg-amber-50/30" 
+                                      : selfieUploadError
+                                      ? "border-red-300 text-red-800 bg-red-50/30"
+                                      : profileForm.selfiePhotoUrl
+                                      ? "border-emerald-500 text-emerald-800 bg-emerald-50/30 font-semibold"
+                                      : "border-emerald-300 text-emerald-850 hover:bg-emerald-50/20"
+                                  }`}
                                 >
-                                  {isUploadingSelfie ? "Unggah..." : profileForm.selfiePhotoName || "Unggah Selfie"}
+                                  {isUploadingSelfie ? (
+                                    <>
+                                      <Loader2 className="size-3.5 animate-spin text-amber-600 animate-duration-1000" />
+                                      <span>Diproses...</span>
+                                    </>
+                                  ) : selfieUploadError ? (
+                                    <>
+                                      <AlertTriangle className="size-3.5 text-red-650" />
+                                      <span>Gagal</span>
+                                    </>
+                                  ) : profileForm.selfiePhotoUrl ? (
+                                    <>
+                                      <CheckCircle2 className="size-3.5 text-emerald-600" />
+                                      <span>Selesai</span>
+                                    </>
+                                  ) : (
+                                    <span>Unggah Selfie</span>
+                                  )}
                                 </Button>
                               </div>
                             </div>
