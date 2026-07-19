@@ -189,6 +189,8 @@ export function DashboardPage() {
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [selectedUserForWarning, setSelectedUserForWarning] = useState<any>(null);
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
+  const [searchIdentitas, setSearchIdentitas] = useState("");
+  const [searchKhusus, setSearchKhusus] = useState("");
 
   const [manualUserModalOpen, setManualUserModalOpen] = useState(false);
   const [manualUserForm, setManualUserForm] = useState({
@@ -3729,65 +3731,157 @@ export function DashboardPage() {
                       <CardDescription className="text-xs">Validasi dokumen lisensi APIGI/HPI milik Guide baru dan legalitas UKM milik Vendor.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {verificationRequests.filter(r => r.status === "pending").length === 0 ? (
-                        <div className="text-center py-12 text-gray-400 text-sm">Tidak ada berkas yang menunggu verifikasi.</div>
-                      ) : (
-                        verificationRequests.filter(r => r.status === "pending").map((req) => (
-                          <div key={req.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <div className="space-y-1.5 flex-1">
-                              <div className="flex items-center gap-2">
-                                <h4 className="font-bold text-gray-800 text-sm">{req.userName}</h4>
-                                <Badge className="bg-blue-100 text-blue-800 uppercase text-[9px] font-bold">{req.role}</Badge>
+                      {(() => {
+                        const pendingIdentitas = verificationRequests.filter(r => r.status === "pending" && (r.ktpPhoto || r.selfiePhoto || r.ktpNumber));
+                        const pendingKhusus = verificationRequests.filter(r => r.status === "pending" && (r.role === "guide" || r.role === "vendor") && r.documentImage);
+
+                        const filteredIdentitas = pendingIdentitas.filter(r => 
+                          r.userName.toLowerCase().includes(searchIdentitas.toLowerCase()) ||
+                          (r.ktpNumber || "").includes(searchIdentitas)
+                        );
+
+                        const filteredKhusus = pendingKhusus.filter(r => 
+                          r.userName.toLowerCase().includes(searchKhusus.toLowerCase()) ||
+                          r.documentName.toLowerCase().includes(searchKhusus.toLowerCase())
+                        );
+
+                        return (
+                          <div className="space-y-6">
+                            {/* ─── Bagian 1: Verifikasi Identitas ─── */}
+                            <div className="space-y-4">
+                              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-gray-50 p-3.5 rounded-xl border border-gray-150">
+                                <div>
+                                  <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">📁 Verifikasi Identitas (KTP & Selfie)</h4>
+                                  <p className="text-[10px] text-gray-500">Daftar pengajuan KYC kartu identitas pendaki, guide, dan vendor.</p>
+                                </div>
+                                <div className="w-full sm:w-60">
+                                  <input
+                                    type="text"
+                                    placeholder="Cari nama atau NIK..."
+                                    value={searchIdentitas}
+                                    onChange={(e) => setSearchIdentitas(e.target.value)}
+                                    className="w-full p-2 text-[11px] border border-gray-200 rounded-lg bg-white focus:outline-emerald-500 font-medium"
+                                  />
+                                </div>
                               </div>
-                              <p className="text-xs text-gray-500 font-semibold">{req.documentName}</p>
-                              
-                              {req.ktpNumber && (
-                                <div className="mt-2 text-xs bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-1.5 max-w-md">
-                                  <p className="font-semibold text-gray-700">Nomor NIK KTP: <span className="font-mono font-bold text-gray-900 bg-gray-200/50 px-1.5 py-0.5 rounded">{req.ktpNumber}</span></p>
-                                  <div className="flex flex-wrap gap-3 mt-1 pt-1.5 border-t border-gray-200/50">
-                                    {req.ktpPhoto && (
-                                      <a href={req.ktpPhoto} target="_blank" rel="noopener noreferrer" className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg font-bold hover:bg-emerald-100/50 flex items-center gap-1 transition-all">
-                                        📄 Lihat Scan KTP
-                                      </a>
-                                    )}
-                                    {req.selfiePhoto && (
-                                      <a href={req.selfiePhoto} target="_blank" rel="noopener noreferrer" className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg font-bold hover:bg-emerald-100/50 flex items-center gap-1 transition-all">
-                                        📸 Lihat Foto Selfie
-                                      </a>
-                                    )}
-                                    {req.documentImage && req.role !== "pendaki" && (
-                                      <a href={req.documentImage} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-700 bg-blue-50 border border-blue-100 px-2 py-1 rounded-lg font-bold hover:bg-blue-100/50 flex items-center gap-1 transition-all">
-                                        📜 Lihat Lampiran Legalitas
-                                      </a>
-                                    )}
-                                  </div>
+
+                              {filteredIdentitas.length === 0 ? (
+                                <div className="text-center py-6 text-gray-400 text-xs italic bg-white border border-dashed border-gray-200 rounded-xl">
+                                  Tidak ada pengajuan verifikasi identitas yang cocok.
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  {filteredIdentitas.map((req) => (
+                                    <div key={`ident_${req.id}`} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-xs transition-shadow">
+                                      <div className="space-y-1.5 flex-1 font-sans">
+                                        <div className="flex items-center gap-2">
+                                          <h4 className="font-bold text-gray-800 text-xs">{req.userName}</h4>
+                                          <Badge className="bg-blue-100 text-blue-800 uppercase text-[8px] font-bold">{req.role}</Badge>
+                                        </div>
+                                        
+                                        {req.ktpNumber && (
+                                          <div className="text-xs bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-1.5 max-w-md">
+                                            <p className="font-semibold text-gray-700">Nomor NIK KTP: <span className="font-mono font-bold text-gray-900 bg-gray-200/50 px-1.5 py-0.5 rounded">{req.ktpNumber}</span></p>
+                                            <div className="flex flex-wrap gap-3 mt-1 pt-1.5 border-t border-gray-200/50">
+                                              {req.ktpPhoto && (
+                                                <a href={req.ktpPhoto} target="_blank" rel="noopener noreferrer" className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg font-bold hover:bg-emerald-100/50 flex items-center gap-1 transition-all">
+                                                  📄 Lihat Scan KTP
+                                                </a>
+                                              )}
+                                              {req.selfiePhoto && (
+                                                <a href={req.selfiePhoto} target="_blank" rel="noopener noreferrer" className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-1 rounded-lg font-bold hover:bg-emerald-100/50 flex items-center gap-1 transition-all">
+                                                  📸 Lihat Foto Selfie
+                                                </a>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      <div className="flex gap-2 shrink-0 w-full md:w-auto justify-end border-t md:border-t-0 pt-2.5 md:pt-0">
+                                        <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => {
+                                          respondToVerification(req.id, true);
+                                          toast.success("Identitas disetujui & diverifikasi!");
+                                        }}>
+                                          Setujui
+                                        </Button>
+                                        <Button size="xs" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50" onClick={() => {
+                                          respondToVerification(req.id, false);
+                                          toast.error("Identitas ditolak verifikasi.");
+                                        }}>
+                                          Tolak
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
                               )}
+                            </div>
 
-                              {!req.ktpNumber && req.documentImage && (
-                                <a href={req.documentImage} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-600 underline font-semibold mt-1 inline-block">
-                                  Lihat Scan Dokumen Lampiran
-                                </a>
+                            {/* ─── Bagian 2: Verifikasi Dokumen Khusus ─── */}
+                            <div className="pt-4 space-y-4">
+                              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-gray-50 p-3.5 rounded-xl border border-gray-150">
+                                <div>
+                                  <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider">📜 Verifikasi Dokumen Khusus (APIGI & NIB)</h4>
+                                  <p className="text-[10px] text-gray-500">Dokumen sertifikasi APIGI/HPI milik Guide dan legalitas NIB milik Vendor.</p>
+                                </div>
+                                <div className="w-full sm:w-60">
+                                  <input
+                                    type="text"
+                                    placeholder="Cari nama atau jenis dokumen..."
+                                    value={searchKhusus}
+                                    onChange={(e) => setSearchKhusus(e.target.value)}
+                                    className="w-full p-2 text-[11px] border border-gray-200 rounded-lg bg-white focus:outline-emerald-500 font-medium"
+                                  />
+                                </div>
+                              </div>
+
+                              {filteredKhusus.length === 0 ? (
+                                <div className="text-center py-6 text-gray-400 text-xs italic bg-white border border-dashed border-gray-200 rounded-xl">
+                                  Tidak ada dokumen kemitraan khusus yang menunggu verifikasi.
+                                </div>
+                              ) : (
+                                <div className="space-y-3">
+                                  {filteredKhusus.map((req) => (
+                                    <div key={`khusus_${req.id}`} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-xs transition-shadow">
+                                      <div className="space-y-1.5 flex-1 font-sans">
+                                        <div className="flex items-center gap-2">
+                                          <h4 className="font-bold text-gray-800 text-xs">{req.userName}</h4>
+                                          <Badge className="bg-blue-100 text-blue-800 uppercase text-[8px] font-bold">{req.role}</Badge>
+                                        </div>
+                                        <p className="text-xs text-gray-500 font-semibold">{req.documentName}</p>
+                                        
+                                        {req.documentImage && (
+                                          <div className="pt-1.5">
+                                            <a href={req.documentImage} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-700 bg-blue-50 border border-blue-100 px-2 py-1 rounded-lg font-bold hover:bg-blue-100/50 inline-flex items-center gap-1 transition-all">
+                                              📜 Lihat Dokumen Legalitas (APIGI / NIB)
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      <div className="flex gap-2 shrink-0 w-full md:w-auto justify-end border-t md:border-t-0 pt-2.5 md:pt-0">
+                                        <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => {
+                                          respondToVerification(req.id, true);
+                                          toast.success("Dokumen khusus disetujui & diverifikasi!");
+                                        }}>
+                                          Setujui
+                                        </Button>
+                                        <Button size="xs" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50" onClick={() => {
+                                          respondToVerification(req.id, false);
+                                          toast.error("Dokumen khusus ditolak verifikasi.");
+                                        }}>
+                                          Tolak
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
-                            
-                            <div className="flex gap-2 shrink-0 w-full md:w-auto justify-end border-t md:border-t-0 pt-2.5 md:pt-0">
-                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => {
-                                respondToVerification(req.id, true);
-                                toast.success("Mitra disetujui & diverifikasi!");
-                              }}>
-                                Setujui
-                              </Button>
-                              <Button size="sm" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50" onClick={() => {
-                                respondToVerification(req.id, false);
-                                toast.error("Mitra ditolak verifikasi.");
-                              }}>
-                                Tolak
-                              </Button>
-                            </div>
                           </div>
-                        ))
-                      )}
+                        );
+                      })()}
 
                       {/* ─── Riwayat Verifikasi ─── */}
                       <div className="pt-6 border-t border-gray-100 space-y-4">
