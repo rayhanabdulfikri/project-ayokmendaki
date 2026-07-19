@@ -1498,6 +1498,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           let depStatus: Booking["depositStatus"] = "refunded";
           
           let climberBalChange = 0;
+          const climberId = b.pendakiId || "pendaki1";
+
           if (approveFine && fine > 0) {
             if (fine >= dep) {
               depStatus = "forfeited";
@@ -1526,8 +1528,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             deposit_status: depStatus,
             fine_amount: approveFine ? fine : 0
           }).eq("id", id);
-
-          const climberId = b.pendakiId || "pendaki1";
           if (climberBalChange !== 0) {
             supabase.from("wallets").select("balance").eq("user_id", climberId).single().then(({ data }) => {
               const current = data ? Number(data.balance) : 0;
