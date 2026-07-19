@@ -179,6 +179,7 @@ export function DashboardPage() {
   const [isUploadingKtp, setIsUploadingKtp] = useState(false);
   const [isUploadingSelfie, setIsUploadingSelfie] = useState(false);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [isUploadingCatalog, setIsUploadingCatalog] = useState(false);
   const [ktpUploadError, setKtpUploadError] = useState(false);
   const [selfieUploadError, setSelfieUploadError] = useState(false);
   const [docUploadError, setDocUploadError] = useState(false);
@@ -274,7 +275,7 @@ export function DashboardPage() {
   }, []);
 
   // File Upload Handlers (Google Drive API via Supabase Edge Function)
-  const handleFileUpload = async (file: File, type: "ktp" | "selfie" | "doc") => {
+  const handleFileUpload = async (file: File, type: "ktp" | "selfie" | "doc" | "catalog") => {
     if (!currentUser) return;
     if (type === "ktp") {
       setIsUploadingKtp(true);
@@ -285,6 +286,8 @@ export function DashboardPage() {
     } else if (type === "doc") {
       setIsUploadingDoc(true);
       setDocUploadError(false);
+    } else if (type === "catalog") {
+      setIsUploadingCatalog(true);
     }
 
     try {
@@ -323,15 +326,19 @@ export function DashboardPage() {
 
       const publicUrl = data.url;
 
-      setProfileForm((prev) => {
-        if (type === "ktp") {
-          return { ...prev, ktpPhotoName: file.name, ktpPhotoUrl: publicUrl };
-        } else if (type === "selfie") {
-          return { ...prev, selfiePhotoName: file.name, selfiePhotoUrl: publicUrl };
-        } else {
-          return { ...prev, docName: file.name, docImage: publicUrl };
-        }
-      });
+      if (type === "catalog") {
+        setCatalogForm((prev) => ({ ...prev, image: publicUrl }));
+      } else {
+        setProfileForm((prev) => {
+          if (type === "ktp") {
+            return { ...prev, ktpPhotoName: file.name, ktpPhotoUrl: publicUrl };
+          } else if (type === "selfie") {
+            return { ...prev, selfiePhotoName: file.name, selfiePhotoUrl: publicUrl };
+          } else {
+            return { ...prev, docName: file.name, docImage: publicUrl };
+          }
+        });
+      }
       toast.success(`Berhasil mengunggah berkas ${type.toUpperCase()} ke Google Drive`);
     } catch (err: any) {
       console.error("Upload error:", err);
@@ -343,6 +350,7 @@ export function DashboardPage() {
       if (type === "ktp") setIsUploadingKtp(false);
       else if (type === "selfie") setIsUploadingSelfie(false);
       else if (type === "doc") setIsUploadingDoc(false);
+      else if (type === "catalog") setIsUploadingCatalog(false);
     }
   };
 
@@ -676,7 +684,8 @@ export function DashboardPage() {
     available: "",
     category: "tent" as "tent" | "carrier" | "other",
     groupDiscountEnabled: false,
-    damageTerms: ""
+    damageTerms: "",
+    image: ""
   });
 
   // Fine / Damage Claim Modal states
@@ -1252,7 +1261,8 @@ export function DashboardPage() {
         available: item.available.toString(),
         category: item.category,
         groupDiscountEnabled: item.groupDiscountEnabled || false,
-        damageTerms: item.damageTerms || ""
+        damageTerms: item.damageTerms || "",
+        image: item.image || ""
       });
     } else {
       setEditingItem(null);
@@ -1263,7 +1273,8 @@ export function DashboardPage() {
         available: "",
         category: "tent",
         groupDiscountEnabled: false,
-        damageTerms: ""
+        damageTerms: "",
+        image: ""
       });
     }
     setItemFormOpen(true);
@@ -1271,7 +1282,7 @@ export function DashboardPage() {
 
   const handleSaveCatalogItem = (e: React.FormEvent) => {
     e.preventDefault();
-    const { name, description, price, available, category, groupDiscountEnabled, damageTerms } = catalogForm;
+    const { name, description, price, available, category, groupDiscountEnabled, damageTerms, image } = catalogForm;
 
     if (!name || !price || !available) {
       toast.error("Wajib mengisi nama, tarif, dan jumlah stok.");
@@ -1286,7 +1297,8 @@ export function DashboardPage() {
         available: parseInt(available),
         category,
         groupDiscountEnabled,
-        damageTerms
+        damageTerms,
+        image
       });
     } else {
       addEquipmentItem({
@@ -1298,7 +1310,8 @@ export function DashboardPage() {
         vendorId: currentUser?.id || "vendor1",
         vendorName: currentUser?.name || "Toko Outdoor",
         groupDiscountEnabled,
-        damageTerms
+        damageTerms,
+        image
       });
     }
 
@@ -3078,6 +3091,8 @@ export function DashboardPage() {
                                 value={catalogForm.price}
                                 onChange={(e) => setCatalogForm({ ...catalogForm, price: e.target.value })}
                               />
+                            </div>
+                            <div className="space-y-1">
                               <label className="text-[11px] font-semibold text-gray-700">Stok Unit Tersedia</label>
                               <Input
                                 type="number"
@@ -3096,6 +3111,29 @@ export function DashboardPage() {
                               value={catalogForm.description}
                               onChange={(e) => setCatalogForm({ ...catalogForm, description: e.target.value })}
                             />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[11px] font-semibold text-gray-750">Gambar / Foto Produk (Simpan ke Google Drive)</label>
+                            <div className="flex gap-2 items-center">
+                              {catalogForm.image ? (
+                                <img src={catalogForm.image} className="w-10 h-10 object-cover rounded-lg border border-gray-200" />
+                              ) : (
+                                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-[9px] text-gray-400 font-sans border border-gray-200">No Img</div>
+                              )}
+                              <Input
+                                type="file"
+                                accept="image/*"
+                                className="bg-white border-gray-200 text-xs flex-1 cursor-pointer"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) handleFileUpload(file, "catalog");
+                                }}
+                              />
+                            </div>
+                            {isUploadingCatalog && (
+                              <p className="text-[10px] text-emerald-600 animate-pulse font-medium">Mengunggah gambar ke Google Drive...</p>
+                            )}
                           </div>
 
                           <div className="grid grid-cols-1 gap-3 border-t border-gray-100 pt-3">
@@ -3133,13 +3171,20 @@ export function DashboardPage() {
                       ) : (
                         equipment.filter(eq => eq.vendorId === currentUser.id).map((eq) => (
                           <div key={eq.id} className="p-4 rounded-xl border border-gray-150 bg-white flex justify-between items-center gap-4 hover:shadow-sm transition-shadow">
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <h4 className="font-bold text-gray-800">{eq.name}</h4>
-                                <Badge variant="outline" className="text-[9px] uppercase">{eq.category}</Badge>
+                            <div className="flex gap-3 items-center">
+                              {eq.image ? (
+                                <img src={eq.image} className="w-12 h-12 object-cover rounded-lg border border-gray-150 shrink-0" />
+                              ) : (
+                                <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center text-[10px] text-gray-400 font-sans border border-gray-150 shrink-0">No Img</div>
+                              )}
+                              <div>
+                                <div className="flex items-center gap-2 mb-1">
+                                  <h4 className="font-bold text-gray-800 text-sm">{eq.name}</h4>
+                                  <Badge variant="outline" className="text-[9px] uppercase">{eq.category}</Badge>
+                                </div>
+                                <p className="text-xs text-gray-500">{eq.description}</p>
+                                <p className="text-xs text-emerald-700 font-bold mt-1">Rp {eq.price.toLocaleString("id-ID")}/hari &middot; Stok: {eq.available} unit</p>
                               </div>
-                              <p className="text-xs text-gray-500">{eq.description}</p>
-                              <p className="text-xs text-emerald-700 font-bold mt-1">Rp {eq.price.toLocaleString("id-ID")}/hari &middot; Stok: {eq.available} unit</p>
                             </div>
                             
                             <div className="flex gap-2 shrink-0">

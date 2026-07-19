@@ -29,6 +29,7 @@ serve(async (req) => {
     const gdRefreshToken = Deno.env.get("GD_REFRESH_TOKEN");
     const gdKtpFolderId = Deno.env.get("GD_KTP_FOLDER_ID"); // Untuk KTP dan Selfie
     const gdDocFolderId = Deno.env.get("GD_DOC_FOLDER_ID"); // Untuk sertifikat APIGI, NIB, dsb.
+    const gdCatalogFolderId = Deno.env.get("GD_CATALOG_FOLDER_ID") || gdDocFolderId; // Untuk gambar katalog vendor
 
     if (!gdClientId || !gdClientSecret || !gdRefreshToken || !gdKtpFolderId || !gdDocFolderId) {
       return new Response(
@@ -38,7 +39,12 @@ serve(async (req) => {
     }
 
     // Tentukan folder penyimpanan berdasarkan tipe berkas
-    const targetFolderId = (type === "ktp" || type === "selfie") ? gdKtpFolderId : gdDocFolderId;
+    let targetFolderId = gdDocFolderId;
+    if (type === "ktp" || type === "selfie") {
+      targetFolderId = gdKtpFolderId;
+    } else if (type === "catalog") {
+      targetFolderId = gdCatalogFolderId;
+    }
 
     // 1. Exchange OAuth2 Refresh Token for Google API Access Token
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {

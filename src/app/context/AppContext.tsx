@@ -101,6 +101,7 @@ export interface EquipmentItem {
   groupDiscountEnabled?: boolean;
   damageTerms?: string;
   discountPercentage?: number;
+  image?: string;
 }
 
 export interface TripPackage {
@@ -628,7 +629,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 category: eq.category,
                 groupDiscountEnabled: eq.group_discount_enabled || false,
                 damageTerms: eq.damage_terms,
-                discountPercentage: Number(eq.discount_percentage || 0)
+                discountPercentage: Number(eq.discount_percentage || 0),
+                image: eq.image || undefined
               };
             })
           );
@@ -946,7 +948,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 category: eq.category,
                 groupDiscountEnabled: eq.group_discount_enabled || false,
                 damageTerms: eq.damage_terms,
-                discountPercentage: Number(eq.discount_percentage || 0)
+                discountPercentage: Number(eq.discount_percentage || 0),
+                image: eq.image || undefined
               };
             })
           );
@@ -1550,7 +1553,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       available: itemData.available,
       category: itemData.category,
       group_discount_enabled: itemData.groupDiscountEnabled || false,
-      damage_terms: itemData.damageTerms || null
+      damage_terms: itemData.damageTerms || null,
+      image: itemData.image || null
     });
 
     if (error) {
@@ -1576,6 +1580,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (itemData.category !== undefined) payload.category = itemData.category;
     if (itemData.groupDiscountEnabled !== undefined) payload.group_discount_enabled = itemData.groupDiscountEnabled;
     if (itemData.damageTerms !== undefined) payload.damage_terms = itemData.damageTerms;
+    if (itemData.image !== undefined) payload.image = itemData.image;
 
     const { error } = await supabase.from("equipment_items").update(payload).eq("id", id);
     if (error) {
