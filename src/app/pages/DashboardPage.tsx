@@ -250,7 +250,7 @@ export function DashboardPage() {
     return false;
   }, []);
 
-  // File Upload Handlers (Supabase Storage kyc-documents bucket)
+  // File Upload Handlers (Google Drive API via Supabase Edge Function)
   const handleFileUpload = async (file: File, type: "ktp" | "selfie" | "doc") => {
     if (!currentUser) return;
     if (type === "ktp") setIsUploadingKtp(true);
@@ -258,15 +258,21 @@ export function DashboardPage() {
     else if (type === "doc") setIsUploadingDoc(true);
 
     try {
-      const cleanName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
-      const path = `${currentUser.id}/${type}_${Date.now()}_${cleanName}`;
-      const { error } = await supabase.storage.from("kyc_document").upload(path, file, {
-        cacheControl: "3600",
-        upsert: true
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("userId", currentUser.id);
+      formData.append("type", type);
+
+      const { data, error } = await supabase.functions.invoke("upload-to-drive", {
+        body: formData,
       });
       if (error) throw error;
 
-      const { data: { publicUrl } } = supabase.storage.from("kyc_document").getPublicUrl(path);
+      if (!data || !data.success) {
+        throw new Error(data?.error || "Gagal mengunggah berkas ke Google Drive");
+      }
+
+      const publicUrl = data.url;
 
       setProfileForm((prev) => {
         if (type === "ktp") {
@@ -277,7 +283,7 @@ export function DashboardPage() {
           return { ...prev, docName: file.name, docImage: publicUrl };
         }
       });
-      toast.success(`Berhasil mengunggah berkas ${type.toUpperCase()}`);
+      toast.success(`Berhasil mengunggah berkas ${type.toUpperCase()} ke Google Drive`);
     } catch (err: any) {
       console.error("Upload error:", err);
       toast.error(`Gagal mengunggah berkas: ${err.message}`);
