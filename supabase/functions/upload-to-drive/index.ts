@@ -1,6 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { create, getNumericDate } from "https://deno.land/x/djwt@v2.9/mod.ts";
-import { decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -26,14 +24,15 @@ serve(async (req) => {
       );
     }
 
-    const gdClientEmail = Deno.env.get("GD_CLIENT_EMAIL");
-    const gdPrivateKey = Deno.env.get("GD_PRIVATE_KEY");
+    const gdClientId = Deno.env.get("GD_CLIENT_ID");
+    const gdClientSecret = Deno.env.get("GD_CLIENT_SECRET");
+    const gdRefreshToken = Deno.env.get("GD_REFRESH_TOKEN");
     const gdKtpFolderId = Deno.env.get("GD_KTP_FOLDER_ID"); // Untuk KTP dan Selfie
     const gdDocFolderId = Deno.env.get("GD_DOC_FOLDER_ID"); // Untuk sertifikat APIGI, NIB, dsb.
 
-    if (!gdClientEmail || !gdPrivateKey || !gdKtpFolderId || !gdDocFolderId) {
+    if (!gdClientId || !gdClientSecret || !gdRefreshToken || !gdKtpFolderId || !gdDocFolderId) {
       return new Response(
-        JSON.stringify({ error: "Google Drive secrets are not fully configured in Supabase env variables." }),
+        JSON.stringify({ error: "Google Drive OAuth secrets are not fully configured in Supabase env variables." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -41,58 +40,28 @@ serve(async (req) => {
     // Tentukan folder penyimpanan berdasarkan tipe berkas
     const targetFolderId = (type === "ktp" || type === "selfie") ? gdKtpFolderId : gdDocFolderId;
 
-    // 1. Authenticate with Google API using JWT
-    const cleanPem = gdPrivateKey.replace(/\\n/g, "\n");
-    const keyData = cleanPem
-      .replace("-----BEGIN PRIVATE KEY-----", "")
-      .replace("-----END PRIVATE KEY-----", "")
-      .replace(/\s+/g, "");
-    
-    // Gunakan fungsi decode dari Deno standard library (lebih aman dan stabil)
-    const binaryKey = decode(keyData);
-
-    const key = await crypto.subtle.importKey(
-      "pkcs8",
-      binaryKey,
-      {
-        name: "RSASSA-PKCS1-v1_5",
-        hash: { name: "SHA-256" },
-      },
-      false,
-      ["sign"]
-    );
-
-    const jwtHeader = { alg: "RS256", typ: "JWT" };
-    const jwtPayload = {
-      iss: gdClientEmail,
-      scope: "https://www.googleapis.com/auth/drive",
-      aud: "https://oauth2.googleapis.com/token",
-      exp: getNumericDate(3600),
-      iat: getNumericDate(0),
-    };
-
-    const jwt = await create(jwtHeader, jwtPayload, key);
-
-    // 2. Exchange JWT for Google API Access Token
+    // 1. Exchange OAuth2 Refresh Token for Google API Access Token
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({
-        grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-        assertion: jwt,
+        client_id: gdClientId,
+        client_secret: gdClientSecret,
+        refresh_token: gdRefreshToken,
+        grant_type: "refresh_token",
       }).toString(),
     });
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
-      throw new Error(`Failed to get Google Access Token: ${errorText}`);
+      throw new Error(`Failed to refresh Google Access Token: ${errorText}`);
     }
 
     const { access_token } = await tokenResponse.json();
 
-    // 3. Upload File to Google Drive
+    // 2. Upload File to Google Drive
     const cleanFileName = file.name.replace(/[^a-zA-Z0-9.]/g, "_");
     const driveFileName = `${userId}_${type}_${Date.now()}_${cleanFileName}`;
     
@@ -103,7 +72,7 @@ serve(async (req) => {
 
     const boundary = "ayokmendaki_upload_boundary";
     
-    // Perbaikan format delimiter multipart agar sesuai dengan spec Google Drive API
+    // Format delimiter multipart
     const delimiter = `--${boundary}\r\n`;
     const nextDelimiter = `\r\n--${boundary}\r\n`;
     const closeDelimiter = `\r\n--${boundary}--`;
@@ -147,7 +116,7 @@ serve(async (req) => {
 
     const uploadedFile = await uploadResponse.json();
 
-    // 4. Set Permission to "anyone with link can view" so it displays on website
+    // 3. Set Permission to "anyone with link can view" so it displays on website
     const permissionResponse = await fetch(
       `https://www.googleapis.com/drive/v3/files/${uploadedFile.id}/permissions`,
       {
