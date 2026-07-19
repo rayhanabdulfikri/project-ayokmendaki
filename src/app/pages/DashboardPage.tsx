@@ -187,6 +187,8 @@ export function DashboardPage() {
   });
 
   const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [selectedUserForWarning, setSelectedUserForWarning] = useState<any>(null);
+  const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
 
   const [manualUserModalOpen, setManualUserModalOpen] = useState(false);
   const [manualUserForm, setManualUserForm] = useState({
@@ -701,6 +703,15 @@ export function DashboardPage() {
     status: "Buka" as "Buka" | "Tutup"
   });
   const [prefilledWarningUserId, setPrefilledWarningUserId] = useState("");
+  useEffect(() => {
+    if (prefilledWarningUserId) {
+      const u = users.find(x => x.id === prefilledWarningUserId);
+      if (u) {
+        setSelectedUserForWarning(u);
+        setUserSearchQuery(u.name);
+      }
+    }
+  }, [prefilledWarningUserId, users]);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [receiptData, setReceiptData] = useState<any>(null);
 
@@ -4265,61 +4276,84 @@ export function DashboardPage() {
                       <form onSubmit={(e) => {
                         e.preventDefault();
                         const fd = new FormData(e.currentTarget);
-                        const targetUser = fd.get("targetUser") as string;
+                        const targetUser = selectedUserForWarning?.id;
                         const warnText = fd.get("warnText") as string;
                         if (!targetUser || !warnText.trim()) {
-                          toast.error("Wajib mengisi target pengguna dan alasan peringatan.");
+                          toast.error("Wajib mencari & memilih target pengguna dari daftar serta mengisi alasan peringatan.");
                           return;
                         }
                         addWarning(targetUser, warnText);
                         toast.success("Surat peringatan berhasil dikirim!");
                         e.currentTarget.reset();
+                        setSelectedUserForWarning(null);
+                        setPrefilledWarningUserId("");
                         setUserSearchQuery(""); // reset search
                       }} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <div className="flex justify-between items-center mb-1">
-                              <label className="text-xs font-semibold text-gray-700 block">Target Pengguna</label>
+                          <div className="relative">
+                            <label className="text-xs font-semibold text-gray-700 block mb-1">Target Pengguna</label>
+                            <div className="relative">
                               <input
                                 type="text"
-                                placeholder="Cari nama / email..."
+                                placeholder="Ketik nama / email untuk mencari..."
                                 value={userSearchQuery}
-                                onChange={(e) => setUserSearchQuery(e.target.value)}
-                                className="p-1 px-2 text-[10px] border border-gray-200 rounded focus:outline-emerald-500 w-44 bg-gray-50 focus:bg-white"
+                                onFocus={() => setIsSearchDropdownOpen(true)}
+                                onBlur={() => {
+                                  setTimeout(() => setIsSearchDropdownOpen(false), 200);
+                                }}
+                                onChange={(e) => {
+                                  setUserSearchQuery(e.target.value);
+                                  setIsSearchDropdownOpen(true);
+                                  if (selectedUserForWarning && e.target.value !== selectedUserForWarning.name) {
+                                    setSelectedUserForWarning(null);
+                                  }
+                                }}
+                                className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 font-medium"
                               />
+                              {selectedUserForWarning && (
+                                <span className="absolute right-3 top-2.5 text-[9px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-extrabold uppercase">
+                                  {selectedUserForWarning.role}
+                                </span>
+                              )}
                             </div>
-                            <select
-                              name="targetUser"
-                              value={prefilledWarningUserId}
-                              onChange={(e) => setPrefilledWarningUserId(e.target.value)}
-                              className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 font-medium"
-                            >
-                              <option value="">-- Pilih Pengguna --</option>
-                              <optgroup label="Pendaki">
-                                {users.filter(u => u.role === "pendaki" && (
-                                  u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                                  (u.email || "").toLowerCase().includes(userSearchQuery.toLowerCase())
-                                )).map(u => (
-                                  <option key={u.id} value={u.id}>{u.name} (Pendaki)</option>
-                                ))}
-                              </optgroup>
-                              <optgroup label="Guides">
-                                {users.filter(u => u.role === "guide" && (
-                                  u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                                  (u.email || "").toLowerCase().includes(userSearchQuery.toLowerCase())
-                                )).map(u => (
-                                  <option key={u.id} value={u.id}>{u.name} (Guide)</option>
-                                ))}
-                              </optgroup>
-                              <optgroup label="Vendors">
-                                {users.filter(u => u.role === "vendor" && (
-                                  u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
-                                  (u.email || "").toLowerCase().includes(userSearchQuery.toLowerCase())
-                                )).map(u => (
-                                  <option key={u.id} value={u.id}>{u.name} (Vendor)</option>
-                                ))}
-                              </optgroup>
-                            </select>
+
+                            {/* Autocomplete Dropdown List */}
+                            {isSearchDropdownOpen && userSearchQuery.trim() !== "" && (
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-150 rounded-xl shadow-lg max-h-60 overflow-y-auto divide-y divide-gray-100 font-sans">
+                                {users.filter(u =>
+                                  u.role !== "admin" && (
+                                    u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                                    (u.email || "").toLowerCase().includes(userSearchQuery.toLowerCase())
+                                  )
+                                ).length === 0 ? (
+                                  <div className="p-3 text-xs text-gray-400 italic text-center">Tidak ada pengguna ditemukan.</div>
+                                ) : (
+                                  users.filter(u =>
+                                    u.role !== "admin" && (
+                                      u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                                      (u.email || "").toLowerCase().includes(userSearchQuery.toLowerCase())
+                                    )
+                                  ).map(u => (
+                                    <button
+                                      key={u.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedUserForWarning(u);
+                                        setUserSearchQuery(u.name);
+                                        setIsSearchDropdownOpen(false);
+                                      }}
+                                      className="w-full text-left p-3 hover:bg-gray-55/70 flex justify-between items-center transition-colors border-none"
+                                    >
+                                      <div>
+                                        <p className="text-xs font-bold text-gray-800">{u.name}</p>
+                                        <p className="text-[10px] text-gray-400 font-normal">{u.email}</p>
+                                      </div>
+                                      <Badge className="bg-gray-100 text-gray-700 uppercase text-[8px] font-bold shrink-0">{u.role}</Badge>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            )}
                           </div>
                           <div>
                             <label className="text-xs font-semibold text-gray-700 block mb-1">Pesan Sanksi / Pelanggaran</label>
