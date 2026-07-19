@@ -99,6 +99,7 @@ export function DashboardPage() {
     sendChatMessage,
     verificationRequests,
     respondToVerification,
+    revokeVerification,
     addVerificationRequest,
     addEquipmentItem,
     updateEquipmentItem,
@@ -3765,6 +3766,73 @@ export function DashboardPage() {
                           </div>
                         ))
                       )}
+
+                      {/* ─── Riwayat Verifikasi ─── */}
+                      <div className="pt-6 border-t border-gray-100 space-y-4">
+                        <h4 className="text-sm font-bold text-gray-800">Riwayat Verifikasi</h4>
+                        {verificationRequests.filter(r => r.status !== "pending").length === 0 ? (
+                          <div className="text-center py-8 text-gray-400 text-xs italic">Belum ada riwayat verifikasi.</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {verificationRequests.filter(r => r.status !== "pending").map((req) => {
+                              const isApproved = req.status === "approved";
+                              return (
+                                <div key={`hist_${req.id}`} className="p-3.5 rounded-xl border border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="font-bold text-gray-800 text-xs">{req.userName}</span>
+                                      <Badge className="bg-gray-100 text-gray-700 uppercase text-[8px] font-bold">{req.role}</Badge>
+                                      <Badge className={`text-[8px] font-bold ${
+                                        isApproved ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-red-50 text-red-700 border border-red-100"
+                                      }`}>
+                                        {isApproved ? "Disetujui" : "Ditolak"}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-[10px] text-gray-500 font-semibold">{req.documentName}</p>
+                                    
+                                    {req.ktpNumber && (
+                                      <div className="flex flex-wrap gap-2 pt-1 text-[9px]">
+                                        {req.ktpPhoto && (
+                                          <a href={req.ktpPhoto} target="_blank" rel="noopener noreferrer" className="text-emerald-700 hover:underline">
+                                            📄 Scan KTP
+                                          </a>
+                                        )}
+                                        {req.selfiePhoto && (
+                                          <a href={req.selfiePhoto} target="_blank" rel="noopener noreferrer" className="text-emerald-700 hover:underline">
+                                            📸 Selfie
+                                          </a>
+                                        )}
+                                        {req.documentImage && req.role !== "pendaki" && (
+                                          <a href={req.documentImage} target="_blank" rel="noopener noreferrer" className="text-blue-700 hover:underline">
+                                            📜 Legalitas
+                                          </a>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="shrink-0 flex gap-2">
+                                    <Button
+                                      size="xs"
+                                      variant="outline"
+                                      className="text-[9px] h-6 text-red-600 border-red-100 hover:bg-red-55"
+                                      onClick={() => {
+                                        const confirmRevoke = window.confirm(`Apakah Anda yakin ingin mencabut verifikasi untuk ${req.userName}?`);
+                                        if (confirmRevoke) {
+                                          revokeVerification(req.id);
+                                          toast.success(`Status verifikasi ${req.userName} dicabut!`);
+                                        }
+                                      }}
+                                    >
+                                      Cabut Verifikasi
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 )}

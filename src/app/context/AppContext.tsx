@@ -272,6 +272,7 @@ interface AppContextType {
   sendChatMessage: (partnerId: string, partnerName: string, message: string) => void;
   verificationRequests: VerificationRequest[];
   respondToVerification: (id: string, approve: boolean) => void;
+  revokeVerification: (id: string) => Promise<void>;
   addVerificationRequest: (req: Omit<VerificationRequest, "id" | "status" | "createdAt">) => Promise<void>;
   addEquipmentItem: (item: Omit<EquipmentItem, "id" | "rating">) => void;
   updateEquipmentItem: (id: string, item: Partial<EquipmentItem>) => void;
@@ -1200,6 +1201,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const { error: reqErr } = await supabase.from("verification_requests").update({ status: approve ? "approved" : "rejected" }).eq("id", id);
     if (reqErr) console.error("Error updating verification request in Supabase:", reqErr.message);
+  };
+
+  const revokeVerification = async (id: string) => {
+    const req = verificationRequests.find((r) => r.id === id);
+    if (!req) return;
+
+    setVerificationRequests((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, status: "pending" } : r))
+    );
+
+    if (req.role === "guide") {
+      setGuides((prev) =>
+        prev.map((g) => (g.id === req.userId ? { ...g, verified: false, status: "Non-Aktif" } : g))
+      );
+      await supabase.from("guides").update({ status: "Non-Aktif" }).eq("id", req.userId);
+    } else if (req.role === "vendor") {
+      setVendors((prev) =>
+        prev.map((v) => (v.id === req.userId ? { ...v, verified: false } : v))
+      );
+    }
+
+    setUsers((prev) =>
+      prev.map((u) => (u.id === req.userId ? { ...u, verified: false } : u))
+    );
+    await supabase.from("users").update({ verified: false }).eq("id", req.userId);
+
+    await supabase.from("verification_requests").update({ status: "pending" }).eq("id", id);
   };
 
   const addVerificationRequest = async (reqData: Omit<VerificationRequest, "id" | "status" | "createdAt">) => {
@@ -2226,6 +2254,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sendChatMessage,
         verificationRequests,
         respondToVerification,
+        revokeVerification,
         addVerificationRequest,
         addEquipmentItem,
         updateEquipmentItem,
