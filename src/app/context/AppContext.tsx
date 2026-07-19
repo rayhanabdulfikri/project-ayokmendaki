@@ -959,19 +959,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, []);
 
-  // Fetch wallets on currentUser change
+  // Fetch wallets and transactions on currentUser change
   useEffect(() => {
     if (!currentUser) return;
-    const loadWallet = async () => {
+    const loadWalletAndTx = async () => {
       try {
-        const { data } = await supabase
+        const { data: walletData } = await supabase
           .from("wallets")
           .select("balance")
           .eq("user_id", currentUser.id)
           .single();
 
-        if (data) {
-          const bal = Number(data.balance);
+        if (walletData) {
+          const bal = Number(walletData.balance);
           if (currentUser.role === "pendaki") {
             setClimberDeposit(bal);
           } else if (currentUser.role === "guide") {
@@ -980,11 +980,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setVendorWallet(bal);
           }
         }
+
+        const { data: txData } = await supabase
+          .from("deposit_transactions")
+          .select("*")
+          .eq("user_id", currentUser.id)
+          .order("created_at", { ascending: false });
+
+        if (txData) {
+          setDepositTransactions(
+            txData.map((t: any) => ({
+              id: t.id,
+              type: t.type,
+              amount: Number(t.amount),
+              description: t.description,
+              createdAt: t.created_at ? new Date(t.created_at).toISOString().split("T")[0] : "",
+            }))
+          );
+        }
       } catch (err) {
-        console.error("Error loading wallet balance:", err);
+        console.error("Error loading wallet and transactions:", err);
       }
     };
-    loadWallet();
+    loadWalletAndTx();
   }, [currentUser]);
 
   // ─── Booking Actions ────────────────────────────────────────────────────────
@@ -1918,10 +1936,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...prev
     ]);
 
-    let targetUserId = "";
-    if (role === "pendaki") targetUserId = "pendaki1";
-    else if (role === "guide") targetUserId = "guide1";
-    else if (role === "vendor") targetUserId = "vendor1";
+    const targetUserId = currentUser?.id || (role === "pendaki" ? "pendaki1" : role === "guide" ? "guide1" : "vendor1");
 
     if (targetUserId) {
       supabase.from("wallets").select("balance").eq("user_id", targetUserId).single().then(({ data }) => {
@@ -1934,6 +1949,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             type: "topup",
             amount,
             description: `Top Up Saldo Dompet (${role.toUpperCase()})`
+          }).then(() => {
+            // Reload user transactions
+            supabase
+              .from("deposit_transactions")
+              .select("*")
+              .eq("user_id", targetUserId)
+              .order("created_at", { ascending: false })
+              .then(({ data: updatedTx }) => {
+                if (updatedTx) {
+                  setDepositTransactions(
+                    updatedTx.map((t: any) => ({
+                      id: t.id,
+                      type: t.type,
+                      amount: Number(t.amount),
+                      description: t.description,
+                      createdAt: t.created_at ? new Date(t.created_at).toISOString().split("T")[0] : "",
+                    }))
+                  );
+                }
+              });
           });
         });
       });
@@ -1963,10 +1998,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...prev
     ]);
 
-    let targetUserId = "";
-    if (role === "pendaki") targetUserId = "pendaki1";
-    else if (role === "guide") targetUserId = "guide1";
-    else if (role === "vendor") targetUserId = "vendor1";
+    const targetUserId = currentUser?.id || (role === "pendaki" ? "pendaki1" : role === "guide" ? "guide1" : "vendor1");
 
     if (targetUserId) {
       supabase.from("wallets").select("balance").eq("user_id", targetUserId).single().then(({ data }) => {
@@ -1979,6 +2011,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             type: "withdraw",
             amount,
             description: description || `Penarikan Dana Dompet (${role.toUpperCase()})`
+          }).then(() => {
+            // Reload user transactions
+            supabase
+              .from("deposit_transactions")
+              .select("*")
+              .eq("user_id", targetUserId)
+              .order("created_at", { ascending: false })
+              .then(({ data: updatedTx }) => {
+                if (updatedTx) {
+                  setDepositTransactions(
+                    updatedTx.map((t: any) => ({
+                      id: t.id,
+                      type: t.type,
+                      amount: Number(t.amount),
+                      description: t.description,
+                      createdAt: t.created_at ? new Date(t.created_at).toISOString().split("T")[0] : "",
+                    }))
+                  );
+                }
+              });
           });
         });
       });
