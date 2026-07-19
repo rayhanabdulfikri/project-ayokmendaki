@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { create, getNumericDate } from "https://deno.land/x/djwt@v2.9/mod.ts";
+import { decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,7 +48,8 @@ serve(async (req) => {
       .replace("-----END PRIVATE KEY-----", "")
       .replace(/\s+/g, "");
     
-    const binaryKey = Uint8Array.from(atob(keyData), (c) => c.charCodeAt(0));
+    // Gunakan fungsi decode dari Deno standard library (lebih aman dan stabil)
+    const binaryKey = decode(keyData);
 
     const key = await crypto.subtle.importKey(
       "pkcs8",
@@ -80,7 +82,7 @@ serve(async (req) => {
       body: new URLSearchParams({
         grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
         assertion: jwt,
-      }),
+      }).toString(),
     });
 
     if (!tokenResponse.ok) {
@@ -100,7 +102,10 @@ serve(async (req) => {
     };
 
     const boundary = "ayokmendaki_upload_boundary";
-    const delimiter = `\r\n--${boundary}\r\n`;
+    
+    // Perbaikan format delimiter multipart agar sesuai dengan spec Google Drive API
+    const delimiter = `--${boundary}\r\n`;
+    const nextDelimiter = `\r\n--${boundary}\r\n`;
     const closeDelimiter = `\r\n--${boundary}--`;
     const mediaType = file.type || "application/octet-stream";
 
@@ -109,7 +114,7 @@ serve(async (req) => {
       delimiter +
       "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
       JSON.stringify(metadata) +
-      delimiter +
+      nextDelimiter +
       `Content-Type: ${mediaType}\r\n\r\n`
     );
 

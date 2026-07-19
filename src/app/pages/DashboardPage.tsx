@@ -274,10 +274,29 @@ export function DashboardPage() {
       formData.append("userId", currentUser.id);
       formData.append("type", type);
 
-      const { data, error } = await supabase.functions.invoke("upload-to-drive", {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/upload-to-drive`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${supabaseAnonKey}`,
+        },
         body: formData,
       });
-      if (error) throw error;
+
+      if (!response.ok) {
+        const errText = await response.text();
+        let parsedErr;
+        try {
+          parsedErr = JSON.parse(errText);
+        } catch {
+          // ignore
+        }
+        throw new Error(parsedErr?.error || errText || `HTTP error ${response.status}`);
+      }
+
+      const data = await response.json();
 
       if (!data || !data.success) {
         throw new Error(data?.error || "Gagal mengunggah berkas ke Google Drive");
