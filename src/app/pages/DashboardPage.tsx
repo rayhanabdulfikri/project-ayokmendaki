@@ -522,7 +522,7 @@ export function DashboardPage() {
         if (guideErr) throw guideErr;
 
         if (isKycChanged) {
-          addVerificationRequest({
+          await addVerificationRequest({
             userId: currentUser.id,
             userName: updatedName,
             role: "guide",
@@ -545,7 +545,7 @@ export function DashboardPage() {
         if (vendorErr) throw vendorErr;
 
         if (isKycChanged) {
-          addVerificationRequest({
+          await addVerificationRequest({
             userId: currentUser.id,
             userName: profileForm.storeName,
             role: "vendor",
@@ -559,7 +559,7 @@ export function DashboardPage() {
 
       } else if (currentUser.role === "pendaki") {
         if (isKycChanged) {
-          addVerificationRequest({
+          await addVerificationRequest({
             userId: currentUser.id,
             userName: currentUser.name,
             role: "pendaki",
@@ -1368,20 +1368,25 @@ export function DashboardPage() {
   };
 
   // Submit Partnership Verification Document
-  const handleSendVerification = (e: React.FormEvent) => {
+  const handleSendVerification = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
     
-    addVerificationRequest({
-      userId: currentUser.id,
-      userName: currentUser.name,
-      role: currentUser.role as "guide" | "vendor",
-      documentName: verDocName,
-      documentImage: verDocFile
-    });
+    try {
+      await addVerificationRequest({
+        userId: currentUser.id,
+        userName: currentUser.name,
+        role: currentUser.role as "guide" | "vendor",
+        documentName: verDocName,
+        documentImage: verDocFile
+      });
 
-    setVerFormOpen(false);
-    toast.success("Dokumen baru dikirim ke Admin untuk ditinjau!");
+      setVerFormOpen(false);
+      toast.success("Dokumen baru dikirim ke Admin untuk ditinjau!");
+    } catch (err: any) {
+      console.error("Error submitting verification doc:", err);
+      toast.error("Gagal mengirim dokumen verifikasi.");
+    }
   };
 
   // Super Admin Mountain handlers

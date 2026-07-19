@@ -272,7 +272,7 @@ interface AppContextType {
   sendChatMessage: (partnerId: string, partnerName: string, message: string) => void;
   verificationRequests: VerificationRequest[];
   respondToVerification: (id: string, approve: boolean) => void;
-  addVerificationRequest: (req: Omit<VerificationRequest, "id" | "status" | "createdAt">) => void;
+  addVerificationRequest: (req: Omit<VerificationRequest, "id" | "status" | "createdAt">) => Promise<void>;
   addEquipmentItem: (item: Omit<EquipmentItem, "id" | "rating">) => void;
   updateEquipmentItem: (id: string, item: Partial<EquipmentItem>) => void;
   deleteEquipmentItem: (id: string) => void;
@@ -1174,7 +1174,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (reqErr) console.error("Error updating verification request in Supabase:", reqErr.message);
   };
 
-  const addVerificationRequest = (reqData: Omit<VerificationRequest, "id" | "status" | "createdAt">) => {
+  const addVerificationRequest = async (reqData: Omit<VerificationRequest, "id" | "status" | "createdAt">) => {
     const id = "ver_" + Math.random().toString(36).substring(2, 9);
     const newReq: VerificationRequest = {
       ...reqData,
@@ -1184,7 +1184,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setVerificationRequests((prev) => [newReq, ...prev]);
 
-    supabase.from("verification_requests").insert({
+    const { error } = await supabase.from("verification_requests").insert({
       id,
       user_id: reqData.userId,
       user_name: reqData.userName,
@@ -1196,6 +1196,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ktp_image: reqData.ktpPhoto || null,
       selfie_image: reqData.selfiePhoto || null
     });
+
+    if (error) {
+      console.error("Error inserting verification request:", error.message);
+      throw error;
+    }
   };
 
   // ─── Vendor Catalog Actions ─────────────────────────────────────────────────
