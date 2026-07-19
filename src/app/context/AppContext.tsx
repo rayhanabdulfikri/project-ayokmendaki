@@ -282,7 +282,7 @@ interface AppContextType {
   toggleGroupDiscount: (role: "guide" | "vendor", id: string) => void;
   confirmEscrow: (type: "booking" | "rental", id: string, role: "pendaki" | "guide" | "vendor") => void;
   reportDamage: (type: "booking" | "rental", id: string, fineAmount: number, fineNotes: string) => void;
-  resolveEscrowWithDeposit: (type: "booking" | "rental", id: string, approveFine: boolean) => void;
+  resolveEscrowWithDeposit: (type: "booking" | "rental", id: string, approveFine: boolean) => Promise<void>;
   climberDeposit: number;
   guideWallet: number;
   vendorWallet: number;
@@ -1543,222 +1543,236 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const resolveEscrowWithDeposit = (type: "booking" | "rental", id: string, approveFine: boolean) => {
+  const resolveEscrowWithDeposit = async (type: "booking" | "rental", id: string, approveFine: boolean) => {
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
 
     if (type === "booking") {
+      const b = bookings.find((x) => x.id === id);
+      if (!b) return;
+      const fine = b.fineAmount || 0;
+      const dep = b.depositAmount || 0;
+      let depStatus: Booking["depositStatus"] = "refunded";
+      
+      let climberBalChange = 0;
+      const climberId = b.pendakiId || "pendaki1";
+
+      if (approveFine && fine > 0) {
+        if (fine >= dep) {
+          depStatus = "forfeited";
+          const excess = fine - dep;
+          climberBalChange = -excess;
+        } else {
+          depStatus = "partially_refunded";
+          climberBalChange = dep - fine;
+        }
+      } else {
+        climberBalChange = dep;
+      }
+
+      const platformFee = Math.round(b.price * 0.1);
+      const basePayout = b.price - platformFee;
+      const finalPayout = basePayout + (approveFine ? fine : 0);
+
+      // 1. Database Sync First
+      const { error: bookingErr } = await supabase.from("bookings").update({
+        status: "Selesai",
+        deposit_status: depStatus,
+        fine_amount: approveFine ? fine : 0
+      }).eq("id", id);
+
+      if (bookingErr) {
+        console.error("Failed to update booking status in Supabase:", bookingErr.message);
+        toast.error(`Gagal mencairkan dana booking: ${bookingErr.message}`);
+        return;
+      }
+
+      // 2. wallets and transactions sync
+      if (climberBalChange !== 0) {
+        const { data } = await supabase.from("wallets").select("balance").eq("user_id", climberId).single();
+        const current = data ? Number(data.balance) : 0;
+        await supabase.from("wallets").update({ balance: Math.max(0, current + climberBalChange) }).eq("user_id", climberId);
+      }
+
+      if (b.guideId) {
+        const { data } = await supabase.from("wallets").select("balance").eq("user_id", b.guideId).single();
+        const current = data ? Number(data.balance) : 0;
+        await supabase.from("wallets").update({ balance: current + finalPayout }).eq("user_id", b.guideId);
+      }
+
+      if (approveFine && fine > 0) {
+        const excess = fine - dep;
+        if (excess > 0) {
+          await supabase.from("deposit_transactions").insert({
+            id: "tx_" + Math.random().toString(36).substring(2, 9),
+            user_id: climberId,
+            type: "fine_deduction",
+            amount: excess,
+            description: `Kekurangan denda pelanggaran booking ${b.mountainName}: ${b.fineNotes || ""}`
+          });
+        } else {
+          await supabase.from("deposit_transactions").insert({
+            id: "tx_" + Math.random().toString(36).substring(2, 9),
+            user_id: climberId,
+            type: "refund",
+            amount: dep - fine,
+            description: `Sisa pengembalian deposit jaminan booking ${b.mountainName}`
+          });
+        }
+        await supabase.from("deposit_transactions").insert({
+          id: "tx_" + Math.random().toString(36).substring(2, 9),
+          user_id: climberId,
+          type: "fine_deduction",
+          amount: Math.min(fine, dep),
+          description: `Denda pelanggaran booking ${b.mountainName}: ${b.fineNotes || ""}`
+        });
+      } else {
+        await supabase.from("deposit_transactions").insert({
+          id: "tx_" + Math.random().toString(36).substring(2, 9),
+          user_id: climberId,
+          type: "refund",
+          amount: dep,
+          description: `Pengembalian penuh deposit jaminan booking ${b.mountainName}`
+        });
+      }
+
+      if (b.guideId) {
+        await supabase.from("deposit_transactions").insert({
+          id: "tx_" + Math.random().toString(36).substring(2, 9),
+          user_id: b.guideId,
+          type: "refund",
+          amount: finalPayout,
+          description: `Penerimaan sewa jasa trip ${b.mountainName} · Pendaki: ${b.pendakiName} ${approveFine ? `(Termasuk denda Rp ${fine.toLocaleString("id-ID")})` : ""}`
+        });
+      }
+
+      // 3. Update React States
       setBookings((prev) =>
-        prev.map((b) => {
-          if (b.id !== id) return b;
-          const fine = b.fineAmount || 0;
-          const dep = b.depositAmount || 0;
-          let depStatus: Booking["depositStatus"] = "refunded";
-          
-          let climberBalChange = 0;
-          const climberId = b.pendakiId || "pendaki1";
-
-          if (approveFine && fine > 0) {
-            if (fine >= dep) {
-              depStatus = "forfeited";
-              const excess = fine - dep;
-              climberBalChange = -excess;
-            } else {
-              depStatus = "partially_refunded";
-              climberBalChange = dep - fine;
-            }
-          } else {
-            climberBalChange = dep;
-          }
-
-          const platformFee = Math.round(b.price * 0.1);
-          const basePayout = b.price - platformFee;
-          const finalPayout = basePayout + (approveFine ? fine : 0);
-
-          if (climberId) {
-            setClimberDeposit((prevDep) => Math.max(0, prevDep + climberBalChange));
-          }
-          setGuideWallet((prev) => prev + finalPayout);
-
-          // Database Sync
-          supabase.from("bookings").update({
-            status: "Selesai",
-            deposit_status: depStatus,
-            fine_amount: approveFine ? fine : 0
-          }).eq("id", id);
-          if (climberBalChange !== 0) {
-            supabase.from("wallets").select("balance").eq("user_id", climberId).single().then(({ data }) => {
-              const current = data ? Number(data.balance) : 0;
-              supabase.from("wallets").update({ balance: Math.max(0, current + climberBalChange) }).eq("user_id", climberId);
-            });
-          }
-
-          if (b.guideId) {
-            supabase.from("wallets").select("balance").eq("user_id", b.guideId).single().then(({ data }) => {
-              const current = data ? Number(data.balance) : 0;
-              supabase.from("wallets").update({ balance: current + finalPayout }).eq("user_id", b.guideId);
-            });
-          }
-
-          if (approveFine && fine > 0) {
-            const excess = fine - dep;
-            if (excess > 0) {
-              supabase.from("deposit_transactions").insert({
-                id: "tx_" + Math.random().toString(36).substring(2, 9),
-                user_id: climberId,
-                type: "fine_deduction",
-                amount: excess,
-                description: `Kekurangan denda pelanggaran booking ${b.mountainName}: ${b.fineNotes || ""}`
-              });
-            } else {
-              supabase.from("deposit_transactions").insert({
-                id: "tx_" + Math.random().toString(36).substring(2, 9),
-                user_id: climberId,
-                type: "refund",
-                amount: dep - fine,
-                description: `Sisa pengembalian deposit jaminan booking ${b.mountainName}`
-              });
-            }
-            supabase.from("deposit_transactions").insert({
-              id: "tx_" + Math.random().toString(36).substring(2, 9),
-              user_id: climberId,
-              type: "fine_deduction",
-              amount: Math.min(fine, dep),
-              description: `Denda pelanggaran booking ${b.mountainName}: ${b.fineNotes || ""}`
-            });
-          } else {
-            supabase.from("deposit_transactions").insert({
-              id: "tx_" + Math.random().toString(36).substring(2, 9),
-              user_id: climberId,
-              type: "refund",
-              amount: dep,
-              description: `Pengembalian penuh deposit jaminan booking ${b.mountainName}`
-            });
-          }
-
-          if (b.guideId) {
-            supabase.from("deposit_transactions").insert({
-              id: "tx_" + Math.random().toString(36).substring(2, 9),
-              user_id: b.guideId,
-              type: "refund",
-              amount: finalPayout,
-              description: `Penerimaan sewa jasa trip ${b.mountainName} · Pendaki: ${b.pendakiName} ${approveFine ? `(Termasuk denda Rp ${fine.toLocaleString("id-ID")})` : ""}`
-            });
-          }
-
-          return {
-            ...b,
-            status: "Selesai",
-            depositStatus: depStatus,
-            fineAmount: approveFine ? fine : 0
-          };
-        })
+        prev.map((item) => (item.id === id ? {
+          ...item,
+          status: "Selesai",
+          depositStatus: depStatus,
+          fineAmount: approveFine ? fine : 0
+        } : item))
       );
+      if (climberId) {
+        setClimberDeposit((prevDep) => Math.max(0, prevDep + climberBalChange));
+      }
+      setGuideWallet((prev) => prev + finalPayout);
+
+      toast.success(approveFine ? "Sanksi denda disetujui & dana dicairkan!" : "Escrow & Deposit dicairkan penuh ke masing-masing pihak.");
     } else {
+      const r = rentalOrders.find((x) => x.id === id);
+      if (!r) return;
+      const fine = r.fineAmount || 0;
+      const dep = r.depositAmount || 0;
+      let depStatus: RentalOrder["depositStatus"] = "refunded";
+      
+      let climberBalChange = 0;
+      const climberId = r.pendakiId || "pendaki1";
+
+      if (approveFine && fine > 0) {
+        if (fine >= dep) {
+          depStatus = "forfeited";
+          const excess = fine - dep;
+          climberBalChange = -excess;
+        } else {
+          depStatus = "partially_refunded";
+          climberBalChange = dep - fine;
+        }
+      } else {
+        climberBalChange = dep;
+      }
+
+      const platformFee = Math.round(r.totalPrice * 0.1);
+      const basePayout = r.totalPrice - platformFee;
+      const finalPayout = basePayout + (approveFine ? fine : 0);
+
+      // 1. Database Sync First
+      const { error: rentalErr } = await supabase.from("rental_orders").update({
+        status: "Selesai",
+        deposit_status: depStatus,
+        fine_amount: approveFine ? fine : 0
+      }).eq("id", id);
+
+      if (rentalErr) {
+        console.error("Failed to update rental status in Supabase:", rentalErr.message);
+        toast.error(`Gagal mencairkan dana rental: ${rentalErr.message}`);
+        return;
+      }
+
+      // 2. wallets and transactions sync
+      if (climberBalChange !== 0) {
+        const { data } = await supabase.from("wallets").select("balance").eq("user_id", climberId).single();
+        const current = data ? Number(data.balance) : 0;
+        await supabase.from("wallets").update({ balance: Math.max(0, current + climberBalChange) }).eq("user_id", climberId);
+      }
+
+      if (r.vendorId) {
+        const { data } = await supabase.from("wallets").select("balance").eq("user_id", r.vendorId).single();
+        const current = data ? Number(data.balance) : 0;
+        await supabase.from("wallets").update({ balance: current + finalPayout }).eq("user_id", r.vendorId);
+      }
+
+      if (approveFine && fine > 0) {
+        const excess = fine - dep;
+        if (excess > 0) {
+          await supabase.from("deposit_transactions").insert({
+            id: "tx_" + Math.random().toString(36).substring(2, 9),
+            user_id: climberId,
+            type: "fine_deduction",
+            amount: excess,
+            description: `Kekurangan denda kerusakan rental ${r.itemName}: ${r.fineNotes || ""}`
+          });
+        } else {
+          await supabase.from("deposit_transactions").insert({
+            id: "tx_" + Math.random().toString(36).substring(2, 9),
+            user_id: climberId,
+            type: "refund",
+            amount: dep - fine,
+            description: `Sisa pengembalian deposit jaminan rental ${r.itemName}`
+          });
+        }
+        await supabase.from("deposit_transactions").insert({
+          id: "tx_" + Math.random().toString(36).substring(2, 9),
+          user_id: climberId,
+          type: "fine_deduction",
+          amount: Math.min(fine, dep),
+          description: `Denda kerusakan rental ${r.itemName}: ${r.fineNotes || ""}`
+        });
+      } else {
+        await supabase.from("deposit_transactions").insert({
+          id: "tx_" + Math.random().toString(36).substring(2, 9),
+          user_id: climberId,
+          type: "refund",
+          amount: dep,
+          description: `Pengembalian penuh deposit jaminan rental ${r.itemName}`
+        });
+      }
+
+      if (r.vendorId) {
+        await supabase.from("deposit_transactions").insert({
+          id: "tx_" + Math.random().toString(36).substring(2, 9),
+          user_id: r.vendorId,
+          type: "refund",
+          amount: finalPayout,
+          description: `Penerimaan rental alat ${r.itemName} · Pendaki: ${r.pendakiName} ${approveFine ? `(Termasuk denda Rp ${fine.toLocaleString("id-ID")})` : ""}`
+        });
+      }
+
+      // 3. Update React States
       setRentalOrders((prev) =>
-        prev.map((r) => {
-          if (r.id !== id) return r;
-          const fine = r.fineAmount || 0;
-          const dep = r.depositAmount || 0;
-          let depStatus: RentalOrder["depositStatus"] = "refunded";
-          
-          let climberBalChange = 0;
-          if (approveFine && fine > 0) {
-            if (fine >= dep) {
-              depStatus = "forfeited";
-              const excess = fine - dep;
-              climberBalChange = -excess;
-            } else {
-              depStatus = "partially_refunded";
-              climberBalChange = dep - fine;
-            }
-          } else {
-            climberBalChange = dep;
-          }
-
-          const platformFee = Math.round(r.totalPrice * 0.1);
-          const basePayout = r.totalPrice - platformFee;
-          const finalPayout = basePayout + (approveFine ? fine : 0);
-
-          setClimberDeposit((prevDep) => Math.max(0, prevDep + climberBalChange));
-          setVendorWallet((prev) => prev + finalPayout);
-
-          // Database Sync
-          supabase.from("rental_orders").update({
-            status: "Selesai",
-            deposit_status: depStatus,
-            fine_amount: approveFine ? fine : 0
-          }).eq("id", id);
-
-          const climberId = r.pendakiId || "pendaki1";
-          if (climberBalChange !== 0) {
-            supabase.from("wallets").select("balance").eq("user_id", climberId).single().then(({ data }) => {
-              const current = data ? Number(data.balance) : 0;
-              supabase.from("wallets").update({ balance: Math.max(0, current + climberBalChange) }).eq("user_id", climberId);
-            });
-          }
-
-          if (r.vendorId) {
-            supabase.from("wallets").select("balance").eq("user_id", r.vendorId).single().then(({ data }) => {
-              const current = data ? Number(data.balance) : 0;
-              supabase.from("wallets").update({ balance: current + finalPayout }).eq("user_id", r.vendorId);
-            });
-          }
-
-          if (approveFine && fine > 0) {
-            const excess = fine - dep;
-            if (excess > 0) {
-              supabase.from("deposit_transactions").insert({
-                id: "tx_" + Math.random().toString(36).substring(2, 9),
-                user_id: climberId,
-                type: "fine_deduction",
-                amount: excess,
-                description: `Kekurangan denda kerusakan rental ${r.itemName}: ${r.fineNotes || ""}`
-              });
-            } else {
-              supabase.from("deposit_transactions").insert({
-                id: "tx_" + Math.random().toString(36).substring(2, 9),
-                user_id: climberId,
-                type: "refund",
-                amount: dep - fine,
-                description: `Sisa pengembalian deposit jaminan rental ${r.itemName}`
-              });
-            }
-            supabase.from("deposit_transactions").insert({
-              id: "tx_" + Math.random().toString(36).substring(2, 9),
-              user_id: climberId,
-              type: "fine_deduction",
-              amount: Math.min(fine, dep),
-              description: `Denda kerusakan rental ${r.itemName}: ${r.fineNotes || ""}`
-            });
-          } else {
-            supabase.from("deposit_transactions").insert({
-              id: "tx_" + Math.random().toString(36).substring(2, 9),
-              user_id: climberId,
-              type: "refund",
-              amount: dep,
-              description: `Pengembalian penuh deposit jaminan rental ${r.itemName}`
-            });
-          }
-
-          if (r.vendorId) {
-            supabase.from("deposit_transactions").insert({
-              id: "tx_" + Math.random().toString(36).substring(2, 9),
-              user_id: r.vendorId,
-              type: "refund",
-              amount: finalPayout,
-              description: `Penerimaan sewa alat ${r.itemName} · Pendaki: ${r.pendakiName} ${approveFine ? `(Termasuk denda Rp ${fine.toLocaleString("id-ID")})` : ""}`
-            });
-          }
-
-          return {
-            ...r,
-            status: "Selesai",
-            depositStatus: depStatus,
-            fineAmount: approveFine ? fine : 0
-          };
-        })
+        prev.map((item) => (item.id === id ? {
+          ...item,
+          status: "Selesai",
+          depositStatus: depStatus,
+          fineAmount: approveFine ? fine : 0
+        } : item))
       );
+      setClimberDeposit((prevDep) => Math.max(0, prevDep + climberBalChange));
+      setVendorWallet((prev) => prev + finalPayout);
+
+      toast.success(approveFine ? "Sanksi denda disetujui & dana dicairkan!" : "Escrow & Deposit dicairkan penuh ke masing-masing pihak.");
     }
   };
 

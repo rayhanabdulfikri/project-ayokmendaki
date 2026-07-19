@@ -4140,9 +4140,8 @@ export function DashboardPage() {
                                             <Button 
                                               size="xs" 
                                               className="bg-red-600 hover:bg-red-700 text-white text-[10px] h-7"
-                                              onClick={() => {
-                                                resolveEscrowWithDeposit("booking", b.id, true);
-                                                toast.success("Super Admin menyetujui denda. Deposit dipotong & dana dicairkan!");
+                                              onClick={async () => {
+                                                await resolveEscrowWithDeposit("booking", b.id, true);
                                               }}
                                             >
                                               Setujui Denda ({Math.round((b.fineAmount || 0) / 1000)}k)
@@ -4151,9 +4150,8 @@ export function DashboardPage() {
                                               size="xs" 
                                               variant="outline" 
                                               className="text-[10px] h-7"
-                                              onClick={() => {
-                                                resolveEscrowWithDeposit("booking", b.id, false);
-                                                toast.success("Super Admin menolak denda. Escrow dicairkan penuh!");
+                                              onClick={async () => {
+                                                await resolveEscrowWithDeposit("booking", b.id, false);
                                               }}
                                             >
                                               Abaikan Denda
@@ -4163,9 +4161,8 @@ export function DashboardPage() {
                                           <Button 
                                             size="xs" 
                                             className={`h-7 text-[10px] ${bothConfirmed ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-400 hover:bg-gray-500"} text-white font-semibold`}
-                                            onClick={() => {
-                                              resolveEscrowWithDeposit("booking", b.id, false);
-                                              toast.success("Escrow & Deposit dicairkan penuh ke masing-masing pihak.");
+                                            onClick={async () => {
+                                              await resolveEscrowWithDeposit("booking", b.id, false);
                                             }}
                                           >
                                             {!bothConfirmed && "⚠️ Payout Paksa "}
@@ -4241,9 +4238,8 @@ export function DashboardPage() {
                                             <Button 
                                               size="xs" 
                                               className="bg-red-600 hover:bg-red-700 text-white text-[10px] h-7"
-                                              onClick={() => {
-                                                resolveEscrowWithDeposit("rental", r.id, true);
-                                                toast.success("Super Admin menyetujui denda kerusakan. Deposit dipotong & dana sewa + denda cair ke Vendor!");
+                                              onClick={async () => {
+                                                await resolveEscrowWithDeposit("rental", r.id, true);
                                               }}
                                             >
                                               Setujui Denda ({Math.round((r.fineAmount || 0) / 1000)}k)
@@ -4252,9 +4248,8 @@ export function DashboardPage() {
                                               size="xs" 
                                               variant="outline" 
                                               className="text-[10px] h-7"
-                                              onClick={() => {
-                                                resolveEscrowWithDeposit("rental", r.id, false);
-                                                toast.success("Super Admin menolak denda. Escrow dicairkan penuh!");
+                                              onClick={async () => {
+                                                await resolveEscrowWithDeposit("rental", r.id, false);
                                               }}
                                             >
                                               Abaikan Denda
@@ -4264,9 +4259,8 @@ export function DashboardPage() {
                                           <Button 
                                             size="xs" 
                                             className={`h-7 text-[10px] ${bothConfirmed ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-400 hover:bg-gray-500"} text-white font-semibold`}
-                                            onClick={() => {
-                                              resolveEscrowWithDeposit("rental", r.id, false);
-                                              toast.success("Escrow & Deposit dicairkan penuh ke masing-masing pihak.");
+                                            onClick={async () => {
+                                              await resolveEscrowWithDeposit("rental", r.id, false);
                                             }}
                                           >
                                             {!bothConfirmed && "⚠️ Payout Paksa "}
