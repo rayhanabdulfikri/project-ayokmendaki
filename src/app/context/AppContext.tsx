@@ -1531,7 +1531,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // ─── Vendor Catalog Actions ─────────────────────────────────────────────────
-  const addEquipmentItem = (itemData: Omit<EquipmentItem, "id" | "rating">) => {
+  const addEquipmentItem = async (itemData: Omit<EquipmentItem, "id" | "rating">) => {
     const id = "eq_" + Math.random().toString(36).substring(2, 9);
     const newItem: EquipmentItem = {
       ...itemData,
@@ -1540,7 +1540,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setEquipment((prev) => [newItem, ...prev]);
 
-    supabase.from("equipment_items").insert({
+    const { error } = await supabase.from("equipment_items").insert({
       id,
       name: itemData.name,
       description: itemData.description,
@@ -1552,9 +1552,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       group_discount_enabled: itemData.groupDiscountEnabled || false,
       damage_terms: itemData.damageTerms || null
     });
+
+    if (error) {
+      console.error("Error inserting equipment item in Supabase:", error.message);
+      toast.error(`Gagal menyimpan ke database: ${error.message}`);
+      setEquipment((prev) => prev.filter((eq) => eq.id !== id));
+    } else {
+      toast.success("Barang camping baru ditambahkan ke katalog!");
+    }
   };
 
-  const updateEquipmentItem = (id: string, itemData: Partial<EquipmentItem>) => {
+  const updateEquipmentItem = async (id: string, itemData: Partial<EquipmentItem>) => {
+    const oldEquipment = [...equipment];
     setEquipment((prev) =>
       prev.map((eq) => (eq.id === id ? { ...eq, ...itemData } : eq))
     );
@@ -1568,12 +1577,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (itemData.groupDiscountEnabled !== undefined) payload.group_discount_enabled = itemData.groupDiscountEnabled;
     if (itemData.damageTerms !== undefined) payload.damage_terms = itemData.damageTerms;
 
-    supabase.from("equipment_items").update(payload).eq("id", id);
+    const { error } = await supabase.from("equipment_items").update(payload).eq("id", id);
+    if (error) {
+      console.error("Error updating equipment item in Supabase:", error.message);
+      toast.error(`Gagal memperbarui di database: ${error.message}`);
+      setEquipment(oldEquipment);
+    } else {
+      toast.success("Barang katalog berhasil diperbarui!");
+    }
   };
 
-  const deleteEquipmentItem = (id: string) => {
+  const deleteEquipmentItem = async (id: string) => {
+    const oldEquipment = [...equipment];
     setEquipment((prev) => prev.filter((eq) => eq.id !== id));
-    supabase.from("equipment_items").delete().eq("id", id);
+
+    const { error } = await supabase.from("equipment_items").delete().eq("id", id);
+    if (error) {
+      console.error("Error deleting equipment item in Supabase:", error.message);
+      toast.error(`Gagal menghapus di database: ${error.message}`);
+      setEquipment(oldEquipment);
+    } else {
+      toast.success("Barang berhasil dihapus dari katalog!");
+    }
   };
 
   // ─── Trip Package Actions ───────────────────────────────────────────────────

@@ -1288,7 +1288,6 @@ export function DashboardPage() {
         groupDiscountEnabled,
         damageTerms
       });
-      toast.success("Barang katalog berhasil diperbarui!");
     } else {
       addEquipmentItem({
         name,
@@ -1301,7 +1300,6 @@ export function DashboardPage() {
         groupDiscountEnabled,
         damageTerms
       });
-      toast.success("Barang camping baru ditambahkan ke katalog!");
     }
 
     setItemFormOpen(false);
