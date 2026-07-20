@@ -1173,17 +1173,20 @@ export function DashboardPage() {
   const handlePayWithWallet = (id: string, type: "booking" | "rental", amount: number) => {
     if (!currentUser) return;
     
-    if (climberDeposit < amount) {
+    const ppn = Math.round(amount * 0.11);
+    const totalAmount = amount + ppn;
+
+    if (climberDeposit < totalAmount) {
       toast.error("Saldo Dompet Anda Tidak Mencukupi!", {
-        description: `Saldo Anda saat ini Rp ${climberDeposit.toLocaleString("id-ID")}. Silakan lakukan Top Up terlebih dahulu di menu Deposit & Dompet.`,
+        description: `Saldo Anda saat ini Rp ${climberDeposit.toLocaleString("id-ID")}. Total pembayaran termasuk PPN 11% adalah Rp ${totalAmount.toLocaleString("id-ID")}. Silakan lakukan Top Up terlebih dahulu di menu Deposit & Dompet.`,
       });
       setActiveTab("deposit_wallet");
       return;
     }
 
-    // Deduct from climber deposit (wallet balance)
-    withdrawWallet("pendaki", amount, `Pembayaran ${type === "booking" ? "Booking Guide" : "Sewa Alat"} (ID: ${id})`);
-    logUserActivity(currentUser.id, currentUser.name || "Pendaki", "pendaki", `Melakukan pembayaran ${type === "booking" ? "Booking Guide" : "Sewa Alat"} senilai Rp ${amount.toLocaleString("id-ID")}`);
+    // Deduct from climber deposit (wallet balance) including PPN 11%
+    withdrawWallet("pendaki", totalAmount, `Pembayaran ${type === "booking" ? "Booking Guide" : "Sewa Alat"} (Base: Rp ${amount.toLocaleString()}, PPN 11%: Rp ${ppn.toLocaleString()}) (ID: ${id})`);
+    logUserActivity(currentUser.id, currentUser.name || "Pendaki", "pendaki", `Melakukan pembayaran ${type === "booking" ? "Booking Guide" : "Sewa Alat"} senilai Rp ${totalAmount.toLocaleString("id-ID")} (Termasuk PPN 11% Rp ${ppn.toLocaleString("id-ID")})`);
 
     if (type === "booking") {
       updateBookingStatus(id, "Telah Dibayar");
@@ -1410,6 +1413,23 @@ export function DashboardPage() {
     });
   };
 
+  const calculateWithdrawalFee = (amount: number): number => {
+    if (!amount || amount < 10000) return 0;
+    if (amount <= 500000) {
+      return 3000;
+    } else if (amount <= 1000000) {
+      return 3500;
+    } else if (amount <= 1500000) {
+      return 4000;
+    } else if (amount <= 2000000) {
+      return 4500;
+    } else {
+      const extraAmount = amount - 2000000;
+      const brackets = Math.ceil(extraAmount / 500000);
+      return 4500 + brackets * 1000;
+    }
+  };
+
   const handleWithdrawSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseInt(depositAmountInput);
@@ -1431,16 +1451,23 @@ export function DashboardPage() {
       return;
     }
 
+    const fee = calculateWithdrawalFee(amount);
+    const netReceived = amount - fee;
+
     setIsProcessingWd(true);
     toast.info("Menghubungkan ke gateway pembayaran (Dummy Midtrans/Xendit payout)...");
 
     setTimeout(() => {
-      withdrawWallet(currentUser?.role as any, amount, `Penarikan Dana ke Rekening ${currentUser.bank_name} (${currentUser.bank_account})`);
+      withdrawWallet(
+        currentUser?.role as any, 
+        amount, 
+        `Penarikan Dana ke Rekening ${currentUser.bank_name} (${currentUser.bank_account}) · Diterima Bersih: Rp ${netReceived.toLocaleString("id-ID")} · Biaya platform: Rp ${fee.toLocaleString("id-ID")}`
+      );
       setIsProcessingWd(false);
       setWithdrawModalOpen(false);
       setDepositAmountInput("");
       toast.success(`Berhasil menarik dana sebesar Rp ${amount.toLocaleString("id-ID")}!`, {
-        description: `Dana ditransfer ke ${currentUser.bank_name} No. Rek ${currentUser.bank_account} a.n. ${currentUser.bank_holder}.`
+        description: `Dana bersih setelah biaya platform Rp ${fee.toLocaleString("id-ID")} adalah Rp ${netReceived.toLocaleString("id-ID")} ditransfer ke ${currentUser.bank_name} No. Rek ${currentUser.bank_account} a.n. ${currentUser.bank_holder}.`
       });
     }, 2000);
   };
@@ -2277,11 +2304,18 @@ export function DashboardPage() {
                               </div>
                             )}
 
-                            <div className="flex gap-2 w-full justify-end border-t border-gray-100 pt-3 mt-3">
+                            <div className="flex gap-2 w-full justify-end items-center flex-wrap border-t border-gray-100 pt-3 mt-3">
                                 {b.status === "Menunggu Pembayaran" && (
-                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold" onClick={() => handlePayWithWallet(b.id, "booking", b.price)}>
-                                    <Wallet className="size-3.5 mr-1" /> Bayar dengan Saldo Dompet
-                                  </Button>
+                                  <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                                    <div className="text-[10px] text-gray-500 text-right leading-tight">
+                                      Biaya Trip: Rp {b.price.toLocaleString("id-ID")} &middot; PPN 11%: Rp {Math.round(b.price * 0.11).toLocaleString("id-ID")}
+                                      <br />
+                                      <span className="font-bold text-emerald-700 text-xs">Total Bayar: Rp {Math.round(b.price * 1.11).toLocaleString("id-ID")}</span>
+                                    </div>
+                                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold rounded-xl" onClick={() => handlePayWithWallet(b.id, "booking", b.price)}>
+                                      <Wallet className="size-3.5 mr-1" /> Bayar Rp {Math.round(b.price * 1.11).toLocaleString("id-ID")}
+                                    </Button>
+                                  </div>
                                 )}
                                 {["Telah Dibayar", "Start", "Muncak"].includes(b.status) && (
                                   <Button 
@@ -2419,11 +2453,18 @@ export function DashboardPage() {
                               </div>
                             )}
 
-                            <div className="flex gap-2 w-full justify-end border-t border-gray-100 pt-3 mt-3">
+                            <div className="flex gap-2 w-full justify-end items-center flex-wrap border-t border-gray-100 pt-3 mt-3">
                                 {r.status === "Menunggu Pembayaran" && (
-                                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold" onClick={() => handlePayWithWallet(r.id, "rental", r.totalPrice)}>
-                                    <Wallet className="size-3.5 mr-1" /> Bayar dengan Saldo Dompet
-                                  </Button>
+                                  <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                                    <div className="text-[10px] text-gray-500 text-right leading-tight">
+                                      Biaya Sewa: Rp {r.totalPrice.toLocaleString("id-ID")} &middot; PPN 11%: Rp {Math.round(r.totalPrice * 0.11).toLocaleString("id-ID")}
+                                      <br />
+                                      <span className="font-bold text-emerald-700 text-xs">Total Bayar: Rp {Math.round(r.totalPrice * 1.11).toLocaleString("id-ID")}</span>
+                                    </div>
+                                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold rounded-xl" onClick={() => handlePayWithWallet(r.id, "rental", r.totalPrice)}>
+                                      <Wallet className="size-3.5 mr-1" /> Bayar Rp {Math.round(r.totalPrice * 1.11).toLocaleString("id-ID")}
+                                    </Button>
+                                  </div>
                                 )}
                                 {["Telah Dibayar", "Siap Diambil", "Sedang Disewa"].includes(r.status) && (
                                   <Button 
@@ -4189,23 +4230,38 @@ export function DashboardPage() {
                     <CardContent className="space-y-4">
                       {/* Escrow summary banner */}
                       {(() => {
-                        const totalPaidBookings = bookings.filter(b => ["Telah Dibayar", "Berangkat", "Basecamp", "Summit", "Dispute"].includes(b.status)).reduce((a, c) => a + c.price, 0);
-                        const totalPaidRentals = rentalOrders.filter(r => ["Telah Dibayar", "Sedang Disewa", "Dispute"].includes(r.status)).reduce((a, c) => a + c.totalPrice, 0);
-                        const totalEscrowBalance = totalPaidBookings + totalPaidRentals;
+                        const activeBookings = bookings.filter(b => ["Telah Dibayar", "Start", "Muncak", "Dispute"].includes(b.status));
+                        const activeRentals = rentalOrders.filter(r => ["Telah Dibayar", "Siap Diambil", "Sedang Disewa", "Dispute"].includes(r.status));
+                        
+                        const totalEscrowBase = activeBookings.reduce((sum, b) => sum + b.price, 0) + activeRentals.reduce((sum, r) => sum + r.totalPrice, 0);
+                        const totalEscrowPpn = Math.round(totalEscrowBase * 0.11);
+                        const totalEscrowBalance = totalEscrowBase + totalEscrowPpn;
 
-                        const totalFinishedBookings = bookings.filter(b => b.status === "Selesai").reduce((a, c) => a + c.price, 0);
-                        const totalFinishedRentals = rentalOrders.filter(r => r.status === "Selesai").reduce((a, c) => a + c.totalPrice, 0);
-                        const totalPlatformCommission = (totalFinishedBookings + totalFinishedRentals) * 0.1; // 10% platform fee fiktif
+                        const finishedBookings = bookings.filter(b => b.status === "Selesai");
+                        const finishedRentals = rentalOrders.filter(r => r.status === "Selesai");
+                        
+                        const finishedBaseAmount = finishedBookings.reduce((sum, b) => sum + b.price, 0) + finishedRentals.reduce((sum, r) => sum + r.totalPrice, 0);
+                        const totalPlatformCommission = Math.round(finishedBaseAmount * 0.10);
+                        const totalPpnCollected = Math.round(finishedBaseAmount * 0.11);
+                        const totalNetRevenue = totalPlatformCommission + totalPpnCollected;
 
                         return (
-                          <div className="grid grid-cols-2 gap-4 mb-4">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                             <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 text-center">
-                              <p className="text-xs text-emerald-800 font-semibold uppercase tracking-wider">Saldo Escrow Tertahan</p>
-                              <p className="text-2xl font-bold text-emerald-600 mt-1">Rp {totalEscrowBalance.toLocaleString("id-ID")}</p>
+                              <p className="text-[10px] text-emerald-800 font-semibold uppercase tracking-wider">Escrow Tertahan (Base+PPN)</p>
+                              <p className="text-xl font-bold text-emerald-600 mt-1">Rp {totalEscrowBalance.toLocaleString("id-ID")}</p>
+                            </div>
+                            <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 text-center">
+                              <p className="text-[10px] text-amber-800 font-semibold uppercase tracking-wider">Komisi Platform Terkumpul</p>
+                              <p className="text-xl font-bold text-amber-600 mt-1">Rp {totalPlatformCommission.toLocaleString("id-ID")}</p>
                             </div>
                             <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 text-center">
-                              <p className="text-xs text-blue-800 font-semibold uppercase tracking-wider">Komisi Platform Terkumpul</p>
-                              <p className="text-2xl font-bold text-blue-600 mt-1">Rp {totalPlatformCommission.toLocaleString("id-ID")}</p>
+                              <p className="text-[10px] text-blue-800 font-semibold uppercase tracking-wider">Pajak PPN 11% Terkumpul</p>
+                              <p className="text-xl font-bold text-blue-600 mt-1">Rp {totalPpnCollected.toLocaleString("id-ID")}</p>
+                            </div>
+                            <div className="p-4 bg-purple-50 rounded-xl border border-purple-100 text-center col-span-2 md:col-span-1">
+                              <p className="text-[10px] text-purple-800 font-semibold uppercase tracking-wider">Total Pendapatan Platform</p>
+                              <p className="text-xl font-bold text-purple-600 mt-1">Rp {totalNetRevenue.toLocaleString("id-ID")}</p>
                             </div>
                           </div>
                         );
@@ -4216,7 +4272,7 @@ export function DashboardPage() {
                         {bookings.map((b) => {
                           const isPaid = ["Telah Dibayar", "Start", "Muncak", "Selesai"].includes(b.status);
                           const bothConfirmed = b.pendakiConfirmed && b.partnerConfirmed;
-                          const hasFine = b.fineAmount && b.fineAmount > 0;
+                          const hasFine = Number(b.fineAmount) > 0;
                           
                           return (
                             <div key={`trans_b_${b.id}`} className="p-4 border border-gray-150 rounded-xl text-xs space-y-3 bg-white hover:shadow-xs transition-shadow">
@@ -4314,7 +4370,7 @@ export function DashboardPage() {
                         {rentalOrders.map((r) => {
                           const isPaid = ["Telah Dibayar", "Siap Diambil", "Sedang Disewa", "Selesai"].includes(r.status);
                           const bothConfirmed = r.pendakiConfirmed && r.partnerConfirmed;
-                          const hasFine = r.fineAmount && r.fineAmount > 0;
+                          const hasFine = Number(r.fineAmount) > 0;
 
                           return (
                             <div key={`trans_r_${r.id}`} className="p-4 border border-gray-150 rounded-xl text-xs space-y-3 bg-white hover:shadow-xs transition-shadow">
@@ -6753,7 +6809,7 @@ export function DashboardPage() {
                   <Button className="w-full text-xs bg-gray-100 text-gray-450 cursor-not-allowed" disabled>Penarikan Dinonaktifkan</Button>
                 </div>
               ) : (
-                <form onSubmit={handleWithdrawSubmit} className="space-y-4">
+                <form onSubmit={handleWithdrawSubmit} className="space-y-4 font-sans">
                   <div>
                     <label className="text-xs font-semibold text-gray-700 block mb-1">Nominal Penarikan (Rp)</label>
                     <div className="relative">
@@ -6770,6 +6826,24 @@ export function DashboardPage() {
                       />
                     </div>
                   </div>
+
+                  {parseInt(depositAmountInput) >= 10000 && (
+                    <div className="p-3 bg-gray-50 rounded-xl border border-gray-150 text-[11px] space-y-1.5 font-medium text-gray-600">
+                      <div className="flex justify-between">
+                        <span>Nominal Penarikan:</span>
+                        <span className="font-bold text-gray-800">Rp {parseInt(depositAmountInput).toLocaleString("id-ID")}</span>
+                      </div>
+                      <div className="flex justify-between text-red-600">
+                        <span>Biaya Platform (Pajak):</span>
+                        <span className="font-bold">- Rp {calculateWithdrawalFee(parseInt(depositAmountInput)).toLocaleString("id-ID")}</span>
+                      </div>
+                      <div className="border-t border-gray-200 pt-1.5 flex justify-between text-emerald-700 font-bold">
+                        <span>Diterima Bersih:</span>
+                        <span>Rp {(parseInt(depositAmountInput) - calculateWithdrawalFee(parseInt(depositAmountInput))).toLocaleString("id-ID")}</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex gap-2.5 pt-2">
                     <Button type="button" variant="outline" className="flex-1 text-xs rounded-xl" onClick={() => setWithdrawModalOpen(false)}>Batal</Button>
                     <Button type="submit" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl" disabled={isProcessingWd}>
