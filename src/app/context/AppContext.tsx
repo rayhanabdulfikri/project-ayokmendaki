@@ -1408,101 +1408,145 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // ─── Negotiation Actions ───────────────────────────────────────────────────
-  const createNegotiation = (negoData: Omit<Negotiation, "id" | "status">) => {
+  const createNegotiation = async (negoData: Omit<Negotiation, "id" | "status">) => {
     const id = "nego_" + Math.random().toString(36).substring(2, 9);
     const newNego: Negotiation = {
       ...negoData,
       id,
       status: "pending",
     };
+
+    const oldNegotiations = [...negotiations];
+    const oldBookings = [...bookings];
+    const oldRentalOrders = [...rentalOrders];
+
     setNegotiations((prev) => [newNego, ...prev]);
 
-    if (negoData.type === "guide") {
-      updateBookingStatus(negoData.orderId, "Menunggu Konfirmasi");
-    } else {
-      updateRentalStatus(negoData.orderId, "Menunggu Konfirmasi");
-    }
+    try {
+      if (negoData.type === "guide") {
+        setBookings((prev) =>
+          prev.map((b) => (b.id === negoData.orderId ? { ...b, status: "Menunggu Konfirmasi" } : b))
+        );
+        const { error: bErr } = await supabase.from("bookings").update({ status: "Menunggu Konfirmasi" }).eq("id", negoData.orderId);
+        if (bErr) throw bErr;
+      } else {
+        setRentalOrders((prev) =>
+          prev.map((r) => (r.id === negoData.orderId ? { ...r, status: "Menunggu Konfirmasi" } : r))
+        );
+        const { error: rErr } = await supabase.from("rental_orders").update({ status: "Menunggu Konfirmasi" }).eq("id", negoData.orderId);
+        if (rErr) throw rErr;
+      }
 
-    supabase.from("negotiations").insert({
-      id,
-      type: negoData.type,
-      order_id: negoData.orderId,
-      item_name: negoData.itemName,
-      original_price: negoData.originalPrice,
-      proposed_price: negoData.proposedPrice,
-      sender_name: negoData.senderName,
-      recipient_id: negoData.recipientId,
-      recipient_name: negoData.recipientName,
-      status: "pending"
-    }).then(({ error }) => {
-      if (error) console.error("Error syncing negotiation:", error);
-    });
+      const { error: nErr } = await supabase.from("negotiations").insert({
+        id,
+        type: negoData.type,
+        order_id: negoData.orderId,
+        item_name: negoData.itemName,
+        original_price: negoData.originalPrice,
+        proposed_price: negoData.proposedPrice,
+        sender_name: negoData.senderName,
+        recipient_id: negoData.recipientId,
+        recipient_name: negoData.recipientName,
+        status: "pending"
+      });
+      if (nErr) throw nErr;
+
+      toast.success("Negosiasi penawaran harga berhasil dikirim!");
+    } catch (err: any) {
+      console.error("Error creating negotiation in Supabase:", err);
+      toast.error(`Gagal mengirim negosiasi: ${err.message}`);
+      setNegotiations(oldNegotiations);
+      setBookings(oldBookings);
+      setRentalOrders(oldRentalOrders);
+    }
   };
 
-  const respondToNegotiation = (id: string, action: "accepted" | "rejected" | "countered", counterPrice?: number) => {
+  const respondToNegotiation = async (id: string, action: "accepted" | "rejected" | "countered", counterPrice?: number) => {
+    const nego = negotiations.find((n) => n.id === id);
+    if (!nego) return;
+
+    const oldNegotiations = [...negotiations];
+    const oldBookings = [...bookings];
+    const oldRentalOrders = [...rentalOrders];
+
     setNegotiations((prev) =>
-      prev.map((n) => {
-        if (n.id !== id) return n;
-
-        const updatedNego: Negotiation = {
-          ...n,
-          status: action,
-          counterPrice: action === "countered" ? counterPrice : n.counterPrice,
-        };
-
-        if (action === "accepted") {
-          const finalPrice = n.status === "countered" && n.counterPrice ? n.counterPrice : n.proposedPrice;
-          if (n.type === "guide") {
-            setBookings((prevBookings) =>
-              prevBookings.map((b) =>
-                b.id === n.orderId
-                  ? { ...b, price: finalPrice, status: "Menunggu Pembayaran" }
-                  : b
-              )
-            );
-            supabase.from("bookings").update({ price: finalPrice, status: "Menunggu Pembayaran" }).eq("id", n.orderId);
-          } else {
-            setRentalOrders((prevRentals) =>
-              prevRentals.map((r) =>
-                r.id === n.orderId
-                  ? { ...r, totalPrice: finalPrice, status: "Menunggu Pembayaran" }
-                  : r
-              )
-            );
-            supabase.from("rental_orders").update({ total_price: finalPrice, status: "Menunggu Pembayaran" }).eq("id", n.orderId);
-          }
-        } else if (action === "countered" && counterPrice) {
-          if (n.type === "guide") {
-            setBookings((prevBookings) =>
-              prevBookings.map((b) =>
-                b.id === n.orderId ? { ...b, price: counterPrice } : b
-              )
-            );
-            supabase.from("bookings").update({ price: counterPrice }).eq("id", n.orderId);
-          } else {
-            setRentalOrders((prevRentals) =>
-              prevRentals.map((r) =>
-                r.id === n.orderId ? { ...r, totalPrice: counterPrice } : r
-              )
-            );
-            supabase.from("rental_orders").update({ total_price: counterPrice }).eq("id", n.orderId);
-          }
-        } else if (action === "rejected") {
-          if (n.type === "guide") {
-            updateBookingStatus(n.orderId, "Dibatalkan");
-          } else {
-            updateRentalStatus(n.orderId, "Dibatalkan");
-          }
-        }
-
-        supabase.from("negotiations").update({
-          status: action,
-          counter_price: action === "countered" ? counterPrice : undefined
-        }).eq("id", id);
-
-        return updatedNego;
-      })
+      prev.map((n) =>
+        n.id === id
+          ? {
+              ...n,
+              status: action,
+              counterPrice: action === "countered" ? counterPrice : n.counterPrice,
+            }
+          : n
+      )
     );
+
+    try {
+      if (action === "accepted") {
+        const finalPrice = nego.status === "countered" && nego.counterPrice ? nego.counterPrice : nego.proposedPrice;
+        if (nego.type === "guide") {
+          setBookings((prev) =>
+            prev.map((b) => (b.id === nego.orderId ? { ...b, price: finalPrice, status: "Menunggu Pembayaran" } : b))
+          );
+          const { error: bErr } = await supabase.from("bookings").update({ price: finalPrice, status: "Menunggu Pembayaran" }).eq("id", nego.orderId);
+          if (bErr) throw bErr;
+        } else {
+          setRentalOrders((prev) =>
+            prev.map((r) => (r.id === nego.orderId ? { ...r, totalPrice: finalPrice, status: "Menunggu Pembayaran" } : r))
+          );
+          const { error: rErr } = await supabase.from("rental_orders").update({ total_price: finalPrice, status: "Menunggu Pembayaran" }).eq("id", nego.orderId);
+          if (rErr) throw rErr;
+        }
+      } else if (action === "countered" && counterPrice) {
+        if (nego.type === "guide") {
+          setBookings((prev) =>
+            prev.map((b) => (b.id === nego.orderId ? { ...b, price: counterPrice } : b))
+          );
+          const { error: bErr } = await supabase.from("bookings").update({ price: counterPrice }).eq("id", nego.orderId);
+          if (bErr) throw bErr;
+        } else {
+          setRentalOrders((prev) =>
+            prev.map((r) => (r.id === nego.orderId ? { ...r, totalPrice: counterPrice } : r))
+          );
+          const { error: rErr } = await supabase.from("rental_orders").update({ total_price: counterPrice }).eq("id", nego.orderId);
+          if (rErr) throw rErr;
+        }
+      } else if (action === "rejected") {
+        if (nego.type === "guide") {
+          setBookings((prev) =>
+            prev.map((b) => (b.id === nego.orderId ? { ...b, status: "Dibatalkan" } : b))
+          );
+          const { error: bErr } = await supabase.from("bookings").update({ status: "Dibatalkan" }).eq("id", nego.orderId);
+          if (bErr) throw bErr;
+        } else {
+          setRentalOrders((prev) =>
+            prev.map((r) => (r.id === nego.orderId ? { ...r, status: "Dibatalkan" } : r))
+          );
+          const { error: rErr } = await supabase.from("rental_orders").update({ status: "Dibatalkan" }).eq("id", nego.orderId);
+          if (rErr) throw rErr;
+        }
+      }
+
+      const { error: nErr } = await supabase.from("negotiations").update({
+        status: action,
+        counter_price: action === "countered" ? counterPrice : undefined
+      }).eq("id", id);
+      if (nErr) throw nErr;
+
+      toast.success(
+        action === "accepted"
+          ? "Negosiasi tarif disetujui! Status diperbarui ke Pembayaran."
+          : action === "rejected"
+          ? "Negosiasi tarif ditolak & pesanan dibatalkan."
+          : "Tawaran harga balik berhasil dikirim ke partner."
+      );
+    } catch (err: any) {
+      console.error("Error updating negotiation in database:", err);
+      toast.error(`Gagal sinkronisasi ke database: ${err.message}`);
+      setNegotiations(oldNegotiations);
+      setBookings(oldBookings);
+      setRentalOrders(oldRentalOrders);
+    }
   };
 
   // ─── Chat Actions ───────────────────────────────────────────────────────────
@@ -2411,20 +2455,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const addCollaborationProposal = (propData: Omit<CollaborationProposal, "id" | "status" | "createdAt">) => {
+  const addCollaborationProposal = async (propData: Omit<CollaborationProposal, "id" | "status" | "createdAt">) => {
+    const id = "prop_" + Math.random().toString(36).substring(2, 9);
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    
-    const id = "prop_" + Math.random().toString(36).substring(2, 9);
+
     const newProposal: CollaborationProposal = {
       ...propData,
       id,
       status: "pending",
       createdAt: dateStr
     };
+
+    const oldProposals = [...collaborationProposals];
     setCollaborationProposals((prev) => [newProposal, ...prev]);
 
-    supabase.from("collaboration_proposals").insert({
+    const { error } = await supabase.from("collaboration_proposals").insert({
       id,
       title: propData.title,
       guide_id: propData.guideId,
@@ -2440,45 +2486,89 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: "pending",
       sender_id: propData.senderId
     });
+
+    if (error) {
+      console.error("Error inserting collaboration proposal in Supabase:", error.message);
+      toast.error(`Gagal mengirim proposal ke database: ${error.message}`);
+      setCollaborationProposals(oldProposals);
+    } else {
+      toast.success("Proposal kerjasama berhasil dikirim ke Partner!");
+    }
   };
 
-  const respondToCollaborationProposal = (id: string, status: "accepted" | "rejected") => {
+  const respondToCollaborationProposal = async (id: string, status: "accepted" | "rejected") => {
+    const prop = collaborationProposals.find((p) => p.id === id);
+    if (!prop) return;
+
+    const oldProposals = [...collaborationProposals];
+    const oldPackages = [...tripPackages];
+
     setCollaborationProposals((prev) =>
-      prev.map((p) => {
-        if (p.id === id) {
-          const updated = { ...p, status };
-          if (status === "accepted") {
-            addTripPackage({
-              title: p.title,
-              guideId: p.guideId,
-              guideName: p.guideName,
-              vendorId: p.vendorId,
-              vendorName: p.vendorName,
-              description: p.description,
-              duration: p.duration,
-              price: p.price,
-              promoDeadline: "2026-07-31",
-              services: [
-                "Jasa Pemandu Gunung Bersertifikat",
-                "Penyewaan Alat Bundling (Tenda, Carrier, Nesting)",
-                "Mekanisme Sewa: " + p.rentalMechanism
-              ],
-              rundown: [
-                "Hari 1: Penjemputan di basecamp & persiapan peralatan bersama Vendor",
-                "Hari 2: Trekking & camp malam bersama Pemandu",
-                "Hari 3: Summit attack & pengembalian peralatan ke Vendor"
-              ],
-              image: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=600&auto=format&fit=crop&q=80",
-              targetMountain: p.targetMountain
-            });
-          }
-          return updated;
-        }
-        return p;
-      })
+      prev.map((p) => (p.id === id ? { ...p, status } : p))
     );
 
-    supabase.from("collaboration_proposals").update({ status }).eq("id", id);
+    try {
+      if (status === "accepted") {
+        const newPkgId = "pkg_" + Math.random().toString(36).substring(2, 9);
+        const newPkg: TripPackage = {
+          id: newPkgId,
+          title: prop.title,
+          guideId: prop.guideId,
+          guideName: prop.guideName,
+          vendorId: prop.vendorId,
+          vendorName: prop.vendorName,
+          description: prop.description,
+          duration: prop.duration,
+          price: prop.price,
+          promoDeadline: "2026-07-31",
+          services: [
+            "Jasa Pemandu Gunung Bersertifikat",
+            "Penyewaan Alat Bundling (Tenda, Carrier, Nesting)",
+            "Mekanisme Sewa: " + prop.rentalMechanism
+          ],
+          rundown: [
+            "Hari 1: Penjemputan di basecamp & persiapan peralatan bersama Vendor",
+            "Hari 2: Trekking & camp malam bersama Pemandu",
+            "Hari 3: Summit attack & pengembalian peralatan ke Vendor"
+          ],
+          image: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=600&auto=format&fit=crop&q=80",
+          targetMountain: prop.targetMountain,
+          status: "pending"
+        };
+        setTripPackages((prev) => [newPkg, ...prev]);
+
+        const { error: pkgErr } = await supabase.from("trip_packages").insert({
+          id: newPkgId,
+          title: prop.title,
+          guide_id: prop.guideId,
+          vendor_id: prop.vendorId || null,
+          description: prop.description,
+          duration: prop.duration,
+          price: prop.price,
+          promo_deadline: "2026-07-31",
+          services: newPkg.services,
+          rundown: newPkg.rundown,
+          image: newPkg.image,
+          target_mountain: prop.targetMountain,
+          status: "pending"
+        });
+        if (pkgErr) throw pkgErr;
+      }
+
+      const { error: propErr } = await supabase.from("collaboration_proposals").update({ status }).eq("id", id);
+      if (propErr) throw propErr;
+
+      toast.success(
+        status === "accepted"
+          ? "Kerjasama disetujui! Paket promo bundling otomatis diterbitkan."
+          : "Proposal kerjasama ditolak."
+      );
+    } catch (err: any) {
+      console.error("Error responding to collaboration proposal in database:", err);
+      toast.error(`Gagal sinkronisasi proposal ke database: ${err.message}`);
+      setCollaborationProposals(oldProposals);
+      setTripPackages(oldPackages);
+    }
   };
 
   const logUserActivity = (userId: string, userName: string, role: UserActivity["userRole"], action: string) => {
