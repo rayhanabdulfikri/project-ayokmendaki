@@ -632,6 +632,8 @@ export function DashboardPage() {
   const [reportsSubTab, setReportsSubTab] = useState("analytics");
   const [bookingSubTab, setBookingSubTab] = useState<"active" | "history">("active");
   const [rentalSubTab, setRentalSubTab] = useState<"active" | "history">("active");
+  const [negoSubTab, setNegoSubTab] = useState<"active" | "history">("active");
+  const [collabProposalSubTab, setCollabProposalSubTab] = useState<"active" | "history">("active");
 
   // Handle redirect states (from Chat button on guide/rental page)
   useEffect(() => {
@@ -805,8 +807,13 @@ export function DashboardPage() {
 
     if (relevantProposals.length === 0) return null;
 
+    const filteredProposals = relevantProposals.filter((p) => {
+      const isActive = p.status === "pending";
+      return collabProposalSubTab === "active" ? isActive : !isActive;
+    });
+
     return (
-      <Card className="border border-amber-200 bg-amber-50/10 shadow-sm mb-6">
+      <Card className="border border-amber-200 bg-amber-50/10 shadow-sm mb-6 animate-in fade-in duration-200">
         <CardHeader className="py-4 border-b border-amber-100 flex flex-row items-center gap-2">
           <Award className="size-5 text-amber-605 shrink-0 animate-bounce" />
           <div>
@@ -815,64 +822,89 @@ export function DashboardPage() {
           </div>
         </CardHeader>
         <CardContent className="p-4 space-y-4">
-          {relevantProposals.map((p) => {
-            const isSender = p.senderId === currentUser.id;
-            const partnerName = currentUser.role === "guide" ? p.vendorName : p.guideName;
-            return (
-              <div key={p.id} className="p-4 rounded-xl border border-gray-150 bg-white shadow-xs flex flex-col gap-3">
-                <div className="flex justify-between items-start flex-wrap gap-2">
-                  <div>
-                    <h4 className="font-extrabold text-gray-800 text-sm">Proposal: {p.title}</h4>
-                    <p className="text-xs text-gray-400 mt-0.5">Gunung: <b>{p.targetMountain}</b> &middot; Durasi: <b>{p.duration}</b></p>
-                    <p className="text-xs text-gray-500 mt-1 font-semibold">
-                      {isSender ? `Mengajukan ke Partner: ${partnerName}` : `Diajukan oleh Partner: ${partnerName}`}
-                    </p>
-                  </div>
-                  <Badge className={`text-[10px] font-bold ${
-                    p.status === "pending"
-                      ? "bg-blue-50 text-blue-700 border border-blue-200 animate-pulse"
-                      : p.status === "accepted"
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                      : "bg-red-50 text-red-700 border border-red-200"
-                  }`}>
-                    {p.status.toUpperCase()}
-                  </Badge>
-                </div>
+          <div className="flex gap-2 mb-2 border-b border-amber-100 pb-3">
+            <Button
+              size="xs"
+              variant={collabProposalSubTab === "active" ? "default" : "outline"}
+              className={`text-xs px-3.5 rounded-xl h-8 ${collabProposalSubTab === "active" ? "bg-amber-600 hover:bg-amber-750 text-white font-bold" : "border-amber-200 text-amber-800 bg-white"}`}
+              onClick={() => setCollabProposalSubTab("active")}
+            >
+              Proposal Aktif
+            </Button>
+            <Button
+              size="xs"
+              variant={collabProposalSubTab === "history" ? "default" : "outline"}
+              className={`text-xs px-3.5 rounded-xl h-8 ${collabProposalSubTab === "history" ? "bg-amber-600 hover:bg-amber-750 text-white font-bold" : "border-amber-200 text-amber-800 bg-white"}`}
+              onClick={() => setCollabProposalSubTab("history")}
+            >
+              Riwayat Kerjasama
+            </Button>
+          </div>
 
-                <div className="p-3 bg-gray-55/40 rounded-lg text-xs space-y-2 text-gray-750 font-medium">
-                  <p><b>Deskripsi Rencana Trip:</b> {p.description}</p>
-                  <p><b>Mekanisme Logistik & Sewa Alat:</b> <span className="font-semibold text-emerald-800">{p.rentalMechanism}</span></p>
-                  <p className="font-bold text-gray-800">Harga Kesepakatan Paket: Rp {p.price.toLocaleString("id-ID")}</p>
-                </div>
-
-                {p.status === "pending" && !isSender && (
-                  <div className="flex gap-2 justify-end pt-1">
-                    <Button
-                      size="xs"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 h-8"
-                      onClick={() => {
-                        respondToCollaborationProposal(p.id, "accepted");
-                        toast.success("Kerjasama disetujui! Paket promo bundling otomatis diterbitkan.");
-                      }}
-                    >
-                      Terima Kerjasama
-                    </Button>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      className="text-xs border-red-200 text-red-600 hover:bg-red-55 h-8 font-semibold"
-                      onClick={() => {
-                        respondToCollaborationProposal(p.id, "rejected");
-                        toast.warning("Proposal kerjasama ditolak.");
-                      }}
-                    >
-                      Tolak
-                    </Button>
+          {filteredProposals.length === 0 ? (
+            <div className="text-center py-6 text-amber-800/60 text-xs italic">
+              {collabProposalSubTab === "active" ? "Belum ada proposal kerjasama aktif." : "Belum ada riwayat kerjasama selesai."}
+            </div>
+          ) : (
+            filteredProposals.map((p) => {
+              const isSender = p.senderId === currentUser.id;
+              const partnerName = currentUser.role === "guide" ? p.vendorName : p.guideName;
+              return (
+                <div key={p.id} className="p-4 rounded-xl border border-gray-150 bg-white shadow-xs flex flex-col gap-3 animate-in fade-in duration-200">
+                  <div className="flex justify-between items-start flex-wrap gap-2">
+                    <div>
+                      <h4 className="font-extrabold text-gray-800 text-sm">Proposal: {p.title}</h4>
+                      <p className="text-xs text-gray-400 mt-0.5">Gunung: <b>{p.targetMountain}</b> &middot; Durasi: <b>{p.duration}</b></p>
+                      <p className="text-xs text-gray-500 mt-1 font-semibold">
+                        {isSender ? `Mengajukan ke Partner: ${partnerName}` : `Diajukan oleh Partner: ${partnerName}`}
+                      </p>
+                    </div>
+                    <Badge className={`text-[10px] font-bold ${
+                      p.status === "pending"
+                        ? "bg-blue-50 text-blue-700 border border-blue-200 animate-pulse"
+                        : p.status === "accepted"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-red-50 text-red-700 border border-red-200"
+                    }`}>
+                      {p.status.toUpperCase()}
+                    </Badge>
                   </div>
-                )}
-              </div>
-            );
-          })}
+
+                  <div className="p-3 bg-gray-55/40 rounded-lg text-xs space-y-2 text-gray-750 font-medium">
+                    <p><b>Deskripsi Rencana Trip:</b> {p.description}</p>
+                    <p><b>Mekanisme Logistik & Sewa Alat:</b> <span className="font-semibold text-emerald-800">{p.rentalMechanism}</span></p>
+                    <p className="font-bold text-gray-800">Harga Kesepakatan Paket: Rp {p.price.toLocaleString("id-ID")}</p>
+                  </div>
+
+                  {p.status === "pending" && !isSender && (
+                    <div className="flex gap-2 justify-end pt-1">
+                      <Button
+                        size="xs"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 h-8"
+                        onClick={() => {
+                          respondToCollaborationProposal(p.id, "accepted");
+                          toast.success("Kerjasama disetujui! Paket promo bundling otomatis diterbitkan.");
+                        }}
+                      >
+                        Terima Kerjasama
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        className="text-xs border-red-200 text-red-655 hover:bg-red-50 h-8 font-semibold"
+                        onClick={() => {
+                          respondToCollaborationProposal(p.id, "rejected");
+                          toast.warning("Proposal kerjasama ditolak.");
+                        }}
+                      >
+                        Tolak
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </CardContent>
       </Card>
     );
@@ -2448,21 +2480,52 @@ export function DashboardPage() {
 
                 {/* 3. Tab Negosiasi Harga (Client side list) */}
                 {activeTab === "negos" && (
-                  <Card className="border border-gray-150 shadow-sm">
+                  <Card className="border border-gray-150 shadow-sm animate-in fade-in duration-200">
                     <CardHeader>
-                      <CardTitle className="text-lg">Negosiasi Tarif Aktif</CardTitle>
+                      <CardTitle className="text-lg">Daftar Negosiasi Tarif</CardTitle>
                       <CardDescription className="text-xs">Pantau status pengajuan penawaran harga Anda ke Guide & Vendor.</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                      {negotiations.filter(n => n.senderName === currentUser.name).length === 0 ? (
-                        <div className="text-center py-12 text-gray-400 text-sm">Belum ada pengajuan negosiasi aktif.</div>
+                    <CardContent className="space-y-4 font-sans">
+                      <div className="flex gap-2 mb-2 border-b border-gray-100 pb-3">
+                        <Button
+                          size="sm"
+                          variant={negoSubTab === "active" ? "default" : "outline"}
+                          className={`text-xs px-4 rounded-xl ${negoSubTab === "active" ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold" : "border-gray-200 text-gray-600 bg-white"}`}
+                          onClick={() => setNegoSubTab("active")}
+                        >
+                          Negosiasi Aktif
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={negoSubTab === "history" ? "default" : "outline"}
+                          className={`text-xs px-4 rounded-xl ${negoSubTab === "history" ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold" : "border-gray-200 text-gray-600 bg-white"}`}
+                          onClick={() => setNegoSubTab("history")}
+                        >
+                          Riwayat Negosiasi
+                        </Button>
+                      </div>
+
+                      {negotiations.filter(n => {
+                        const isMine = n.senderName === currentUser.name;
+                        if (!isMine) return false;
+                        const isActive = ["pending", "countered"].includes(n.status);
+                        return negoSubTab === "active" ? isActive : !isActive;
+                      }).length === 0 ? (
+                        <div className="text-center py-12 text-gray-400 text-sm">
+                          {negoSubTab === "active" ? "Belum ada negosiasi aktif." : "Belum ada riwayat negosiasi."}
+                        </div>
                       ) : (
-                        negotiations.filter(n => n.senderName === currentUser.name).map((n) => (
-                          <div key={n.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        negotiations.filter(n => {
+                          const isMine = n.senderName === currentUser.name;
+                          if (!isMine) return false;
+                          const isActive = ["pending", "countered"].includes(n.status);
+                          return negoSubTab === "active" ? isActive : !isActive;
+                        }).map((n) => (
+                          <div key={n.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-in fade-in duration-200">
                             <div>
                               <h4 className="font-bold text-gray-800 text-sm">{n.itemName}</h4>
                               <p className="text-xs text-gray-500 mt-1">Ditujukan Ke: <b>{n.recipientName}</b></p>
-                              <div className="grid grid-cols-2 gap-3 mt-2 text-xs border border-gray-50 p-2 rounded-lg bg-gray-50/50">
+                              <div className="grid grid-cols-2 gap-3 mt-2 text-xs border border-gray-50 p-2 rounded-lg bg-gray-55/50">
                                 <div>Harga Awal: <b className="text-gray-500 line-through">Rp {n.originalPrice.toLocaleString()}</b></div>
                                 <div>Tawaran Anda: <b className="text-emerald-700 font-bold">Rp {n.proposedPrice.toLocaleString()}</b></div>
                               </div>
