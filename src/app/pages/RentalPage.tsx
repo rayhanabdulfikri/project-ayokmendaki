@@ -253,7 +253,11 @@ export function RentalPage() {
       <Card className="hover:shadow-md transition-shadow">
         <CardContent className="flex flex-col sm:flex-row items-start gap-5 p-6">
           <div className="size-24 bg-emerald-50 text-emerald-600 rounded-2xl flex-shrink-0 overflow-hidden flex items-center justify-center border border-emerald-100 shadow-sm shrink-0">
-            <Package className="size-12" />
+            {item.image ? (
+              <img src={item.image} className="w-full h-full object-cover" />
+            ) : (
+              <Package className="size-12" />
+            )}
           </div>
           <div className="flex-1 w-full min-w-0">
             <div className="flex items-start justify-between gap-4 mb-1">
