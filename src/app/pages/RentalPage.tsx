@@ -99,6 +99,11 @@ export function RentalPage() {
       return;
     }
 
+    if (currentUser.id === item.vendorId) {
+      toast.error("Anda tidak dapat menyewa barang dari toko Anda sendiri.");
+      return;
+    }
+
     if (currentUser.role !== "pendaki") {
       toast.error("Hanya Pendaki yang dapat menyewa alat.");
       return;
@@ -225,6 +230,10 @@ export function RentalPage() {
       navigate("/login");
       return;
     }
+    if (currentUser.id === vendorId) {
+      toast.error("Anda tidak dapat mengirim pesan ke toko Anda sendiri.");
+      return;
+    }
     navigate("/dashboard", {
       state: { activeTab: "chat", partnerId: vendorId, partnerName: vendorName }
     });
@@ -316,15 +325,21 @@ export function RentalPage() {
                   <span className="font-bold text-emerald-600 text-lg">Rp {item.price.toLocaleString("id-ID")}<span className="text-xs font-normal text-gray-400">/hari</span></span>
                 )}
               </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="text-xs" onClick={() => handleChatVendor(item.vendorId, item.vendorName)}>
-                  <MessageCircle className="size-4 mr-1 text-emerald-600" />
-                  Chat
-                </Button>
-                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs" onClick={() => handleOpenRentalModal(item)}>
-                  Sewa Alat
-                </Button>
-              </div>
+              {currentUser?.id === item.vendorId ? (
+                <div className="text-xs text-amber-600 font-semibold italic bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
+                  Barang milik Anda
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="text-xs" onClick={() => handleChatVendor(item.vendorId, item.vendorName)}>
+                    <MessageCircle className="size-4 mr-1 text-emerald-600" />
+                    Chat
+                  </Button>
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs" onClick={() => handleOpenRentalModal(item)}>
+                    Sewa Alat
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </CardContent>

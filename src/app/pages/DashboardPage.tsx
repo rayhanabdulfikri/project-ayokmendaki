@@ -891,9 +891,13 @@ export function DashboardPage() {
     const partnersMap = new Map<string, string>();
     chatMessages.forEach((m) => {
       if (m.senderId === currentUser.id) {
-        partnersMap.set(m.chatPartnerId, m.chatPartnerName);
+        if (m.chatPartnerId !== currentUser.id) {
+          partnersMap.set(m.chatPartnerId, m.chatPartnerName);
+        }
       } else if (m.chatPartnerId === currentUser.id) {
-        partnersMap.set(m.senderId, m.senderName);
+        if (m.senderId !== currentUser.id) {
+          partnersMap.set(m.senderId, m.senderName);
+        }
       }
     });
     return Array.from(partnersMap.entries()).map(([id, name]) => ({ id, name }));
@@ -2976,6 +2980,10 @@ export function DashboardPage() {
                                     variant="outline"
                                     className="text-xs border-gray-200 text-gray-700 hover:bg-gray-50 font-bold flex-1 sm:flex-initial rounded-xl"
                                     onClick={() => {
+                                      if (v.id === currentUser.id) {
+                                        toast.error("Anda tidak dapat menghubungi diri Anda sendiri.");
+                                        return;
+                                      }
                                       setSelectedChatPartnerId(v.id);
                                       setSelectedChatPartnerName(v.name);
                                       setActiveTab("chat");
@@ -3014,6 +3022,10 @@ export function DashboardPage() {
                                     <Badge className="bg-emerald-600 text-white text-[10px]">Kolaborasi Aktif</Badge>
                                     {p.vendorId && (
                                       <Button variant="outline" size="sm" className="text-xs w-full sm:w-auto font-bold rounded-xl" onClick={() => {
+                                        if (p.vendorId === currentUser.id) {
+                                          toast.error("Anda tidak dapat menghubungi diri Anda sendiri.");
+                                          return;
+                                        }
                                         setSelectedChatPartnerId(p.vendorId!);
                                         setSelectedChatPartnerName(p.vendorName || "Vendor Partner");
                                         setActiveTab("chat");
@@ -3391,6 +3403,10 @@ export function DashboardPage() {
                                     variant="outline"
                                     className="text-xs border-gray-200 text-gray-700 hover:bg-gray-50 font-semibold flex-1 sm:flex-initial"
                                     onClick={() => {
+                                      if (g.id === currentUser.id) {
+                                        toast.error("Anda tidak dapat menghubungi diri Anda sendiri.");
+                                        return;
+                                      }
                                       setSelectedChatPartnerId(g.id);
                                       setSelectedChatPartnerName(g.name);
                                       setActiveTab("chat");
@@ -3429,6 +3445,10 @@ export function DashboardPage() {
                                   <div className="shrink-0 flex flex-col items-end gap-1.5 w-full sm:w-auto border-t sm:border-t-0 pt-2.5 sm:pt-0">
                                     <Badge className="bg-emerald-600 text-white text-[10px]">Kolaborasi Aktif</Badge>
                                     <Button variant="outline" size="sm" className="text-xs w-full sm:w-auto" onClick={() => {
+                                      if (p.guideId === currentUser.id) {
+                                        toast.error("Anda tidak dapat menghubungi diri Anda sendiri.");
+                                        return;
+                                      }
                                       setSelectedChatPartnerId(p.guideId);
                                       setSelectedChatPartnerName(p.guideName);
                                       setActiveTab("chat");
@@ -4587,6 +4607,10 @@ export function DashboardPage() {
                             onClick={async () => {
                               if (blastTargetType === "individual" && !selectedInboxUserForBroadcast) {
                                 toast.error("Penerima personal wajib dicari & dipilih dari rekomendasi.");
+                                return;
+                              }
+                              if (blastTargetType === "individual" && selectedInboxUserForBroadcast.id === currentUser?.id) {
+                                toast.error("Anda tidak dapat mengirim pesan ke akun Anda sendiri.");
                                 return;
                               }
                               if (!broadcastTitle.trim() || !broadcastContent.trim()) {

@@ -1418,6 +1418,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // ─── Chat Actions ───────────────────────────────────────────────────────────
   const sendChatMessage = (partnerId: string, partnerName: string, message: string) => {
     if (!currentUser) return;
+    if (currentUser.id === partnerId) {
+      toast.error("Anda tidak dapat mengirim pesan ke diri Anda sendiri.");
+      return;
+    }
     const id = "chat_" + Math.random().toString(36).substring(2, 9);
     const now = new Date();
     const timestamp = `${now.getHours().toString().padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;

@@ -83,6 +83,11 @@ export function GuidePage() {
       return;
     }
     
+    if (currentUser.id === guide.id) {
+      toast.error("Anda tidak dapat memesan jasa Anda sendiri.");
+      return;
+    }
+
     if (currentUser.role !== "pendaki") {
       toast.error("Hanya Pendaki yang dapat menyewa guide.");
       return;
@@ -202,6 +207,10 @@ export function GuidePage() {
     if (!currentUser) {
       toast.warning("Silakan masuk terlebih dahulu untuk mengirim pesan.");
       navigate("/login");
+      return;
+    }
+    if (currentUser.id === guide.id) {
+      toast.error("Anda tidak dapat mengirim pesan ke akun Anda sendiri.");
       return;
     }
     navigate("/dashboard", {
@@ -418,25 +427,31 @@ export function GuidePage() {
                           <p className="font-bold text-emerald-600 text-base">Rp {guide.price.toLocaleString("id-ID")}<span className="text-[10px] text-gray-400 font-normal">/hari</span></p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="flex-1 text-xs"
-                          onClick={() => handleChatGuide(guide)}
-                        >
-                          <MessageCircle className="size-4 mr-1 text-emerald-600" />
-                          Chat
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          className={`flex-1 text-xs font-semibold ${guide.status === "Aktif" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed border-gray-300"}`}
-                          disabled={guide.status !== "Aktif"}
-                          onClick={() => handleOpenBooking(guide)}
-                        >
-                          Booking Jasa
-                        </Button>
-                      </div>
+                      {currentUser?.id === guide.id ? (
+                        <div className="w-full text-center text-xs text-amber-600 font-semibold italic bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
+                          Profil Anda sendiri
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="flex-1 text-xs"
+                            onClick={() => handleChatGuide(guide)}
+                          >
+                            <MessageCircle className="size-4 mr-1 text-emerald-600" />
+                            Chat
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            className={`flex-1 text-xs font-semibold ${guide.status === "Aktif" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-gray-200 text-gray-400 cursor-not-allowed border-gray-300"}`}
+                            disabled={guide.status !== "Aktif"}
+                            onClick={() => handleOpenBooking(guide)}
+                          >
+                            Booking Jasa
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
