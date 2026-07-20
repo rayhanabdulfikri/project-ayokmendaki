@@ -1798,37 +1798,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const confirmEscrow = (type: "booking" | "rental", id: string, role: "pendaki" | "guide" | "vendor") => {
+  const confirmEscrow = async (type: "booking" | "rental", id: string, role: "pendaki" | "guide" | "vendor") => {
     if (type === "booking") {
+      const oldBookings = [...bookings];
+      // Optimistic update
       setBookings((prev) =>
-        prev.map((b) => {
-          if (b.id !== id) return b;
-          const updated = { ...b };
-          if (role === "pendaki") {
-            updated.pendakiConfirmed = true;
-            supabase.from("bookings").update({ pendaki_confirmed: true }).eq("id", id);
-          } else {
-            updated.partnerConfirmed = true;
-            supabase.from("bookings").update({ partner_confirmed: true }).eq("id", id);
-          }
-          return updated;
-        })
+        prev.map((b) => (b.id === id ? { ...b, pendakiConfirmed: role === "pendaki" ? true : b.pendakiConfirmed, partnerConfirmed: role !== "pendaki" ? true : b.partnerConfirmed } : b))
       );
+
+      const updatePayload = role === "pendaki" ? { pendaki_confirmed: true } : { partner_confirmed: true };
+      const { error } = await supabase.from("bookings").update(updatePayload).eq("id", id);
+      if (error) {
+        console.error("Error updating booking escrow confirmation:", error.message);
+        toast.error(`Gagal mengirim konfirmasi ke database: ${error.message}`);
+        setBookings(oldBookings);
+      } else {
+        toast.success(
+          role === "pendaki"
+            ? "Konfirmasi penyelesaian trip Anda terkirim. Menunggu persetujuan Mitra & Admin."
+            : "Trip dikonfirmasi selesai. Menunggu persetujuan Pendaki & Admin."
+        );
+      }
     } else {
+      const oldRentalOrders = [...rentalOrders];
+      // Optimistic update
       setRentalOrders((prev) =>
-        prev.map((r) => {
-          if (r.id !== id) return r;
-          const updated = { ...r };
-          if (role === "pendaki") {
-            updated.pendakiConfirmed = true;
-            supabase.from("rental_orders").update({ pendaki_confirmed: true }).eq("id", id);
-          } else {
-            updated.partnerConfirmed = true;
-            supabase.from("rental_orders").update({ partner_confirmed: true }).eq("id", id);
-          }
-          return updated;
-        })
+        prev.map((r) => (r.id === id ? { ...r, pendakiConfirmed: role === "pendaki" ? true : r.pendakiConfirmed, partnerConfirmed: role !== "pendaki" ? true : r.partnerConfirmed } : r))
       );
+
+      const updatePayload = role === "pendaki" ? { pendaki_confirmed: true } : { partner_confirmed: true };
+      const { error } = await supabase.from("rental_orders").update(updatePayload).eq("id", id);
+      if (error) {
+        console.error("Error updating rental escrow confirmation:", error.message);
+        toast.error(`Gagal mengirim konfirmasi ke database: ${error.message}`);
+        setRentalOrders(oldRentalOrders);
+      } else {
+        toast.success(
+          role === "pendaki"
+            ? "Konfirmasi pengembalian alat sewaan Anda terkirim. Menunggu persetujuan Vendor & Admin."
+            : "Konfirmasi pengembalian alat selesai terkirim. Menunggu Pendaki & Admin."
+        );
+      }
     }
   };
 

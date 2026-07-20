@@ -2209,7 +2209,7 @@ export function DashboardPage() {
                             )}
 
                             {/* Fine notification */}
-                            {b.fineAmount && b.fineAmount > 0 && (
+                            {Number(b.fineAmount) > 0 && (
                               <div className="mt-3 p-3 bg-red-50 rounded-xl border border-red-200/50 max-w-lg text-xs text-red-800 space-y-1">
                                 <p className="font-bold flex items-center gap-1">⚠️ Pelanggaran / Denda Dilaporkan Mitra:</p>
                                 <p>Nominal: <b>Rp {b.fineAmount.toLocaleString("id-ID")}</b></p>
@@ -2231,7 +2231,6 @@ export function DashboardPage() {
                                     className={`text-xs px-4 ${b.pendakiConfirmed ? "text-gray-400 border-gray-200 bg-white" : "bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"}`}
                                     onClick={() => {
                                       confirmEscrow("booking", b.id, "pendaki");
-                                      toast.success("Konfirmasi penyelesaian trip Anda terkirim. Menunggu persetujuan Mitra & Admin.");
                                     }}
                                     disabled={b.pendakiConfirmed}
                                   >
@@ -2321,7 +2320,7 @@ export function DashboardPage() {
                             )}
 
                             {/* Fine notification */}
-                            {r.fineAmount && r.fineAmount > 0 && (
+                            {Number(r.fineAmount) > 0 && (
                               <div className="mt-3 p-3 bg-red-50 rounded-xl border border-red-200/50 max-w-lg text-xs text-red-800 space-y-1">
                                 <p className="font-bold flex items-center gap-1">⚠️ Pelanggaran / Denda Dilaporkan Vendor:</p>
                                 <p>Nominal: <b>Rp {r.fineAmount.toLocaleString("id-ID")}</b></p>
@@ -2343,7 +2342,6 @@ export function DashboardPage() {
                                     className={`text-xs px-4 ${r.pendakiConfirmed ? "text-gray-400 border-gray-200 bg-white" : "bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"}`}
                                     onClick={() => {
                                       confirmEscrow("rental", r.id, "pendaki");
-                                      toast.success("Konfirmasi pengembalian alat sewaan Anda terkirim. Menunggu persetujuan Vendor & Admin.");
                                     }}
                                     disabled={r.pendakiConfirmed}
                                   >
@@ -2677,7 +2675,6 @@ export function DashboardPage() {
                                   disabled={b.partnerConfirmed}
                                   onClick={() => {
                                     confirmEscrow("booking", b.id, "guide");
-                                    toast.success("Trip dikonfirmasi selesai. Menunggu persetujuan Pendaki & Admin.");
                                   }}
                                 >
                                   {b.partnerConfirmed ? "✓ Selesai Terkonfirmasi" : "Konfirmasi Selesai"}
@@ -3315,7 +3312,6 @@ export function DashboardPage() {
                                               disabled={r.partnerConfirmed}
                                               onClick={() => {
                                                 confirmEscrow("rental", r.id, "vendor");
-                                                toast.success("Konfirmasi pengembalian alat selesai terkirim. Menunggu Pendaki & Admin.");
                                               }}
                                             >
                                               {r.partnerConfirmed ? "✓ Pengembalian Dikonfirmasi" : "Konfirmasi Pengembalian Selesai"}
