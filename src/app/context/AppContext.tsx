@@ -829,6 +829,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setDepositTransactions(
             txData.map((t: any) => ({
               id: t.id,
+              userId: t.user_id,
               type: t.type,
               amount: Number(t.amount),
               description: t.description,
@@ -1029,6 +1030,69 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
+    const fetchBookings = async () => {
+      try {
+        const { data: bookingsData } = await supabase.from("bookings").select("*");
+        if (bookingsData) {
+          setBookings(
+            bookingsData.map((b: any) => ({
+              id: b.id,
+              mountainName: b.mountain_name,
+              basecamp: b.basecamp,
+              guideId: b.guide_id,
+              pendakiId: b.pendaki_id,
+              bookingDate: b.booking_date,
+              price: Number(b.price),
+              status: b.status,
+              disputeNotes: b.dispute_notes,
+              officialTicketBooking: b.official_ticket_booking,
+              bookingType: b.booking_type,
+              packageId: b.package_id,
+              preTripMeetingDate: b.pre_trip_meeting_date,
+              preTripMeetingTime: b.pre_trip_meeting_time,
+              preTripMeetingLink: b.pre_trip_meeting_link,
+              climbersCount: b.climbers_count,
+              depositAmount: Number(b.deposit_amount),
+              depositStatus: b.deposit_status,
+              fineAmount: Number(b.fine_amount),
+              fineNotes: b.fine_notes,
+              pendakiConfirmed: b.pendaki_confirmed,
+              partnerConfirmed: b.partner_confirmed,
+              createdAt: b.created_at,
+              notes: b.notes || ""
+            }))
+          );
+        }
+      } catch (err) {
+        console.warn("Error fetching bookings:", err);
+      }
+    };
+
+    const fetchTransactions = async () => {
+      try {
+        if (!currentUser) return;
+        const { data: txData } = await supabase
+          .from("deposit_transactions")
+          .select("*")
+          .eq("user_id", currentUser.id)
+          .order("created_at", { ascending: false });
+        if (txData) {
+          setDepositTransactions(
+            txData.map((t: any) => ({
+              id: t.id,
+              userId: t.user_id,
+              type: t.type,
+              amount: Number(t.amount),
+              description: t.description,
+              createdAt: t.created_at ? new Date(t.created_at).toISOString().split("T")[0] : "",
+            }))
+          );
+        }
+      } catch (err) {
+        console.warn("Error fetching transactions:", err);
+      }
+    };
+
     const msgChannel = supabase
       .channel("realtime-admin-messages")
       .on(
@@ -1074,11 +1138,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       )
       .subscribe();
 
+    const bookChannel = supabase
+      .channel("realtime-bookings")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "bookings" },
+        () => { fetchBookings(); }
+      )
+      .subscribe();
+
+    const txChannel = supabase
+      .channel("realtime-deposit-transactions")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "deposit_transactions" },
+        () => { fetchTransactions(); }
+      )
+      .subscribe();
+
     const msgInterval = setInterval(fetchMsgs, 5000);
     const warnInterval = setInterval(fetchWarnings, 5000);
     const eqInterval = setInterval(fetchEquipment, 5000);
     const rentInterval = setInterval(fetchRentals, 5000);
     const propInterval = setInterval(fetchProposals, 5000);
+    const bookInterval = setInterval(fetchBookings, 5000);
+    const txInterval = setInterval(fetchTransactions, 5000);
 
     return () => {
       supabase.removeChannel(msgChannel);
@@ -1086,13 +1170,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       supabase.removeChannel(eqChannel);
       supabase.removeChannel(rentChannel);
       supabase.removeChannel(propChannel);
+      supabase.removeChannel(bookChannel);
+      supabase.removeChannel(txChannel);
       clearInterval(msgInterval);
       clearInterval(warnInterval);
       clearInterval(eqInterval);
       clearInterval(rentInterval);
       clearInterval(propInterval);
+      clearInterval(bookInterval);
+      clearInterval(txInterval);
     };
-  }, []);
+  }, [currentUser]);
 
   // Fetch wallets and transactions on currentUser change
   useEffect(() => {
@@ -1165,6 +1253,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDepositTransactions((prev) => [
       {
         id: "tx_" + Math.random().toString(36).substring(2, 9),
+        userId: currentUser?.id || "pendaki1",
         type: "withdraw",
         amount: 100000,
         description: `Deposit jaminan dikunci untuk booking ${bookingData.mountainName}`,
@@ -1251,6 +1340,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDepositTransactions((prev) => [
       {
         id: "tx_" + Math.random().toString(36).substring(2, 9),
+        userId: orderData.pendakiId,
         type: "withdraw",
         amount: 100000,
         description: `Deposit jaminan dikunci untuk rental ${orderData.itemName}`,
@@ -2092,7 +2182,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const topUpWallet = (role: "pendaki" | "guide" | "vendor", amount: number) => {
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    
+    const targetUserId = currentUser?.id || (role === "pendaki" ? "pendaki1" : role === "guide" ? "guide1" : "vendor1");
+
     if (role === "pendaki") {
       setClimberDeposit((prev) => prev + amount);
     } else if (role === "guide") {
@@ -2104,6 +2195,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDepositTransactions((prev) => [
       {
         id: "tx_" + Math.random().toString(36).substring(2, 9),
+        userId: targetUserId,
         type: "topup",
         amount,
         description: `Top Up Saldo Dompet (${role.toUpperCase()})`,
@@ -2111,8 +2203,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       ...prev
     ]);
-
-    const targetUserId = currentUser?.id || (role === "pendaki" ? "pendaki1" : role === "guide" ? "guide1" : "vendor1");
 
     if (targetUserId) {
       supabase.from("wallets").select("balance").eq("user_id", targetUserId).single().then(({ data }) => {
@@ -2137,6 +2227,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   setDepositTransactions(
                     updatedTx.map((t: any) => ({
                       id: t.id,
+                      userId: t.user_id,
                       type: t.type,
                       amount: Number(t.amount),
                       description: t.description,
@@ -2154,7 +2245,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const withdrawWallet = (role: "pendaki" | "guide" | "vendor", amount: number, description?: string) => {
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    
+    const targetUserId = currentUser?.id || (role === "pendaki" ? "pendaki1" : role === "guide" ? "guide1" : "vendor1");
+
     if (role === "pendaki") {
       setClimberDeposit((prev) => Math.max(0, prev - amount));
     } else if (role === "guide") {
@@ -2166,6 +2258,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDepositTransactions((prev) => [
       {
         id: "tx_" + Math.random().toString(36).substring(2, 9),
+        userId: targetUserId,
         type: "withdraw",
         amount,
         description: description || `Penarikan Dana Dompet (${role.toUpperCase()})`,
@@ -2173,8 +2266,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       ...prev
     ]);
-
-    const targetUserId = currentUser?.id || (role === "pendaki" ? "pendaki1" : role === "guide" ? "guide1" : "vendor1");
 
     if (targetUserId) {
       supabase.from("wallets").select("balance").eq("user_id", targetUserId).single().then(({ data }) => {
@@ -2199,6 +2290,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   setDepositTransactions(
                     updatedTx.map((t: any) => ({
                       id: t.id,
+                      userId: t.user_id,
                       type: t.type,
                       amount: Number(t.amount),
                       description: t.description,

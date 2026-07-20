@@ -35,7 +35,8 @@ import {
   Wallet,
   User as UserIcon,
   Loader2,
-  Mail
+  Mail,
+  History
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router";
@@ -629,6 +630,8 @@ export function DashboardPage() {
   // Navigation tabs in dashboard
   const [activeTab, setActiveTab] = useState("bookings");
   const [reportsSubTab, setReportsSubTab] = useState("analytics");
+  const [bookingSubTab, setBookingSubTab] = useState<"active" | "history">("active");
+  const [rentalSubTab, setRentalSubTab] = useState<"active" | "history">("active");
 
   // Handle redirect states (from Chat button on guide/rental page)
   useEffect(() => {
@@ -2118,11 +2121,42 @@ export function DashboardPage() {
                       <CardDescription className="text-xs">Kelola perizinan simaksi resmi gunung dan sewa guide pendakian Anda.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {bookings.filter(b => b.pendakiId === currentUser.id).length === 0 ? (
-                        <div className="text-center py-12 text-gray-400 text-sm">Belum ada pemesanan.</div>
+                      <div className="flex gap-2 mb-2 border-b border-gray-100 pb-3">
+                        <Button
+                          size="sm"
+                          variant={bookingSubTab === "active" ? "default" : "outline"}
+                          className={`text-xs px-4 rounded-xl ${bookingSubTab === "active" ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold" : "border-gray-200 text-gray-600 bg-white"}`}
+                          onClick={() => setBookingSubTab("active")}
+                        >
+                          Booking Aktif
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={bookingSubTab === "history" ? "default" : "outline"}
+                          className={`text-xs px-4 rounded-xl ${bookingSubTab === "history" ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold" : "border-gray-200 text-gray-600 bg-white"}`}
+                          onClick={() => setBookingSubTab("history")}
+                        >
+                          Riwayat Selesai & Batal
+                        </Button>
+                      </div>
+
+                      {bookings.filter(b => {
+                        const isMine = b.pendakiId === currentUser.id;
+                        if (!isMine) return false;
+                        const isActive = ["Menunggu Konfirmasi", "Menunggu Pembayaran", "Telah Dibayar", "Start", "Muncak"].includes(b.status);
+                        return bookingSubTab === "active" ? isActive : !isActive;
+                      }).length === 0 ? (
+                        <div className="text-center py-12 text-gray-400 text-sm">
+                          {bookingSubTab === "active" ? "Belum ada pemesanan aktif." : "Belum ada riwayat pemesanan."}
+                        </div>
                       ) : (
-                        bookings.filter(b => b.pendakiId === currentUser.id).map((b) => (
-                          <div key={b.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col hover:shadow-md transition-all">
+                        bookings.filter(b => {
+                          const isMine = b.pendakiId === currentUser.id;
+                          if (!isMine) return false;
+                          const isActive = ["Menunggu Konfirmasi", "Menunggu Pembayaran", "Telah Dibayar", "Start", "Muncak"].includes(b.status);
+                          return bookingSubTab === "active" ? isActive : !isActive;
+                        }).map((b) => (
+                          <div key={b.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col hover:shadow-md transition-all animate-in fade-in duration-200">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                               <div>
                                 <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -2156,16 +2190,9 @@ export function DashboardPage() {
                                 <p className="text-[9px] text-gray-500 leading-tight mt-0.5">
                                   *Wajib bergabung untuk briefing fisik, peralatan, logistik, rundown, dan koordinasi dengan Guide.*
                                 </p>
-                                <Button 
-                                  size="xs" 
-                                  className="mt-2 bg-amber-600 hover:bg-amber-700 text-white text-[10px] h-7 px-3 font-semibold"
-                                  onClick={() => {
-                                    window.open(b.preTripMeetingLink, "_blank");
-                                    toast.success("[Simulasi] Bergabung ke video call Google Meet Pre-Trip persiapan.");
-                                  }}
-                                >
-                                  Gabung Google Meet (30 Menit)
-                                </Button>
+                                <a href={b.preTripMeetingLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center text-xs text-emerald-700 font-bold hover:underline mt-1">
+                                  Klik untuk Bergabung (Google Meet) ➔
+                                </a>
                               </div>
                             )}
 
@@ -2196,7 +2223,7 @@ export function DashboardPage() {
 
                             {/* Deposit Jaminan Status */}
                             {b.depositAmount && (
-                              <div className="mt-3 flex items-center justify-between text-xs p-2.5 rounded-lg border bg-gray-50/50">
+                              <div className="mt-3 flex items-center justify-between text-xs p-2.5 rounded-lg border bg-gray-55/50">
                                 <span className="text-gray-500 font-semibold">Deposit Jaminan (Held in Escrow):</span>
                                 <div className="flex items-center gap-1.5 font-bold">
                                   <span>Rp {b.depositAmount.toLocaleString("id-ID")}</span>
@@ -2287,11 +2314,42 @@ export function DashboardPage() {
                       <CardDescription className="text-xs">Daftar alat camping yang disewa dari vendor terverifikasi.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {rentalOrders.filter(r => r.pendakiId === currentUser.id).length === 0 ? (
-                        <div className="text-center py-12 text-gray-400 text-sm">Belum ada penyewaan.</div>
+                      <div className="flex gap-2 mb-2 border-b border-gray-100 pb-3">
+                        <Button
+                          size="sm"
+                          variant={rentalSubTab === "active" ? "default" : "outline"}
+                          className={`text-xs px-4 rounded-xl ${rentalSubTab === "active" ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold" : "border-gray-200 text-gray-600 bg-white"}`}
+                          onClick={() => setRentalSubTab("active")}
+                        >
+                          Sewa Aktif
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={rentalSubTab === "history" ? "default" : "outline"}
+                          className={`text-xs px-4 rounded-xl ${rentalSubTab === "history" ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold" : "border-gray-200 text-gray-600 bg-white"}`}
+                          onClick={() => setRentalSubTab("history")}
+                        >
+                          Riwayat Sewa
+                        </Button>
+                      </div>
+
+                      {rentalOrders.filter(r => {
+                        const isMine = r.pendakiId === currentUser.id;
+                        if (!isMine) return false;
+                        const isActive = ["Menunggu Konfirmasi", "Menunggu Pembayaran", "Telah Dibayar", "Siap Diambil", "Sedang Disewa"].includes(r.status);
+                        return rentalSubTab === "active" ? isActive : !isActive;
+                      }).length === 0 ? (
+                        <div className="text-center py-12 text-gray-400 text-sm">
+                          {rentalSubTab === "active" ? "Belum ada penyewaan aktif." : "Belum ada riwayat penyewaan."}
+                        </div>
                       ) : (
-                        rentalOrders.filter(r => r.pendakiId === currentUser.id).map((r) => (
-                          <div key={r.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col hover:shadow-md transition-shadow">
+                        rentalOrders.filter(r => {
+                          const isMine = r.pendakiId === currentUser.id;
+                          if (!isMine) return false;
+                          const isActive = ["Menunggu Konfirmasi", "Menunggu Pembayaran", "Telah Dibayar", "Siap Diambil", "Sedang Disewa"].includes(r.status);
+                          return rentalSubTab === "active" ? isActive : !isActive;
+                        }).map((r) => (
+                          <div key={r.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col hover:shadow-md transition-shadow animate-in fade-in duration-200">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                               <div>
                                 <h4 className="font-bold text-gray-800">{r.itemName}</h4>
@@ -2307,8 +2365,8 @@ export function DashboardPage() {
 
                             {/* Deposit Jaminan Status */}
                             {r.depositAmount && (
-                              <div className="mt-3 flex items-center justify-between text-xs p-2.5 rounded-lg border bg-gray-50/50">
-                                <span className="text-gray-500 font-semibold">Deposit Jaminan (Held in Escrow):</span>
+                              <div className="mt-3 flex items-center justify-between text-xs p-2.5 rounded-lg border bg-gray-55/50">
+                                <span className="text-gray-550 font-semibold">Deposit Jaminan (Held in Escrow):</span>
                                 <div className="flex items-center gap-1.5 font-bold">
                                   <span>Rp {r.depositAmount.toLocaleString("id-ID")}</span>
                                   {r.depositStatus === "held" && <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[9px] py-0">Ditahan</Badge>}
@@ -2545,13 +2603,44 @@ export function DashboardPage() {
                           </p>
                         </div>
                       </div>
-                      {bookings.filter(b => b.guideId === currentUser.id).length === 0 ? (
-                        <div className="text-center py-12 text-gray-400 text-sm">Belum ada booking masuk.</div>
+                      <div className="flex gap-2 mb-2 border-b border-gray-100 pb-3">
+                        <Button
+                          size="sm"
+                          variant={bookingSubTab === "active" ? "default" : "outline"}
+                          className={`text-xs px-4 rounded-xl ${bookingSubTab === "active" ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold" : "border-gray-200 text-gray-600 bg-white"}`}
+                          onClick={() => setBookingSubTab("active")}
+                        >
+                          Booking Aktif
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={bookingSubTab === "history" ? "default" : "outline"}
+                          className={`text-xs px-4 rounded-xl ${bookingSubTab === "history" ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold" : "border-gray-200 text-gray-600 bg-white"}`}
+                          onClick={() => setBookingSubTab("history")}
+                        >
+                          Riwayat Selesai & Batal
+                        </Button>
+                      </div>
+
+                      {bookings.filter(b => {
+                        const isMine = b.guideId === currentUser.id;
+                        if (!isMine) return false;
+                        const isActive = ["Menunggu Konfirmasi", "Menunggu Pembayaran", "Telah Dibayar", "Start", "Muncak"].includes(b.status);
+                        return bookingSubTab === "active" ? isActive : !isActive;
+                      }).length === 0 ? (
+                        <div className="text-center py-12 text-gray-400 text-sm">
+                          {bookingSubTab === "active" ? "Belum ada booking masuk aktif." : "Belum ada riwayat booking masuk."}
+                        </div>
                       ) : (
-                        bookings.filter(b => b.guideId === currentUser.id).map((b) => {
+                        bookings.filter(b => {
+                          const isMine = b.guideId === currentUser.id;
+                          if (!isMine) return false;
+                          const isActive = ["Menunggu Konfirmasi", "Menunggu Pembayaran", "Telah Dibayar", "Start", "Muncak"].includes(b.status);
+                          return bookingSubTab === "active" ? isActive : !isActive;
+                        }).map((b) => {
                           const relevantNego = negotiations.find(n => n.orderId === b.id && n.status === "pending");
                           return (
-                            <div key={b.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-sm transition-all">
+                            <div key={b.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-sm transition-all animate-in fade-in duration-200">
                               <div>
                                 <div className="flex items-center gap-2 flex-wrap mb-1">
                                   <h4 className="font-bold text-gray-800">{b.pendakiName}</h4>
@@ -2587,10 +2676,10 @@ export function DashboardPage() {
                                   ) : (
                                     b.status === "Menunggu Konfirmasi" && (
                                       <>
-                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => updateBookingStatus(b.id, "Menunggu Pembayaran")}>
+                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold rounded-xl" onClick={() => updateBookingStatus(b.id, "Menunggu Pembayaran")}>
                                           Konfirmasi Jadwal
                                         </Button>
-                                        <Button size="sm" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50" onClick={() => updateBookingStatus(b.id, "Dibatalkan")}>
+                                        <Button size="sm" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50 font-bold rounded-xl" onClick={() => updateBookingStatus(b.id, "Dibatalkan")}>
                                           Tolak
                                         </Button>
                                       </>
@@ -3247,13 +3336,45 @@ export function DashboardPage() {
                           </p>
                         </div>
                       </div>
-                      {rentalOrders.filter(r => r.vendorId === currentUser.id).length === 0 ? (
-                        <div className="text-center py-12 text-gray-400 text-sm">Belum ada pesanan sewa masuk.</div>
+
+                      <div className="flex gap-2 mb-2 border-b border-gray-100 pb-3">
+                        <Button
+                          size="sm"
+                          variant={rentalSubTab === "active" ? "default" : "outline"}
+                          className={`text-xs px-4 rounded-xl ${rentalSubTab === "active" ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold" : "border-gray-200 text-gray-600 bg-white"}`}
+                          onClick={() => setRentalSubTab("active")}
+                        >
+                          Penyewaan Aktif
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={rentalSubTab === "history" ? "default" : "outline"}
+                          className={`text-xs px-4 rounded-xl ${rentalSubTab === "history" ? "bg-emerald-600 hover:bg-emerald-700 text-white font-bold" : "border-gray-200 text-gray-600 bg-white"}`}
+                          onClick={() => setRentalSubTab("history")}
+                        >
+                          Riwayat Selesai & Batal
+                        </Button>
+                      </div>
+
+                      {rentalOrders.filter(r => {
+                        const isMine = r.vendorId === currentUser.id;
+                        if (!isMine) return false;
+                        const isActive = ["Menunggu Konfirmasi", "Menunggu Pembayaran", "Telah Dibayar", "Siap Diambil", "Sedang Disewa"].includes(r.status);
+                        return rentalSubTab === "active" ? isActive : !isActive;
+                      }).length === 0 ? (
+                        <div className="text-center py-12 text-gray-400 text-sm">
+                          {rentalSubTab === "active" ? "Belum ada pesanan sewa aktif masuk." : "Belum ada riwayat pesanan sewa masuk."}
+                        </div>
                       ) : (
-                        rentalOrders.filter(r => r.vendorId === currentUser.id).map((r) => {
+                        rentalOrders.filter(r => {
+                          const isMine = r.vendorId === currentUser.id;
+                          if (!isMine) return false;
+                          const isActive = ["Menunggu Konfirmasi", "Menunggu Pembayaran", "Telah Dibayar", "Siap Diambil", "Sedang Disewa"].includes(r.status);
+                          return rentalSubTab === "active" ? isActive : !isActive;
+                        }).map((r) => {
                           const relevantNego = negotiations.find(n => n.orderId === r.id && n.status === "pending");
                           return (
-                            <div key={r.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-sm transition-all">
+                            <div key={r.id} className="p-4 rounded-xl border border-gray-150 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-sm transition-all animate-in fade-in duration-200">
                               <div>
                                 <div className="flex items-center gap-2 flex-wrap mb-1">
                                   <h4 className="font-bold text-gray-800">{r.itemName}</h4>
@@ -3290,16 +3411,16 @@ export function DashboardPage() {
                                   ) : (
                                     r.status === "Menunggu Konfirmasi" ? (
                                       <>
-                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white animate-pulse" onClick={() => updateRentalStatus(r.id, "Menunggu Pembayaran")}>
+                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold rounded-xl animate-pulse" onClick={() => updateRentalStatus(r.id, "Menunggu Pembayaran")}>
                                           Konfirmasi Unit Ready
                                         </Button>
-                                        <Button size="sm" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50" onClick={() => updateRentalStatus(r.id, "Dibatalkan")}>
+                                        <Button size="sm" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50 font-bold rounded-xl" onClick={() => updateRentalStatus(r.id, "Dibatalkan")}>
                                           Tolak
                                         </Button>
                                       </>
                                     ) : (
                                       r.status === "Telah Dibayar" ? (
-                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-semibold" onClick={() => updateRentalStatus(r.id, "Sedang Disewa")}>
+                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold rounded-xl" onClick={() => updateRentalStatus(r.id, "Sedang Disewa")}>
                                           Tandai Diambil Penyewa
                                         </Button>
                                       ) : (
@@ -5325,6 +5446,63 @@ export function DashboardPage() {
                           <div>
                             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Nama Pemilik</p>
                             <p className="font-extrabold text-gray-800 mt-1">{currentUser.bank_holder}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Riwayat Transaksi Dompet & Deposit */}
+                    <div className="border-t border-gray-100 pt-5 mt-6 font-sans">
+                      <h4 className="text-sm font-bold text-gray-805 flex items-center gap-2 mb-3">
+                        <History className="size-4 text-emerald-600 shrink-0" />
+                        Riwayat Transaksi Dompet & Deposit
+                      </h4>
+                      {depositTransactions.filter(tx => tx.userId === currentUser.id).length === 0 ? (
+                        <div className="text-center py-6 text-gray-400 text-xs italic bg-gray-50/30 border border-dashed border-gray-200 rounded-xl">
+                          Belum ada riwayat transaksi masuk atau keluar.
+                        </div>
+                      ) : (
+                        <div className="border border-gray-150 rounded-xl overflow-hidden bg-white">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs text-left border-collapse">
+                              <thead>
+                                <tr className="bg-slate-50 text-[10px] text-gray-400 font-bold uppercase tracking-wider border-b border-gray-150">
+                                  <th className="p-3">Tanggal</th>
+                                  <th className="p-3">Tipe</th>
+                                  <th className="p-3">Deskripsi</th>
+                                  <th className="p-3 text-right">Nominal</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100 font-semibold text-gray-650">
+                                {depositTransactions
+                                  .filter(tx => tx.userId === currentUser.id)
+                                  .map((tx) => {
+                                    const isPlus = tx.type === "topup" || tx.type === "refund";
+                                    return (
+                                      <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors">
+                                        <td className="p-3 text-gray-500 font-mono text-[10px]">{tx.createdAt}</td>
+                                        <td className="p-3">
+                                          <Badge className={`text-[9px] uppercase font-bold px-1.5 py-0.5 rounded-md ${
+                                            tx.type === "topup" ? "bg-green-50 text-green-700 border border-green-200" :
+                                            tx.type === "withdraw" ? "bg-red-50 text-red-700 border border-red-200" :
+                                            tx.type === "refund" ? "bg-blue-50 text-blue-700 border border-blue-200" :
+                                            "bg-amber-50 text-amber-700 border border-amber-200"
+                                          }`}>
+                                            {tx.type === "topup" ? "Top Up" :
+                                             tx.type === "withdraw" ? "Tarik Dana" :
+                                             tx.type === "refund" ? "Refund" :
+                                             "Denda"}
+                                          </Badge>
+                                        </td>
+                                        <td className="p-3 text-gray-700 font-normal">{tx.description}</td>
+                                        <td className={`p-3 text-right font-bold ${isPlus ? "text-green-600" : "text-red-600"}`}>
+                                          {isPlus ? "+" : "-"} Rp {tx.amount.toLocaleString("id-ID")}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       )}
