@@ -494,29 +494,41 @@ export function RentalPage() {
           </Tabs>
         </div>
       </section>
-
-      {/* ── Rental Booking & Price Nego Modal ── */}
       {rentalModalOpen && selectedItem && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200 font-sans">
-            <button onClick={() => setRentalModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400 transition-colors">
-              <X className="size-5" />
-            </button>
-            <div className="flex items-center gap-2 text-emerald-800 font-bold mb-3">
-              <Package className="size-6 text-emerald-600 shrink-0" />
-              <h3 className="text-lg">Sewa Alat & Nego Harga</h3>
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setRentalModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl w-full max-w-md shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200 font-sans flex flex-col max-h-[85vh] md:max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-5 pb-3 border-b border-gray-100 relative shrink-0">
+              <button 
+                onClick={() => setRentalModalOpen(false)} 
+                className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400 transition-colors"
+              >
+                <X className="size-5" />
+              </button>
+              <div className="flex items-center gap-2 text-emerald-800 font-bold">
+                <Package className="size-6 text-emerald-600 shrink-0" />
+                <h3 className="text-base md:text-lg">Sewa Alat & Nego Harga</h3>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
+                Tentukan kuantitas, durasi sewa, dan tawarkan harga sewa alternatif.
+              </p>
             </div>
-            <p className="text-xs text-gray-500 mb-4 leading-relaxed font-normal">
-              Tentukan kuantitas, durasi sewa, dan tawarkan harga sewa alternatif. Vendor berhak mengonfirmasi ketersediaan barang dan menyetujui penawaran harga Anda.
-            </p>
-            <div className="space-y-4 text-sm">
+
+            {/* Scrollable Form Content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs md:text-sm">
               <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center gap-3">
-                <div className="size-10 rounded-lg bg-white flex items-center justify-center border border-emerald-150">
+                <div className="size-10 rounded-lg bg-white flex items-center justify-center border border-emerald-150 shrink-0">
                   <Package className="size-6 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="font-bold text-gray-800 leading-tight">{selectedItem.name}</p>
-                  <p className="text-xs text-emerald-800">Vendor: **{selectedItem.vendorName}**</p>
+                  <p className="font-bold text-gray-800 leading-tight text-sm">{selectedItem.name}</p>
+                  <p className="text-xs text-emerald-800">Vendor: <b>{selectedItem.vendorName}</b></p>
                 </div>
               </div>
               
@@ -557,7 +569,7 @@ export function RentalPage() {
                     type="number" 
                     min={1} 
                     max={selectedItem.available}
-                    className="text-xs h-9" 
+                    className="text-xs h-9 bg-white" 
                     value={quantity}
                     onChange={(e) => setQuantity(Math.min(selectedItem.available, Math.max(1, parseInt(e.target.value) || 1)))}
                   />
@@ -570,7 +582,7 @@ export function RentalPage() {
                     <DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-emerald-600 font-bold" />
                     <Input 
                       type="number" 
-                      className="pl-7 text-xs font-bold text-emerald-700 h-9"
+                      className="pl-7 text-xs font-bold text-emerald-700 h-9 bg-white"
                       value={proposedPrice}
                       onChange={(e) => setProposedPrice(e.target.value)}
                     />
@@ -582,7 +594,7 @@ export function RentalPage() {
               <div>
                 <label className="text-xs font-semibold text-gray-700 block mb-1">Catatan / Keterangan Penawaran</label>
                 <textarea 
-                  className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 h-14 resize-none"
+                  className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-55 focus:bg-white focus:outline-emerald-500 h-14 resize-none"
                   placeholder="Contoh: Nego tipis ya gan, ambil sekalian 3 item."
                   value={negoNotes}
                   onChange={(e) => setNegoNotes(e.target.value)}
@@ -594,7 +606,7 @@ export function RentalPage() {
                   <label className="text-xs font-semibold text-gray-700 block mb-1">Kupon Diskon Vendor</label>
                   <Input 
                     placeholder="Contoh: SEWAOK"
-                    className="text-xs h-9" 
+                    className="text-xs h-9 bg-white" 
                     value={couponInput}
                     onChange={(e) => setCouponInput(e.target.value)}
                   />
@@ -603,7 +615,7 @@ export function RentalPage() {
                   <label className="text-xs font-semibold text-gray-700 block mb-1">Catatan Rental/Kirim</label>
                   <Input 
                     placeholder="Catatan tambahan sewa"
-                    className="text-xs h-9" 
+                    className="text-xs h-9 bg-white" 
                     value={checkoutNotes}
                     onChange={(e) => setCheckoutNotes(e.target.value)}
                   />
@@ -668,11 +680,12 @@ export function RentalPage() {
                   </div>
                 );
               })()}
-              
-              <div className="flex gap-2.5 pt-2">
-                <Button variant="outline" className="flex-1 text-xs" onClick={() => setRentalModalOpen(false)}>Batal</Button>
-                <Button className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" onClick={handleConfirmRental}>Kirim Booking & Sewa</Button>
-              </div>
+            </div>
+
+            {/* Fixed Footer Actions */}
+            <div className="p-4 border-t border-gray-100 flex gap-2.5 bg-gray-50/50 shrink-0">
+              <Button type="button" variant="outline" className="flex-1 text-xs rounded-xl" onClick={() => setRentalModalOpen(false)}>Batal</Button>
+              <Button type="button" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl" onClick={handleConfirmRental}>Kirim Booking & Sewa</Button>
             </div>
           </div>
         </div>

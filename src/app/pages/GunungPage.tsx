@@ -838,22 +838,40 @@ export function GunungPage() {
 
       {/* ── Official Booking Modal ── */}
       {bookingModalOpen && bookingMountain && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200 font-sans">
-            <button onClick={() => setBookingModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400 transition-colors">
-              <X className="size-5" />
-            </button>
-            <div className="flex items-center gap-2 text-emerald-800 font-bold mb-3">
-              <Ticket className="size-6 text-emerald-600 shrink-0" />
-              <h3 className="text-lg">Pesan Tiket Masuk Gunung</h3>
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setBookingModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl w-full max-w-md shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200 font-sans flex flex-col max-h-[85vh] md:max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-5 pb-3 border-b border-gray-100 relative shrink-0">
+              <button 
+                onClick={() => setBookingModalOpen(false)} 
+                className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400 transition-colors"
+              >
+                <X className="size-5" />
+              </button>
+              <div className="flex items-center gap-2 text-emerald-800 font-bold">
+                <Ticket className="size-6 text-emerald-600 shrink-0" />
+                <h3 className="text-base md:text-lg">Pesan Tiket Masuk Gunung</h3>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
+                Pesan tiket masuk/izin pendakian resmi untuk {bookingMountain.name}.
+              </p>
             </div>
-            <p className="text-xs text-gray-500 mb-4 leading-relaxed font-normal">
-              Anda memesan tiket masuk/izin pendakian resmi untuk **{bookingMountain.name}**. Biaya tiket bersifat pas (fixed). Tiket ini dikelola oleh Super Admin yang akan mendaftarkannya secara manual ke pihak pengelola gunung via **{bookingMountain.adminContactMethod}: {bookingMountain.adminContactValue}** setelah pembayaran escrow terverifikasi.
-            </p>
-            <div className="space-y-4 text-sm">
-              <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-100">
+
+            {/* Scrollable Form Content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs md:text-sm">
+              <p className="text-xs text-gray-500 leading-relaxed font-normal bg-gray-50 p-2.5 rounded-xl border border-gray-150">
+                Biaya tiket bersifat pas (fixed). Tiket ini dikelola oleh Super Admin yang akan mendaftarkannya secara manual ke pihak pengelola gunung via <b>{bookingMountain.adminContactMethod}: {bookingMountain.adminContactValue}</b> setelah pembayaran escrow terverifikasi.
+              </p>
+              
+              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100">
                 <p className="text-xs text-emerald-800 font-semibold">Tujuan Pendakian</p>
-                <p className="font-bold text-gray-800 text-base">{bookingMountain.name}</p>
+                <p className="font-bold text-gray-800 text-sm md:text-base">{bookingMountain.name}</p>
                 <p className="text-xs text-gray-500">📍 {bookingMountain.location}</p>
               </div>
               
@@ -901,10 +919,10 @@ export function GunungPage() {
                 </div>
               )}
               
-              <div className="border-t border-gray-150 pt-3 flex justify-between items-center">
+              <div className="border-t border-gray-150 pt-3 flex justify-between items-center text-xs">
                 <div>
-                  <p className="text-xs text-gray-400">Harga Tiket Satuan</p>
-                  <p className="text-xs font-bold text-gray-700">Rp {bookingMountain.ticketPrice.toLocaleString("id-ID")} / Orang</p>
+                  <p className="text-gray-400">Harga Tiket Satuan</p>
+                  <p className="font-bold text-gray-700">Rp {bookingMountain.ticketPrice.toLocaleString("id-ID")} / Orang</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-gray-500 font-semibold">Total Pembayaran</p>

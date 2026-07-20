@@ -541,29 +541,41 @@ export function GuidePage() {
           </div>
         </div>
       </section>
-
-      {/* ── Guide Booking & Price Nego Modal ── */}
       {bookingModalOpen && bookingGuide && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200 font-sans">
-            <button onClick={() => setBookingModalOpen(false)} className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400 transition-colors">
-              <X className="size-5" />
-            </button>
-            <div className="flex items-center gap-2 text-emerald-800 font-bold mb-3">
-              <Award className="size-6 text-emerald-600 shrink-0" />
-              <h3 className="text-lg">Booking & Nego Jasa Guide</h3>
+        <div 
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setBookingModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl w-full max-w-md shadow-2xl relative border border-gray-100 animate-in zoom-in-95 duration-200 font-sans flex flex-col max-h-[85vh] md:max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-5 pb-3 border-b border-gray-100 relative shrink-0">
+              <button 
+                onClick={() => setBookingModalOpen(false)} 
+                className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-100 text-gray-400 transition-colors"
+              >
+                <X className="size-5" />
+              </button>
+              <div className="flex items-center gap-2 text-emerald-800 font-bold">
+                <Award className="size-6 text-emerald-600 shrink-0" />
+                <h3 className="text-base md:text-lg">Booking & Nego Jasa Guide</h3>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1 leading-relaxed">
+                Kirimkan pengajuan jadwal dan tawarkan harga jasa guide.
+              </p>
             </div>
-            <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-              Kirimkan pengajuan jadwal dan tawarkan harga jasa guide. Guide berhak menyetujui, menolak, atau menawarkan harga balik.
-            </p>
-            <div className="space-y-4 text-sm">
+
+            {/* Scrollable Form Content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs md:text-sm">
               <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 flex items-center gap-3">
                 <Avatar className="size-11">
                   <AvatarImage src={bookingGuide.avatar} />
                   <AvatarFallback>{bookingGuide.name[0]}</AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="font-bold text-gray-800">{bookingGuide.name}</p>
+                  <p className="font-bold text-gray-800 text-sm">{bookingGuide.name}</p>
                   <p className="text-xs text-emerald-700 font-semibold">{bookingGuide.specialty}</p>
                 </div>
               </div>
@@ -574,7 +586,7 @@ export function GuidePage() {
                   <div className="relative">
                     <MountainIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-gray-400 pointer-events-none" />
                     <select 
-                      className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 bg-gray-50 rounded-lg focus:bg-white focus:outline-emerald-500"
+                      className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 bg-gray-50 rounded-lg focus:bg-white focus:outline-emerald-500 font-medium"
                       value={targetMountain}
                       onChange={(e) => setTargetMountain(e.target.value)}
                     >
@@ -633,7 +645,7 @@ export function GuidePage() {
                   <div>
                     <label className="text-xs font-semibold text-gray-700 block mb-1">Pilih Jalur / Basecamp Pendakian</label>
                     <select
-                      className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 font-medium"
+                      className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-55 focus:bg-white focus:outline-emerald-500 font-medium"
                       value={selectedBasecamp}
                       onChange={(e) => setSelectedBasecamp(e.target.value)}
                     >
@@ -669,7 +681,6 @@ export function GuidePage() {
                 <p className="text-[10px] text-gray-400 mt-1">Isi sama dengan tarif normal jika tidak ingin melakukan negosiasi.</p>
               </div>
 
-              {/* Coupon Code Input */}
               {bookingGuide.couponCode && (
                 <div>
                   <label className="text-xs font-semibold text-gray-700 block mb-1">
@@ -687,18 +698,16 @@ export function GuidePage() {
                 </div>
               )}
 
-              {/* Checkout Note (Shopee Style) */}
               <div>
                 <label className="text-xs font-semibold text-gray-700 block mb-1">Catatan Tambahan (Keterangan Khusus)</label>
                 <textarea
-                  className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:bg-white focus:outline-emerald-500 h-14 resize-none"
+                  className="w-full p-2.5 text-xs border border-gray-200 rounded-lg bg-gray-55 focus:bg-white focus:outline-emerald-500 h-14 resize-none"
                   placeholder="Masukkan keterangan (misal: ukuran kaos, riwayat asma, atau request logistik khusus)."
                   value={checkoutNotes}
                   onChange={(e) => setCheckoutNotes(e.target.value)}
                 />
               </div>
 
-              {/* Discount and Deposit Calculation Breakdown */}
               {(() => {
                 const base = parseInt(proposedPrice) || bookingGuide.price;
                 const discPercent = bookingGuide.discountPercentage || 0;
@@ -755,11 +764,12 @@ export function GuidePage() {
                   onChange={(e) => setNegoNotes(e.target.value)}
                 />
               </div>
-              
-              <div className="flex gap-2.5 pt-2">
-                <Button variant="outline" className="flex-1 text-xs" onClick={() => setBookingModalOpen(false)}>Batal</Button>
-                <Button className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" onClick={handleConfirmBooking}>Kirim Booking & Nego</Button>
-              </div>
+            </div>
+
+            {/* Fixed Footer Actions */}
+            <div className="p-4 border-t border-gray-100 flex gap-2.5 bg-gray-50/50 shrink-0">
+              <Button type="button" variant="outline" className="flex-1 text-xs rounded-xl" onClick={() => setBookingModalOpen(false)}>Batal</Button>
+              <Button type="button" className="flex-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl" onClick={handleConfirmBooking}>Kirim Booking & Nego</Button>
             </div>
           </div>
         </div>
