@@ -103,6 +103,7 @@ export function DashboardPage() {
     setCurrentUser,
     mountains,
     setMountains,
+    updateMountain,
     guides,
     setGuides,
     vendors,
@@ -1668,25 +1669,18 @@ export function DashboardPage() {
     });
   };
 
-  const handleSaveMountain = (e: React.FormEvent) => {
+  const handleSaveMountain = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingMountain) return;
     
     const { ticketPrice, adminContactMethod, adminContactValue, status } = mountainForm;
     
-    setMountains((prev) =>
-      prev.map((m) =>
-        m.name === editingMountain.name
-          ? {
-              ...m,
-              ticketPrice: parseInt(ticketPrice) || 0,
-              adminContactMethod,
-              adminContactValue,
-              status
-            }
-          : m
-      )
-    );
+    await updateMountain(editingMountain.name, {
+      ticketPrice: parseInt(ticketPrice) || 0,
+      adminContactMethod,
+      adminContactValue,
+      status
+    });
     
     setEditingMountain(null);
     toast.success(`Kontak tiket resmi ${editingMountain.name} berhasil diperbarui!`);

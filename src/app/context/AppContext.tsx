@@ -315,6 +315,7 @@ interface AppContextType {
   toggleUserVerification: (id: string) => void;
   addManualUser: (userData: Omit<User, "id" | "avatar" | "status"> & { password?: string }) => Promise<void>;
   updateTripPackageStatus: (id: string, status: "approved" | "rejected") => void;
+  updateMountain: (name: string, fields: Partial<Mountain>) => Promise<void>;
   userActivities: UserActivity[];
   logUserActivity: (userId: string, userName: string, role: UserActivity["userRole"], action: string) => void;
   ensureMockUserExists: (user: User) => Promise<void>;
@@ -1779,6 +1780,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logUserActivity("admin1", "Super Admin", "admin", `Mengubah status iklan paket ID ${id} menjadi ${status.toUpperCase()}`);
   };
 
+  const updateMountain = async (name: string, fields: Partial<Mountain>) => {
+    // 1. Optimistic update local state
+    setMountains((prev) =>
+      prev.map((m) => (m.name === name ? { ...m, ...fields } : m))
+    );
+
+    // 2. Map camelCase fields to snake_case for Supabase
+    const dbFields: any = {};
+    if (fields.status !== undefined) dbFields.status = fields.status;
+    if (fields.ticketPrice !== undefined) dbFields.ticket_price = fields.ticketPrice;
+    if (fields.adminContactMethod !== undefined) dbFields.admin_contact_method = fields.adminContactMethod;
+    if (fields.adminContactValue !== undefined) dbFields.admin_contact_value = fields.adminContactValue;
+
+    try {
+      const { error } = await supabase
+        .from("mountains")
+        .update(dbFields)
+        .eq("name", name);
+        
+      if (error) throw error;
+      logUserActivity("admin1", "Super Admin", "admin", `Memperbarui data/status Gunung ${name}`);
+    } catch (err: any) {
+      console.error(`Error updating mountain ${name}:`, err.message);
+      toast.error(`Gagal memperbarui status gunung di database: ${err.message}`);
+      
+      // Rollback on database error
+      const { data: mtnData } = await supabase.from("mountains").select("*");
+      if (mtnData) {
+        setMountains(
+          mtnData.map((m: any) => ({
+            name: m.name,
+            location: m.location,
+            province: m.province,
+            elevation: m.elevation,
+            elevationM: m.elevation_m,
+            difficulty: m.difficulty,
+            image: m.image,
+            rating: Number(m.rating),
+            reviews: m.reviews,
+            lat: Number(m.lat),
+            lng: Number(m.lng),
+            status: m.status,
+            ticketPrice: Number(m.ticket_price),
+            adminContactMethod: m.admin_contact_method,
+            adminContactValue: m.admin_contact_value,
+            basecamps: m.basecamps || [],
+          }))
+        );
+      }
+    }
+  };
+
   const addManualUser = async (userData: Omit<User, "id" | "avatar" | "status"> & { password?: string }) => {
     const newUserId = "user_" + Math.random().toString(36).substring(2, 9);
     const newUserObj: User = {
@@ -2898,6 +2951,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleUserVerification,
         addManualUser,
         updateTripPackageStatus,
+        updateMountain,
         userActivities,
         logUserActivity,
         ensureMockUserExists,
