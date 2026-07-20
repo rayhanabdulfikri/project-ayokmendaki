@@ -1,57 +1,43 @@
-# RENCANA PERBAIKAN DOKUMEN SRS (SOFTWARE REQUIREMENT SPECIFICATION)
-**Proyek:** AyokMendaki - Platform Marketplace Pendakian  
-**Status Peninjauan:** DRAFT REVISI AKHIR  
+# INSTRUKSI EVALUASI & REVISI SRS (FORMAT LATEX)
 
-Setelah membandingkan dokumen `SRS_AYOKMENDAKITERBARU.docx` dengan kondisi riil implementasi kode pada folder project, ditemukan beberapa ketidaksesuaian (*mismatches*) teknis yang mendasar. Laporan ini merinci poin-poin tersebut beserta rencana perbaikan yang harus dituangkan ke dalam dokumen SRS revisi akhir.
-
----
-
-## POIN-POIN REVISI UTAMA
-
-### 1. Perubahan Arsitektur & Teknologi Stack (Tech Stack)
-*   **Kondisi di Dokumen SRS Lama:** 
-    *   Backend: Laravel (PHP)
-    *   Frontend Web: VueJS
-    *   Mobile App: React Native
-*   **Kondisi Riil Implementasi Project:**
-    *   Sistem dibangun menggunakan arsitektur **Serverless SPA (Single Page Application)**.
-    *   Frontend & Client logic: **Vite + React.js (TypeScript)**.
-    *   Backend, Database & Real-time State: **Supabase** (tanpa server backend Laravel terpisah, query database dieksekusi langsung dari client menggunakan `supabase-js` SDK dengan memanfaatkan Row Level Security).
-*   **Rencana Tindakan Perbaikan SRS:**
-    *   Ubah Bab 1 (Tujuan, Ruang Lingkup) dan Bab 2 (Ketergantungan Software, Spesifikasi Pendukung) untuk merefleksikan penggunaan **Vite + React (TypeScript) + Supabase**.
+**Petunjuk Penggunaan di Claude.ai:**
+1. Unggah (*upload*) dokumen `SRS_AYOKMENDAKITERBARU.docx` Anda ke Claude.ai.
+2. Salin seluruh isi teks di bawah garis pembatas di bawah ini dan tempelkan (*copy-paste*) ke dalam kolom prompt chat Claude.ai.
+3. Kirim prompt tersebut dan tunggu Claude.ai menghasilkan kode LaTeX lengkap untuk dokumen perbaikan SRS Anda.
 
 ---
 
-### 2. Mekanisme Keuangan & Sistem Escrow Transaksi
-*   **Kondisi di Dokumen SRS Lama:**
-    *   Pembayaran escrow biasa melalui integrasi Midtrans/Xendit tanpa rincian formula pajak dan jaminan.
-*   **Kondisi Riil Implementasi Project:**
-    *   **Pajak PPN 11%:** Dihitung otomatis di setiap transaksi booking guide dan sewa alat outdoor (`basePrice * 1.11`).
-    *   **Deposit Jaminan Rp 100.000:** Ditahan sementara oleh sistem escrow untuk setiap transaksi booking/rental. Uang ini otomatis kembali 100% setelah status trip "Selesai" disetujui bersama oleh pendaki & mitra, atau dipotong jika ada klaim denda dari mitra yang disetujui Super Admin.
-    *   **Sistem Biaya Penarikan (*Withdrawal Fee*):** Admin mengenakan tarif progresif pada setiap penarikan saldo dompet mitra:
-        *   Penarikan < Rp 50.000: Admin fee flat Rp 5.000.
-        *   Penarikan Rp 50.000 s/d Rp 500.000: Admin fee 10%.
-        *   Penarikan > Rp 500.000: Admin fee 5%.
-*   **Rencana Tindakan Perbaikan SRS:**
-    *   Tambahkan sub-bab baru di Bab 2/3 mengenai **Spesifikasi Aturan Bisnis Keuangan (Business Rules: PPN, Deposit Jaminan, & Biaya Admin Progresif)**.
+**PROMPT EVALUASI & GENERATOR KODE LATEX:**
 
----
+Bertindaklah sebagai Senior Business Analyst dan Technical Architect. Saya telah mengunggah dokumen spesifikasi kebutuhan perangkat lunak (SRS) proyek kami yang berjudul "SRS_AYOKMENDAKITERBARU.docx". 
 
-### 3. Logika Validasi Pendaftaran & Spesialisasi Pemandu
-*   **Kondisi di Dokumen SRS Lama:**
-    *   Pendaki bebas memilih gunung tujuan saat memesan jasa guide apa saja.
-*   **Kondisi Riil Implementasi Project:**
-    *   **Saringan Spesialisasi Gunung:** Pendaki hanya diperbolehkan memilih gunung tujuan pendakian yang tercantum dalam spesifikasi gunung guide tersebut (misal: Ahmad hanya bisa dipesan untuk Gunung Semeru & Gunung Bromo).
-    *   **Validasi Keaktifan Gunung:** Jika seluruh gunung spesialisasi guide berstatus "Tutup" di database, booking otomatis ditolak oleh sistem.
-*   **Rencana Tindakan Perbaikan SRS:**
-    *   Revisi Skenario Use Case "Booking Guide" di Bab 3 untuk menambahkan *Pre-condition* dan *Exceptions Flow* terkait validasi spesialisasi gunung pemandu.
+Tugas Anda adalah mengevaluasi dokumen SRS tersebut secara kritis dan membandingkannya dengan spesifikasi teknis riil dari sistem yang telah selesai dikembangkan saat ini. Berdasarkan hasil evaluasi tersebut, buatlah dokumen "Laporan Evaluasi dan Rencana Perbaikan Dokumen SRS - AyokMendaki" dalam bentuk kode LaTeX lengkap (\documentclass{article} sampai \end{document}) yang siap di-compile di Overleaf.
 
----
+### Kondisi Riil Sistem Saat Ini (Sebagai Pembanding):
+1. **Teknologi Stack:** Menggunakan arsitektur Serverless Single Page Application (SPA) berbasis Vite + React.js (TypeScript) di sisi front-end dan Supabase di sisi back-end/database. Sistem tidak menggunakan Laravel (PHP), VueJS, maupun React Native seperti yang tertulis di SRS lama.
+2. **Koneksi Database:** Berinteraksi langsung dari React client ke database Supabase menggunakan `supabase-js` SDK dengan otentikasi JWT dan Row Level Security (RLS) pada tabel-tabel database.
+3. **Mekanisme Transaksi & Pajak:** 
+   - Transaksi sewa/booking dikenakan PPN 11% secara otomatis pada biaya dasar (`basePrice * 1.11`).
+   - Penahanan deposit jaminan Rp 100.000 per transaksi yang akan kembali otomatis 100% setelah trip selesai dan disetujui bersama oleh pendaki dan mitra, atau dipotong jika ada laporan denda kerusakan dari mitra yang disetujui Admin.
+4. **Struktur Biaya Admin Penarikan Saldo (Withdrawal):** Biaya admin progresif:
+   - Penarikan < Rp 50.000: Admin fee flat Rp 5.000.
+   - Penarikan Rp 50.000 s/d Rp 500.000: Admin fee 10% dari nominal penarikan.
+   - Penarikan > Rp 500.000: Admin fee 5% dari nominal penarikan.
+5. **Validasi Spesialisasi Guide:** Saat pendaki memesan jasa guide, sistem secara ketat memfilter pilihan gunung tujuan hanya pada gunung yang terdaftar pada spesialisasi guide tersebut dan status gunung tersebut "Buka".
+6. **Responsivitas Antarmuka (UI/UX):** Penggunaan modal pop-up transaksi yang responsif terhadap resolusi layar kecil (mobile) dengan tinggi maksimum max-h-[85vh], tata letak flex-column, scrollbar vertikal pada form body, dan penutupan modal instan dengan klik backdrop.
 
-### 4. Responsivitas Antarmuka & Penutupan Modal (UI/UX)
-*   **Kondisi di Dokumen SRS Lama:**
-    *   Hanya spesifikasi tampilan web/mobile standar.
-*   **Kondisi Riil Implementasi Project:**
-    *   Seluruh modal transaksi (Booking Guide, Sewa Alat, Tiket Gunung) dirancang dengan batas tinggi maksimal (`max-h-[85vh]`), layout flex vertikal, scroll independen pada bagian form body, serta fitur penutupan instan dengan mengklik area backdrop transparan.
-*   **Rencana Tindakan Perbaikan SRS:**
-    *   Perbarui Kebutuhan Non-Fungsional pada aspek *Usability* untuk mencantumkan spesifikasi modal pop-up responsif yang mendukung kemudahan gulir (*scrollable*) dan penutupan cepat (*backdrop dismissal*) pada resolusi mobile.
+### Struktur Penulisan Laporan dalam Kode LaTeX:
+- Gunakan package standard: `geometry` (margin 2.5cm), `hyperref`, `booktabs`, `amsmath`, `listings`, dan `xcolor`.
+- Cantumkan identitas kelompok berikut pada bagian judul/identitas:
+  - Rayhan Abdul Fikri (Project Manager)
+  - Muhammad Ubaidillah Rosyid (Full-Stack)
+  - Ryan Anugrah (UI/UX)
+- Susun bagian-bagian laporan sebagai berikut:
+  1. **Bab I: Identitas & Latar Belakang Masalah** (Tabel kelompok berisi Rayhan, Ubaidillah, Ryan).
+  2. **Bab II: Mismatch Arsitektur Perangkat Lunak** (Gunakan tabel `\begin{table}` dan `\begin{tabular}` untuk membandingkan secara jelas antara "SRS Lama" vs "Implementasi Riil" pada aspek Tech Stack, Database, API Routing, dan Payment Gateway).
+  3. **Bab III: Spesifikasi Logika Keuangan & Escrow** (Gunakan notasi matematika LaTeX untuk menjabarkan formula Pajak PPN 11% dan Biaya Admin Penarikan Progresif).
+  4. **Bab IV: Aturan Validasi Khusus** (Menjelaskan logika pemfilteran gunung berdasarkan spesialisasi guide dan status gunung).
+  5. **Bab V: Spesifikasi UX Responsif** (Menjelaskan parameter modal scrollable, max-height, dan backdrop clicks).
+  6. **Bab VI: Kesimpulan dan Langkah Aksi Revisi Dokumen**.
+
+Pastikan kode LaTeX yang Anda hasilkan lengkap, tidak terpotong (jangan gunakan placeholder atau singkatan seperti "lorem ipsum" atau "..."), bebas dari error sintaks, dan siap di-copy langsung ke Overleaf. Tulis seluruh teks dokumen dalam Bahasa Indonesia yang formal.
