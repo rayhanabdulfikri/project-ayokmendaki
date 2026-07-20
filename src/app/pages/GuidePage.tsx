@@ -98,16 +98,27 @@ export function GuidePage() {
       return;
     }
 
-    // Filter open mountains
-    const openM = mountains.filter(m => m.status === "Buka");
-    if (openM.length === 0) {
-      toast.error("Tidak ada gunung yang buka untuk pendakian saat ini.");
+    // Parse guide's specialty mountains
+    const guideSpecialties = guide.specialty
+      ? guide.specialty.split(",").map((s: string) => s.trim().toLowerCase())
+      : [];
+
+    const allowedM = mountains.filter(m => {
+      if (m.status !== "Buka") return false;
+      if (guideSpecialties.length === 0) return true;
+      return guideSpecialties.some((specialty: string) => 
+        m.name.toLowerCase().includes(specialty) || specialty.includes(m.name.toLowerCase())
+      );
+    });
+
+    if (allowedM.length === 0) {
+      toast.error(`Guide ${guide.name} tidak memiliki spesialisasi di gunung yang saat ini buka.`);
       return;
     }
 
     setBookingGuide(guide);
     setBookingDate("");
-    setTargetMountain(openM[0].name);
+    setTargetMountain(allowedM[0].name);
     setProposedPrice(guide.price.toString());
     setNegoNotes("");
     setClimbersCount(1);
@@ -590,9 +601,22 @@ export function GuidePage() {
                       value={targetMountain}
                       onChange={(e) => setTargetMountain(e.target.value)}
                     >
-                      {mountains.filter(m => m.status === "Buka").map((m) => (
-                        <option key={m.name} value={m.name}>{m.name}</option>
-                      ))}
+                      {(() => {
+                        const guideSpecialties = bookingGuide.specialty
+                          ? bookingGuide.specialty.split(",").map((s: string) => s.trim().toLowerCase())
+                          : [];
+                        return mountains
+                          .filter(m => {
+                            if (m.status !== "Buka") return false;
+                            if (guideSpecialties.length === 0) return true;
+                            return guideSpecialties.some((specialty: string) => 
+                              m.name.toLowerCase().includes(specialty) || specialty.includes(m.name.toLowerCase())
+                            );
+                          })
+                          .map((m) => (
+                            <option key={m.name} value={m.name}>{m.name}</option>
+                          ));
+                      })()}
                     </select>
                   </div>
                 </div>
