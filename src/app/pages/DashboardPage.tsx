@@ -1,6 +1,26 @@
 import { useState, useEffect, useMemo } from "react";
 import { useApp, Booking, RentalOrder, Negotiation, UserRole, EquipmentItem, User, Mountain } from "../context/AppContext";
 import { supabase } from "../../supabase";
+import Swal from "sweetalert2";
+
+const themeConfirm = (title: string, text: string, icon: 'question' | 'warning' | 'info' | 'success' | 'error' = 'question') => {
+  return Swal.fire({
+    title,
+    text,
+    icon,
+    showCancelButton: true,
+    confirmButtonColor: '#059669', // emerald-600
+    cancelButtonColor: '#ef4444', // red-500
+    confirmButtonText: 'Ya, Lanjutkan',
+    cancelButtonText: 'Batal',
+    background: '#ffffff',
+    customClass: {
+      popup: 'rounded-2xl font-sans text-sm',
+      title: 'text-gray-800 font-bold text-lg',
+    }
+  });
+};
+
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -491,8 +511,8 @@ export function DashboardPage() {
       return;
     }
 
-    const confirmSave = window.confirm("Apakah Anda yakin ingin menyimpan perubahan profil dan data verifikasi Anda?");
-    if (!confirmSave) return;
+    const result = await themeConfirm("Simpan Perubahan", "Apakah Anda yakin ingin menyimpan perubahan profil dan data verifikasi Anda?", "question");
+    if (!result.isConfirmed) return;
 
     setProfileLoading(true);
 
@@ -881,10 +901,7 @@ export function DashboardPage() {
                       <Button
                         size="xs"
                         className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 h-8"
-                        onClick={() => {
-                          respondToCollaborationProposal(p.id, "accepted");
-                          toast.success("Kerjasama disetujui! Paket promo bundling otomatis diterbitkan.");
-                        }}
+                        onClick={() => handleRespondProposal(p.id, "accepted")}
                       >
                         Terima Kerjasama
                       </Button>
@@ -892,10 +909,7 @@ export function DashboardPage() {
                         size="xs"
                         variant="outline"
                         className="text-xs border-red-200 text-red-655 hover:bg-red-50 h-8 font-semibold"
-                        onClick={() => {
-                          respondToCollaborationProposal(p.id, "rejected");
-                          toast.warning("Proposal kerjasama ditolak.");
-                        }}
+                        onClick={() => handleRespondProposal(p.id, "rejected")}
                       >
                         Tolak
                       </Button>
@@ -1170,7 +1184,149 @@ export function DashboardPage() {
     setPaymentModalOpen(true);
   };
 
-  const handlePayWithWallet = (id: string, type: "booking" | "rental", amount: number) => {
+  const handleConfirmEscrow = async (type: "booking" | "rental", id: string, role: "pendaki" | "guide" | "vendor") => {
+    const textMsg = 
+      type === "booking" 
+        ? "Apakah Anda yakin ingin menyatakan trip/jasa pemandu ini telah selesai dilaksanakan?"
+        : "Apakah Anda yakin ingin menyatakan pengembalian barang sewaan ini telah selesai?";
+        
+    const confirmRes = await themeConfirm(
+      "Konfirmasi Penyelesaian",
+      textMsg,
+      "question"
+    );
+    if (confirmRes.isConfirmed) {
+      confirmEscrow(type, id, role);
+    }
+  };
+
+  const handleAdminResolveEscrow = async (
+    type: "booking" | "rental", 
+    id: string, 
+    approveFine: boolean, 
+    fineAmount?: number,
+    bothConfirmed?: boolean
+  ) => {
+    let confirmTitle = "";
+    let confirmText = "";
+    let confirmIcon: "warning" | "question" = "question";
+
+    if (approveFine) {
+      confirmTitle = "Setujui Klaim Denda";
+      confirmText = `Apakah Anda yakin ingin menyetujui klaim denda sebesar Rp ${(fineAmount || 0).toLocaleString("id-ID")} untuk transaksi ini?`;
+      confirmIcon = "warning";
+    } else if (fineAmount && fineAmount > 0) {
+      confirmTitle = "Abaikan Klaim Denda";
+      confirmText = "Apakah Anda yakin ingin mengabaikan denda kerusakan dan mengembalikan deposit jaminan penuh?";
+      confirmIcon = "warning";
+    } else {
+      confirmTitle = "Cairkan Dana Escrow";
+      confirmText = bothConfirmed 
+        ? "Apakah Anda yakin ingin menyelesaikan transaksi ini dan mencairkan dana escrow?"
+        : "⚠️ PERINGATAN: Salah satu pihak belum menyetujui. Apakah Anda yakin ingin melakukan Payout Paksa untuk mencairkan dana?";
+      confirmIcon = bothConfirmed ? "question" : "warning";
+    }
+
+    const confirmRes = await themeConfirm(confirmTitle, confirmText, confirmIcon);
+    if (confirmRes.isConfirmed) {
+      await resolveEscrowWithDeposit(type, id, approveFine);
+    }
+  };
+
+  // SweetAlert2 wrapper for negotiation accept/reject
+  const handleRespondNegotiation = async (negoId: string, action: "accepted" | "rejected") => {
+    const isAccept = action === "accepted";
+    const res = await themeConfirm(
+      isAccept ? "Setujui Negosiasi" : "Tolak Negosiasi",
+      isAccept
+        ? "Apakah Anda yakin ingin menyetujui penawaran harga negosiasi ini?"
+        : "Apakah Anda yakin ingin menolak penawaran harga negosiasi ini?",
+      isAccept ? "question" : "warning"
+    );
+    if (res.isConfirmed) respondToNegotiation(negoId, action);
+  };
+
+  // SweetAlert2 wrapper for collaboration proposal accept/reject
+  const handleRespondProposal = async (proposalId: string, action: "accepted" | "rejected") => {
+    const isAccept = action === "accepted";
+    const res = await themeConfirm(
+      isAccept ? "Terima Proposal Kolaborasi" : "Tolak Proposal Kolaborasi",
+      isAccept
+        ? "Apakah Anda yakin ingin menerima proposal kerjasama ini? Paket bundling akan otomatis dibuat."
+        : "Apakah Anda yakin ingin menolak proposal kerjasama ini?",
+      isAccept ? "question" : "warning"
+    );
+    if (res.isConfirmed) respondToCollaborationProposal(proposalId, action);
+  };
+
+  // SweetAlert2 wrapper for admin trip package status changes
+  const handleUpdatePackageStatus = async (pkgId: string, pkgTitle: string, status: "approved" | "rejected") => {
+    const isApprove = status === "approved";
+    const res = await themeConfirm(
+      isApprove ? "Setujui & Tayangkan Paket" : "Tarik Paket dari Beranda",
+      isApprove
+        ? `Apakah Anda yakin ingin menyetujui dan menayangkan paket "${pkgTitle}" ke halaman beranda?`
+        : `Apakah Anda yakin ingin menarik paket "${pkgTitle}" dari tayangan beranda?`,
+      isApprove ? "question" : "warning"
+    );
+    if (res.isConfirmed) {
+      updateTripPackageStatus(pkgId, status);
+      isApprove
+        ? toast.success(`Paket "${pkgTitle}" berhasil disetujui & ditayangkan!`)
+        : toast.warning(`Paket "${pkgTitle}" diturunkan dari beranda.`);
+    }
+  };
+
+  // SweetAlert2 wrapper for admin verification approve/reject
+  const handleRespondVerification = async (reqId: string, userName: string, approve: boolean) => {
+    const res = await themeConfirm(
+      approve ? "Setujui Verifikasi" : "Tolak Verifikasi",
+      approve
+        ? `Apakah Anda yakin ingin menyetujui dan memverifikasi akun ${userName}?`
+        : `Apakah Anda yakin ingin menolak permohonan verifikasi dari ${userName}?`,
+      approve ? "question" : "warning"
+    );
+    if (res.isConfirmed) {
+      respondToVerification(reqId, approve);
+      approve
+        ? toast.success(`Verifikasi ${userName} berhasil disetujui!`)
+        : toast.error(`Permohonan verifikasi ${userName} ditolak.`);
+    }
+  };
+
+  // SweetAlert2 wrapper for admin toggle user verification
+  const handleToggleUserVerification = async (userId: string, userName: string, currentVerified: boolean) => {
+    const res = await themeConfirm(
+      currentVerified ? "Cabut Verifikasi" : "Verifikasi Pengguna",
+      currentVerified
+        ? `Apakah Anda yakin ingin mencabut status verifikasi dari ${userName}?`
+        : `Apakah Anda yakin ingin memberikan status terverifikasi kepada ${userName}?`,
+      currentVerified ? "warning" : "question"
+    );
+    if (res.isConfirmed) toggleUserVerification(userId);
+  };
+
+  // SweetAlert2 wrapper for rental status change (Vendor actions)
+  const handleUpdateRentalStatus = async (id: string, newStatus: string, label: string) => {
+    const res = await themeConfirm(
+      "Konfirmasi Tindakan",
+      `Apakah Anda yakin ingin ${label}?`,
+      "question"
+    );
+    if (res.isConfirmed) updateRentalStatus(id, newStatus);
+  };
+
+  // SweetAlert2 wrapper for booking status change (Guide actions)
+  const handleUpdateBookingStatus = async (id: string, newStatus: string, label: string) => {
+    const res = await themeConfirm(
+      "Konfirmasi Tindakan",
+      `Apakah Anda yakin ingin ${label}?`,
+      "question"
+    );
+    if (res.isConfirmed) updateBookingStatus(id, newStatus);
+  };
+
+  const handlePayWithWallet = async (id: string, type: "booking" | "rental", amount: number) => {
     if (!currentUser) return;
     
     const ppn = Math.round(amount * 0.11);
@@ -1183,6 +1339,13 @@ export function DashboardPage() {
       setActiveTab("deposit_wallet");
       return;
     }
+
+    const confirmRes = await themeConfirm(
+      "Konfirmasi Pembayaran",
+      `Apakah Anda yakin ingin membayar sebesar Rp ${totalAmount.toLocaleString("id-ID")} (Termasuk PPN 11% Rp ${ppn.toLocaleString("id-ID")}) menggunakan saldo dompet Anda?`,
+      "question"
+    );
+    if (!confirmRes.isConfirmed) return;
 
     // Deduct from climber deposit (wallet balance) including PPN 11%
     withdrawWallet("pendaki", totalAmount, `Pembayaran ${type === "booking" ? "Booking Guide" : "Sewa Alat"} (Base: Rp ${amount.toLocaleString()}, PPN 11%: Rp ${ppn.toLocaleString()}) (ID: ${id})`);
@@ -2323,7 +2486,7 @@ export function DashboardPage() {
                                     variant={b.pendakiConfirmed ? "outline" : "default"} 
                                     className={`text-xs px-4 ${b.pendakiConfirmed ? "text-gray-400 border-gray-200 bg-white" : "bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"}`}
                                     onClick={() => {
-                                      confirmEscrow("booking", b.id, "pendaki");
+                                      handleConfirmEscrow("booking", b.id, "pendaki");
                                     }}
                                     disabled={b.pendakiConfirmed}
                                   >
@@ -2472,7 +2635,7 @@ export function DashboardPage() {
                                     variant={r.pendakiConfirmed ? "outline" : "default"} 
                                     className={`text-xs px-4 ${r.pendakiConfirmed ? "text-gray-400 border-gray-200 bg-white" : "bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"}`}
                                     onClick={() => {
-                                      confirmEscrow("rental", r.id, "pendaki");
+                                      handleConfirmEscrow("rental", r.id, "pendaki");
                                     }}
                                     disabled={r.pendakiConfirmed}
                                   >
@@ -2591,10 +2754,10 @@ export function DashboardPage() {
                               </span>
                               {n.status === "countered" && (
                                 <div className="flex gap-1.5 w-full sm:w-auto">
-                                  <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-3 text-white h-7 py-1" onClick={() => respondToNegotiation(n.id, "accepted")}>
+                                  <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-3 text-white h-7 py-1" onClick={() => handleRespondNegotiation(n.id, "accepted")}>
                                     Setujui
                                   </Button>
-                                  <Button size="xs" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50 h-7 py-1" onClick={() => respondToNegotiation(n.id, "rejected")}>
+                                  <Button size="xs" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50 h-7 py-1" onClick={() => handleRespondNegotiation(n.id, "rejected")}>
                                     Tolak
                                   </Button>
                                 </div>
@@ -2767,23 +2930,23 @@ export function DashboardPage() {
                                 <div className="flex gap-2 w-full md:w-auto justify-end">
                                   {relevantNego ? (
                                     <>
-                                      <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-3 text-white h-8 py-1" onClick={() => respondToNegotiation(relevantNego.id, "accepted")}>
+                                      <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-3 text-white h-8 py-1" onClick={() => handleRespondNegotiation(relevantNego.id, "accepted")}>
                                         Terima Nego
                                       </Button>
                                       <Button size="xs" variant="outline" className="text-xs border-amber-300 text-amber-800 hover:bg-amber-50 h-8 py-1" onClick={() => handleOpenCounter(relevantNego)}>
                                         Tawar Balik
                                       </Button>
-                                      <Button size="xs" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50 h-8 py-1" onClick={() => respondToNegotiation(relevantNego.id, "rejected")}>
+                                      <Button size="xs" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50 h-8 py-1" onClick={() => handleRespondNegotiation(relevantNego.id, "rejected")}>
                                         Tolak
                                       </Button>
                                     </>
                                   ) : (
                                     b.status === "Menunggu Konfirmasi" && (
                                       <>
-                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold rounded-xl" onClick={() => updateBookingStatus(b.id, "Menunggu Pembayaran")}>
+                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold rounded-xl" onClick={() => handleUpdateBookingStatus(b.id, "Menunggu Pembayaran", "mengkonfirmasi jadwal pendakian ini")}>
                                           Konfirmasi Jadwal
                                         </Button>
-                                        <Button size="sm" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50 font-bold rounded-xl" onClick={() => updateBookingStatus(b.id, "Dibatalkan")}>
+                                        <Button size="sm" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50 font-bold rounded-xl" onClick={() => handleUpdateBookingStatus(b.id, "Dibatalkan", "menolak booking pendakian ini")}>
                                           Tolak
                                         </Button>
                                       </>
@@ -2867,7 +3030,7 @@ export function DashboardPage() {
                                   className={b.partnerConfirmed ? "text-gray-400 border-gray-200 bg-white" : "bg-emerald-600 text-white font-semibold"}
                                   disabled={b.partnerConfirmed}
                                   onClick={() => {
-                                    confirmEscrow("booking", b.id, "guide");
+                                    handleConfirmEscrow("booking", b.id, "guide");
                                   }}
                                 >
                                   {b.partnerConfirmed ? "✓ Selesai Terkonfirmasi" : "Konfirmasi Selesai"}
@@ -3502,29 +3665,29 @@ export function DashboardPage() {
                                 <div className="flex gap-2 w-full md:w-auto justify-end">
                                   {relevantNego ? (
                                     <>
-                                      <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-3 text-white h-8 py-1" onClick={() => respondToNegotiation(relevantNego.id, "accepted")}>
+                                      <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-3 text-white h-8 py-1" onClick={() => handleRespondNegotiation(relevantNego.id, "accepted")}>
                                         Terima Nego
                                       </Button>
                                       <Button size="xs" variant="outline" className="text-xs border-amber-300 text-amber-800 hover:bg-amber-50 h-8 py-1" onClick={() => handleOpenCounter(relevantNego)}>
                                         Tawar Balik
                                       </Button>
-                                      <Button size="xs" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50 h-8 py-1" onClick={() => respondToNegotiation(relevantNego.id, "rejected")}>
+                                      <Button size="xs" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50 h-8 py-1" onClick={() => handleRespondNegotiation(relevantNego.id, "rejected")}>
                                         Tolak
                                       </Button>
                                     </>
                                   ) : (
                                     r.status === "Menunggu Konfirmasi" ? (
                                       <>
-                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold rounded-xl animate-pulse" onClick={() => updateRentalStatus(r.id, "Menunggu Pembayaran")}>
+                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold rounded-xl animate-pulse" onClick={() => handleUpdateRentalStatus(r.id, "Menunggu Pembayaran", "mengkonfirmasi unit alat siap diambil")}>
                                           Konfirmasi Unit Ready
                                         </Button>
-                                        <Button size="sm" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50 font-bold rounded-xl" onClick={() => updateRentalStatus(r.id, "Dibatalkan")}>
+                                        <Button size="sm" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50 font-bold rounded-xl" onClick={() => handleUpdateRentalStatus(r.id, "Dibatalkan", "menolak pesanan sewa ini")}>
                                           Tolak
                                         </Button>
                                       </>
                                     ) : (
                                       r.status === "Telah Dibayar" ? (
-                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold rounded-xl" onClick={() => updateRentalStatus(r.id, "Sedang Disewa")}>
+                                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white font-bold rounded-xl" onClick={() => handleUpdateRentalStatus(r.id, "Sedang Disewa", "menandai bahwa alat sudah diambil penyewa")}>
                                           Tandai Diambil Penyewa
                                         </Button>
                                       ) : (
@@ -3536,7 +3699,7 @@ export function DashboardPage() {
                                               className={r.partnerConfirmed ? "text-gray-400 border-gray-250 bg-white" : "bg-emerald-600 text-white font-semibold"}
                                               disabled={r.partnerConfirmed}
                                               onClick={() => {
-                                                confirmEscrow("rental", r.id, "vendor");
+                                                handleConfirmEscrow("rental", r.id, "vendor");
                                               }}
                                             >
                                               {r.partnerConfirmed ? "✓ Pengembalian Dikonfirmasi" : "Konfirmasi Pengembalian Selesai"}
@@ -3833,10 +3996,18 @@ export function DashboardPage() {
                                               ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                                               : "bg-red-100 text-red-700 hover:bg-red-200 border border-red-200"
                                           }`}
-                                          onClick={() => {
+                                          onClick={async () => {
                                             const newStatus = isSuspended ? "active" : "suspended";
-                                            updateUserStatus(u.id, newStatus);
-                                            toast.success(`Akun ${u.name} berhasil di-${newStatus === "active" ? "aktifkan kembali" : "suspend"}`);
+                                            const actionLabel = newStatus === "active" ? "mengaktifkan kembali" : "mensuspend";
+                                            const res = await themeConfirm(
+                                              newStatus === "active" ? "Aktifkan Akun" : "Suspend Akun",
+                                              `Apakah Anda yakin ingin ${actionLabel} akun ${u.name}?`,
+                                              newStatus === "active" ? "question" : "warning"
+                                            );
+                                            if (res.isConfirmed) {
+                                              updateUserStatus(u.id, newStatus);
+                                              toast.success(`Akun ${u.name} berhasil di-${newStatus === "active" ? "aktifkan kembali" : "suspend"}`);
+                                            }
                                           }}
                                         >
                                           {isSuspended ? "Aktifkan" : "Suspend"}
@@ -3852,10 +4023,7 @@ export function DashboardPage() {
                                                 ? "border-gray-200 text-gray-500 hover:bg-gray-55"
                                                 : "border-blue-200 text-blue-700 hover:bg-blue-50"
                                             }`}
-                                            onClick={() => {
-                                              toggleUserVerification(u.id);
-                                              toast.success(`Status verifikasi ${u.name} diperbarui!`);
-                                            }}
+                                            onClick={() => handleToggleUserVerification(u.id, u.name, isVerified)}
                                           >
                                             {isVerified ? "Batal Verif" : "Verifikasi"}
                                           </Button>
@@ -3965,16 +4133,10 @@ export function DashboardPage() {
                                       </div>
 
                                       <div className="flex gap-2 shrink-0 w-full md:w-auto justify-end border-t md:border-t-0 pt-2.5 md:pt-0">
-                                        <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => {
-                                          respondToVerification(req.id, true);
-                                          toast.success("Identitas disetujui & diverifikasi!");
-                                        }}>
+                                        <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => handleRespondVerification(req.id, req.userName, true)}>
                                           Setujui
                                         </Button>
-                                        <Button size="xs" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50" onClick={() => {
-                                          respondToVerification(req.id, false);
-                                          toast.error("Identitas ditolak verifikasi.");
-                                        }}>
+                                        <Button size="xs" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50" onClick={() => handleRespondVerification(req.id, req.userName, false)}>
                                           Tolak
                                         </Button>
                                       </div>
@@ -4027,16 +4189,10 @@ export function DashboardPage() {
                                       </div>
 
                                       <div className="flex gap-2 shrink-0 w-full md:w-auto justify-end border-t md:border-t-0 pt-2.5 md:pt-0">
-                                        <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => {
-                                          respondToVerification(req.id, true);
-                                          toast.success("Dokumen khusus disetujui & diverifikasi!");
-                                        }}>
+                                        <Button size="xs" className="bg-emerald-600 hover:bg-emerald-700 text-xs px-4 text-white" onClick={() => handleRespondVerification(req.id, req.userName, true)}>
                                           Setujui
                                         </Button>
-                                        <Button size="xs" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50" onClick={() => {
-                                          respondToVerification(req.id, false);
-                                          toast.error("Dokumen khusus ditolak verifikasi.");
-                                        }}>
+                                        <Button size="xs" variant="outline" className="text-xs border-red-200 text-red-600 hover:bg-red-50" onClick={() => handleRespondVerification(req.id, req.userName, false)}>
                                           Tolak
                                         </Button>
                                       </div>
@@ -4098,9 +4254,9 @@ export function DashboardPage() {
                                       size="xs"
                                       variant="outline"
                                       className="text-[9px] h-6 text-red-600 border-red-100 hover:bg-red-55"
-                                      onClick={() => {
-                                        const confirmRevoke = window.confirm(`Apakah Anda yakin ingin mencabut verifikasi untuk ${req.userName}?`);
-                                        if (confirmRevoke) {
+                                      onClick={async () => {
+                                        const result = await themeConfirm("Cabut Verifikasi", `Apakah Anda yakin ingin mencabut verifikasi untuk ${req.userName}?`, "warning");
+                                        if (result.isConfirmed) {
                                           revokeVerification(req.id);
                                           toast.success(`Status verifikasi ${req.userName} dicabut!`);
                                         }
@@ -4165,10 +4321,7 @@ export function DashboardPage() {
                                       <Button
                                         size="sm"
                                         className="bg-emerald-600 hover:bg-emerald-700 text-[10px] font-bold h-8 px-3 text-white rounded-lg"
-                                        onClick={() => {
-                                          updateTripPackageStatus(pkg.id, "approved");
-                                          toast.success(`Paket "${pkg.title}" berhasil disetujui & ditayangkan!`);
-                                        }}
+                                        onClick={() => handleUpdatePackageStatus(pkg.id, pkg.title, "approved")}
                                       >
                                         Setujui Iklan
                                       </Button>
@@ -4176,10 +4329,7 @@ export function DashboardPage() {
                                         size="sm"
                                         variant="outline"
                                         className="text-[10px] font-bold h-8 px-3 border-red-200 text-red-650 hover:bg-red-50 rounded-lg"
-                                        onClick={() => {
-                                          updateTripPackageStatus(pkg.id, "rejected");
-                                          toast.error(`Paket "${pkg.title}" ditolak.`);
-                                        }}
+                                        onClick={() => handleUpdatePackageStatus(pkg.id, pkg.title, "rejected")}
                                       >
                                         Tolak Iklan
                                       </Button>
@@ -4190,10 +4340,7 @@ export function DashboardPage() {
                                       size="sm"
                                       variant="outline"
                                       className="text-[10px] font-bold h-8 px-3 border-red-250 text-red-650 hover:bg-red-50 rounded-lg"
-                                      onClick={() => {
-                                        updateTripPackageStatus(pkg.id, "rejected");
-                                        toast.warning(`Paket "${pkg.title}" diturunkan dari beranda.`);
-                                      }}
+                                      onClick={() => handleUpdatePackageStatus(pkg.id, pkg.title, "rejected")}
                                     >
                                       Tarik Tayangan
                                     </Button>
@@ -4202,10 +4349,7 @@ export function DashboardPage() {
                                     <Button
                                       size="sm"
                                       className="bg-emerald-600 hover:bg-emerald-700 text-[10px] font-bold h-8 px-3 text-white rounded-lg"
-                                      onClick={() => {
-                                        updateTripPackageStatus(pkg.id, "approved");
-                                        toast.success(`Paket "${pkg.title}" berhasil disetujui kembali!`);
-                                      }}
+                                      onClick={() => handleUpdatePackageStatus(pkg.id, pkg.title, "approved")}
                                     >
                                       Setujui & Tayangkan
                                     </Button>
@@ -4322,7 +4466,7 @@ export function DashboardPage() {
                                               size="xs" 
                                               className="bg-red-600 hover:bg-red-700 text-white text-[10px] h-7"
                                               onClick={async () => {
-                                                await resolveEscrowWithDeposit("booking", b.id, true);
+                                                await handleAdminResolveEscrow("booking", b.id, true, b.fineAmount);
                                               }}
                                             >
                                               Setujui Denda ({Math.round((b.fineAmount || 0) / 1000)}k)
@@ -4332,7 +4476,7 @@ export function DashboardPage() {
                                               variant="outline" 
                                               className="text-[10px] h-7"
                                               onClick={async () => {
-                                                await resolveEscrowWithDeposit("booking", b.id, false);
+                                                await handleAdminResolveEscrow("booking", b.id, false, b.fineAmount);
                                               }}
                                             >
                                               Abaikan Denda
@@ -4343,7 +4487,7 @@ export function DashboardPage() {
                                             size="xs" 
                                             className={`h-7 text-[10px] ${bothConfirmed ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-400 hover:bg-gray-500"} text-white font-semibold`}
                                             onClick={async () => {
-                                              await resolveEscrowWithDeposit("booking", b.id, false);
+                                              await handleAdminResolveEscrow("booking", b.id, false, undefined, bothConfirmed);
                                             }}
                                           >
                                             {!bothConfirmed && "⚠️ Payout Paksa "}
@@ -4420,7 +4564,7 @@ export function DashboardPage() {
                                               size="xs" 
                                               className="bg-red-600 hover:bg-red-700 text-white text-[10px] h-7"
                                               onClick={async () => {
-                                                await resolveEscrowWithDeposit("rental", r.id, true);
+                                                await handleAdminResolveEscrow("rental", r.id, true, r.fineAmount);
                                               }}
                                             >
                                               Setujui Denda ({Math.round((r.fineAmount || 0) / 1000)}k)
@@ -4430,7 +4574,7 @@ export function DashboardPage() {
                                               variant="outline" 
                                               className="text-[10px] h-7"
                                               onClick={async () => {
-                                                await resolveEscrowWithDeposit("rental", r.id, false);
+                                                await handleAdminResolveEscrow("rental", r.id, false, r.fineAmount);
                                               }}
                                             >
                                               Abaikan Denda
@@ -4441,7 +4585,7 @@ export function DashboardPage() {
                                             size="xs" 
                                             className={`h-7 text-[10px] ${bothConfirmed ? "bg-emerald-600 hover:bg-emerald-700" : "bg-gray-400 hover:bg-gray-500"} text-white font-semibold`}
                                             onClick={async () => {
-                                              await resolveEscrowWithDeposit("rental", r.id, false);
+                                              await handleAdminResolveEscrow("rental", r.id, false, undefined, bothConfirmed);
                                             }}
                                           >
                                             {!bothConfirmed && "⚠️ Payout Paksa "}
@@ -4896,7 +5040,8 @@ export function DashboardPage() {
                                         </Badge>
                                         <button
                                           onClick={async () => {
-                                            if (confirm("Apakah Anda yakin ingin menghapus pesan ini?")) {
+                                            const result = await themeConfirm("Hapus Pesan", "Apakah Anda yakin ingin menghapus pesan ini?", "warning");
+                                            if (result.isConfirmed) {
                                               await deleteAdminMessage(m.id);
                                             }
                                           }}
