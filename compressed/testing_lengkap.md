@@ -21,7 +21,7 @@ Pengujian White Box berfokus pada struktur logika kode program. Kita akan menguj
 | 6 | `  return;` |
 
 #### Gambar Flowgraph
-Proses Pemesanan Tiket
+Proses Pemesanan Tiket (Nested-If Validation)
 ```
   ( 1 )
     │
@@ -79,68 +79,90 @@ $V(G) = 8 - 6 + 2 = 4$
 **Peran:** Project Manager & QA Lead
 
 ### a. Pengujian White Box
-Pengujian White Box berfokus pada struktur logika kode program. Kita akan menguji fungsi `handleWithdrawSubmit` yang ada di dalam file `DashboardPage.tsx`. Fitur ini dipilih karena merupakan alur krusial penarikan dana keuangan platform.
+Pengujian White Box berfokus pada struktur logika kode program. Kita akan menguji fungsi `calculateWithdrawalFee` yang ada di dalam file `DashboardPage.tsx`. Fitur ini dipilih karena merupakan alur perhitungan tarif progresif biaya admin yang krusial.
 
 #### Tabel Pengujian Whitebox
 | Node | Source Code |
 | :---: | :--- |
-| 1 | `const handleWithdrawSubmit = (e: React.FormEvent) => {`<br>`  e.preventDefault();`<br>`  const amount = parseInt(depositAmountInput);` |
-| 2 | `  if (!amount \|\| amount <= 0) {`<br>`    toast.error("Masukkan nominal yang valid!");`<br>`    return;`<br>`  }` |
-| 3 | `  const currentBalance = currentUser?.role === "pendaki" ? climberDeposit : ...;`<br>`  if (amount > currentBalance) {`<br>`    toast.error("Saldo tidak mencukupi!");`<br>`    return;`<br>`  }` |
-| 4 | `  if (!currentUser?.bank_account) {`<br>`    toast.error("Anda belum mengatur rekening bank penarikan dana!");`<br>`    return;`<br>`  }` |
-| 5 | `  const fee = calculateWithdrawalFee(amount);`<br>`  const netReceived = amount - fee;`<br>`  setIsProcessingWd(true);`<br>`  setTimeout(() => {`<br>`    withdrawWallet(currentUser?.role, amount, ...);`<br>`    setIsProcessingWd(false);`<br>`    setWithdrawModalOpen(false);`<br>`    toast.success(\`Berhasil menarik dana sebesar Rp \${amount.toLocaleString("id-ID")}!\`);`<br>`  }, 2000);` |
-| 6 | `  return;` |
+| 1 | `const calculateWithdrawalFee = (amount: number): number => {` |
+| 2 | `  if (!amount \|\| amount < 10000)` |
+| 3 | `    return 0;` |
+| 4 | `  if (amount <= 500000)` |
+| 5 | `    return 3000;` |
+| 6 | `  else if (amount <= 1000000)` |
+| 7 | `    return 3500;` |
+| 8 | `  else if (amount <= 1500000)` |
+| 9 | `    return 4000;` |
+| 10 | `  else if (amount <= 2000000)` |
+| 11 | `    return 4500;` |
+| 12 | `  else {`<br>`    const extraAmount = amount - 2000000;`<br>`    const brackets = Math.ceil(extraAmount / 500000);`<br>`    return 4500 + brackets * 1000;`<br>`  }` |
+| 13 | `};` |
 
 #### Gambar Flowgraph
-Proses Penarikan Dana (Withdrawal)
+Proses Perhitungan Biaya Admin Progresif (Multi-Decision Waterfall)
 ```
-  ( 1 )
-    │
-    ▼
-  ( 2 ) ──────────────┐
-    │                 │
-    ▼                 │
-  ( 3 ) ────────┐     │
-    │           │     │
-    ▼           │     │
-  ( 4 ) ──┐     │     │
-    │     │     │     │
-    ▼     │     │     │
-  ( 5 )   │     │     │
-    │     │     │     │
-    ▼     ▼     ▼     ▼
-  ( 6 ) <─────────────┘
+          [ Node 1: Start ]
+                  │
+                  ▼
+          [ Node 2: < 10k? ] ───────────────┐
+           /              \                 │
+      Yes /                \ No             │
+         ▼                  ▼               │
+    [ Node 3: ret 0 ]  [ Node 4: <= 500k? ] ├────────┐
+         │              /                 \ │        │
+         │         Yes /                   \│No      │
+         │            ▼                     ▼        │
+         │     [ Node 5: ret 3k ] [ Node 6: <= 1M? ] ├──────────────┐
+         │            │            /              \  │              │
+         │            │       Yes /                \ │No            │
+         │            │          ▼                  ▼               │
+         │            │     [ Node 7: ret 3.5k ] [ Node 8: <= 1.5M? ] ├─────────────┐
+         │            │          │               /                 \  │             │
+         │            │          │          Yes /                   \ │No           │
+         │            │          │             ▼                     ▼              │
+         │            │          │     [ Node 9: ret 4k ] [ Node 10: <= 2M? ] ├─────┼─────────────┐
+         │            │          │             │            /              \  │     │             │
+         │            │          │             │       Yes /                \ │No   │             │
+         │            │          │             │          ▼                  ▼      │             │
+         │            │          │             │     [ Node 11: ret 4.5k ] [ Node 12: formula ]   │
+         │            │          │             │          │                   │     │             │
+         └────────────┴──────────┴─────────────┴──────────┴───────────────────┴─────┴─────────────┘
+                                                  │
+                                                  ▼
+                                          [ Node 13: Exit ]
 ```
 
 Dari gambar ditentukan Cyclomatic Complexity:
 $V(G) = E - N + 2$  
-$E$ = Jumlah panah (edge) pada flowgraph = $8$  
-$N$ = Jumlah lingkaran (node) pada flowgraph = $6$  
-$V(G) = 8 - 6 + 2 = 4$
+$E$ = Jumlah panah (edge) pada flowgraph = $18$  
+$N$ = Jumlah lingkaran (node) pada flowgraph = $13$  
+$V(G) = 18 - 13 + 2 = 7$
 
 #### Tabel 1 Jalur Flowgraph
 | Basis Flowgraph | Jalur Bebas | Keterangan |
 | :---: | :---: | :--- |
-| Jalur 1 | 1 - 2 - 6 | Validasi nominal gagal dikarenakan nilai input kosong atau $\le 0$ |
-| Jalur 2 | 1 - 2 - 3 - 6 | Validasi Saldo Gagal dikarenakan nominal penarikan melebihi saldo dompet |
-| Jalur 3 | 1 - 2 - 3 - 4 - 6 | Validasi Rekening Gagal dikarenakan pengguna belum mengatur akun bank di profil |
-| Jalur 4 | 1 - 2 - 3 - 4 - 5 - 6 | Penarikan Berhasil. Sistem menghitung biaya admin progresif, mendebet saldo, dan memicu status pengiriman. |
+| Jalur 1 | 1 - 2 - 3 - 13 | Nominal di bawah batas minimal penarikan Rp 10.000 (tidak dikenakan biaya) |
+| Jalur 2 | 1 - 2 - 4 - 5 - 13 | Nominal $\le$ Rp 500.000 (biaya flat Rp 3.000) |
+| Jalur 3 | 1 - 2 - 4 - 6 - 7 - 13 | Nominal Rp 500.001 s/d Rp 1.000.000 (biaya flat Rp 3.500) |
+| Jalur 4 | 1 - 2 - 4 - 6 - 8 - 9 - 13 | Nominal Rp 1.000.001 s/d Rp 1.500.000 (biaya flat Rp 4.000) |
+| Jalur 5 | 1 - 2 - 4 - 6 - 8 - 10 - 11 - 13 | Nominal Rp 1.500.001 s/d Rp 2.000.000 (biaya flat Rp 4.500) |
+| Jalur 6 | 1 - 2 - 4 - 6 - 8 - 10 - 12 - 13 | Nominal $>$ Rp 2.000.000 (biaya admin progresif per kelipatan Rp 500.000) |
 
 #### Tabel 2 Jalur Test Case
 | Jalur | Skenario | Hasil yang diharapkan | Hasil Pengujian |
 | :---: | :--- | :--- | :---: |
-| Jalur 1 | Memasukkan nominal penarikan 0 atau kosong | Sistem menghentikan proses dan menampilkan error "Masukkan nominal yang valid!" | Sesuai |
-| Jalur 2 | Nominal penarikan Rp 500.000, sedangkan saldo dompet hanya Rp 200.000 | Sistem menghentikan proses dan menampilkan error "Saldo tidak mencukupi!" | Sesuai |
-| Jalur 3 | Saldo mencukupi, namun profil akun tidak memiliki informasi nomor rekening bank | Sistem menghentikan proses dan menampilkan error "Anda belum mengatur rekening bank penarikan dana!" | Sesuai |
-| Jalur 4 | Saldo mencukupi, input valid, nomor rekening bank terkonfigurasi | Sistem memproses penarikan, memotong saldo, mengenakan biaya admin sesuai jenjang, dan menampilkan toast sukses. | Sesuai |
+| Jalur 1 | Input nominal Rp 5.000 | Mengembalikan nilai 0. | Sesuai |
+| Jalur 2 | Input nominal Rp 200.000 | Mengembalikan nilai 3000. | Sesuai |
+| Jalur 3 | Input nominal Rp 800.000 | Mengembalikan nilai 3500. | Sesuai |
+| Jalur 4 | Input nominal Rp 1.200.000 | Mengembalikan nilai 4000. | Sesuai |
+| Jalur 5 | Input nominal Rp 1.800.000 | Mengembalikan nilai 4500. | Sesuai |
+| Jalur 6 | Input nominal Rp 3.000.000 | Mengembalikan nilai 6500 (`4500 + 2 * 1000`). | Sesuai |
 
 ### b. Pengujian Black Box
 | No | Fitur Diuji | Tindakan Pengguna | Hasil Pengujian | Kesimpulan |
 | :---: | :--- | :--- | :--- | :---: |
 | 1 | PPN 11% Otomatis | Membayar pesanan booking guide senilai Rp 300.000 | Sistem secara otomatis menambahkan beban pajak PPN 11% senilai Rp 33.000, sehingga total bayar adalah Rp 333.000. | Valid |
-| 2 | Biaya Admin Progresif (< 50k) | Melakukan penarikan saldo sebesar Rp 40.000 | Saldo terpotong Rp 45.000 (penarikan Rp 40.000 + biaya flat admin Rp 5.000). | Valid |
-| 3 | Biaya Admin Progresif (50k - 500k) | Melakukan penarikan saldo sebesar Rp 200.000 | Saldo terpotong Rp 220.000 (penarikan Rp 200.000 + biaya admin 10% senilai Rp 20.000). | Valid |
-| 4 | Biaya Admin Progresif (> 500k) | Melakukan penarikan saldo sebesar Rp 1.000.000 | Saldo terpotong Rp 1.050.000 (penarikan Rp 1.000.000 + biaya admin 5% senilai Rp 50.000). | Valid |
+| 2 | Verifikasi Rekening | Melakukan klik "Tarik Dana" saat data rekening bank di profil kosong | Penarikan diblokir dengan peringatan: "Anda belum mengatur rekening bank penarikan dana!". | Valid |
 
 ---
 
@@ -148,71 +170,77 @@ $V(G) = 8 - 6 + 2 = 4$
 **Peran:** Full-Stack Developer
 
 ### a. Pengujian White Box
-Pengujian White Box berfokus pada struktur logika kode program. Kita akan menguji fungsi `handleConfirmBooking` pada pemesanan jasa guide di file `GuidePage.tsx`. Fitur ini dipilih karena merupakan alur penting yang menangani jaminan deposit, negosiasi harga, dan validasi jadwal sibuk guide.
+Pengujian White Box berfokus pada struktur logika kode program. Kita akan menguji fungsi `updateMountain` (proses pembaruan asinkronus Supabase & mekanisme rollback) di file `AppContext.tsx`. Fitur ini dipilih karena berkaitan erat dengan integritas data status buka/tutup gunung.
 
 #### Tabel Pengujian Whitebox
 | Node | Source Code |
 | :---: | :--- |
-| 1 | `const handleConfirmBooking = () => {` |
-| 2 | `  if (!bookingDate) {`<br>`    toast.error("Silakan tentukan tanggal pendakian.");`<br>`    return;`<br>`  }` |
-| 3 | `  if (!targetMountain) {`<br>`    toast.error("Silakan pilih gunung tujuan.");`<br>`    return;`<br>`  }` |
-| 4 | `  if (bookingGuide.busyDates && bookingGuide.busyDates.includes(bookingDate)) {`<br>`    toast.error("Guide sudah memiliki jadwal trip pada tanggal tersebut.");`<br>`    return;`<br>`  }` |
-| 5 | `  if (currentUser && currentUser.role === "pendaki" && (climberDeposit \|\| 0) < 100000) {`<br>`    toast.error("Saldo deposit Anda kurang dari Rp 100.000.");`<br>`    return;`<br>`  }` |
-| 6 | `  const basePriceProposed = parseInt(proposedPrice) \|\| bookingGuide.price;`<br>`  const finalPrice = Math.round(basePriceProposed * (1 - (bookingGuide.discountPercentage \|\| 0) / 100));`<br>`  addBooking({`<br>`    mountainName: targetMountain,`<br>`    guideId: bookingGuide.id,`<br>`    price: finalPrice * climbersCount,`<br>`    bookingType: "mandiri"`<br>`  });`<br>`  setBookingModalOpen(false);`<br>`  navigate("/dashboard");` |
-| 7 | `  return;` |
+| 1 | `const updateMountain = async (name: string, fields: Partial<Mountain>) => {`<br>`  setMountains((prev) => prev.map((m) => (m.name === name ? { ...m, ...fields } : m)));` |
+| 2 | `  const dbFields: any = {};`<br>`  if (fields.status !== undefined) dbFields.status = fields.status; ...` |
+| 3 | `  try {`<br>`    const { error } = await supabase.from("mountains").update(dbFields).eq("name", name);` |
+| 4 | `    if (error) throw error;` |
+| 5 | `    logUserActivity("admin1", "Super Admin", "admin", "Memperbarui data...");` |
+| 6 | `  } catch (err: any) {`<br>`    console.error(err.message);`<br>`    toast.error("Gagal memperbarui status gunung");` |
+| 7 | `    const { data: mtnData } = await supabase.from("mountains").select("*");` |
+| 8 | `    if (mtnData) {` |
+| 9 | `      setMountains(mtnData.map((m: any) => ({ ...m })));` |
+| 10 | `    }`<br>`  }` |
 
 #### Gambar Flowgraph
-Proses Pemesanan Jasa Guide
+Proses Asinkronus Database & Rollback (Try-Catch Node)
 ```
-    ( 1 )
-      │
-      ▼
-    ( 2 ) ────────────────┐
-      │                   │
-      ▼                   │
-    ( 3 ) ──────────┐     │
-      │             │     │
-      ▼             │     │
-    ( 4 ) ────┐     │     │
-      │       │     │     │
-      ▼       │     │     │
-    ( 5 ) ──┐ │     │     │
-      │     │ │     │     │
-      ▼     │ │     │     │
-    ( 6 )   │ │     │     │
-      │     │ │     │     │
-      ▼     ▼ ▼     ▼     ▼
-    ( 7 ) <───────────────┘
+          [ Node 1: Optimistic Local State Update ]
+                              │
+                              ▼
+                [ Node 2: Map Database Fields ]
+                              │
+                              ▼
+            [ Node 3: supabase.from().update() ]
+                              │
+                              ▼
+                    [ Node 4: error thrown? ]
+                      /                  \
+               True  /                    \ False
+                    ▼                      ▼
+           [ Node 6: Catch block ]   [ Node 5: logUserActivity ]
+                    │                      │
+                    ▼                      │
+         [ Node 7: supabase.select() ]     │
+                    │                      │
+                    ▼                      │
+           [ Node 8: data null? ]          │
+             /                \            │
+        No  /                  \ Yes       │
+           ▼                    │          │
+    [ Node 9: Local Rollback ]  │          │
+           │                    │          │
+           └────────────────────┼──────────┘
+                                ▼
+                        [ Node 10: End ]
 ```
 
 Dari gambar ditentukan Cyclomatic Complexity:
 $V(G) = E - N + 2$  
-$E$ = Jumlah panah (edge) pada flowgraph = $10$  
-$N$ = Jumlah lingkaran (node) pada flowgraph = $7$  
-$V(G) = 10 - 7 + 2 = 5$
+$E$ = Jumlah panah (edge) pada flowgraph = $11$  
+$N$ = Jumlah lingkaran (node) pada flowgraph = $10$  
+$V(G) = 11 - 10 + 2 = 3$
 
 #### Tabel 1 Jalur Flowgraph
 | Basis Flowgraph | Jalur Bebas | Keterangan |
 | :---: | :---: | :--- |
-| Jalur 1 | 1 - 2 - 7 | Validasi tanggal gagal dikarenakan `bookingDate` kosong |
-| Jalur 2 | 1 - 2 - 3 - 7 | Validasi Gunung Gagal dikarenakan `targetMountain` belum dipilih |
-| Jalur 3 | 1 - 2 - 3 - 4 - 7 | Validasi Jadwal Gagal dikarenakan guide berstatus sibuk (*busy*) di tanggal tersebut |
-| Jalur 4 | 1 - 2 - 3 - 4 - 5 - 7 | Validasi Deposit Gagal dikarenakan saldo deposit pendaki di bawah batas jaminan Rp 100.000 |
-| Jalur 5 | 1 - 2 - 3 - 4 - 5 - 6 - 7 | Pemesanan Jasa Guide Berhasil. Transaksi dibuat dengan status menunggu konfirmasi. |
+| Jalur 1 | 1 - 2 - 3 - 4 - 5 - 10 | Operasi database sukses, log aktivitas dicatat, status ter-update permanen. |
+| Jalur 2 | 1 - 2 - 3 - 4 - 6 - 7 - 8 - 9 - 10 | Operasi database error (koneksi terputus), data cadangan ter-load, memicu rollback state UI. |
+| Jalur 3 | 1 - 2 - 3 - 4 - 6 - 7 - 8 - 10 | Operasi database error, query cadangan gagal/data null (tidak memicu rollback). |
 
 #### Tabel 2 Jalur Test Case
 | Jalur | Skenario | Hasil yang diharapkan | Hasil Pengujian |
 | :---: | :--- | :--- | :---: |
-| Jalur 1 | Mengosongkan isian tanggal pemesanan | Sistem menghentikan proses dan menampilkan error "Silakan tentukan tanggal pendakian." | Sesuai |
-| Jalur 2 | Mengisi tanggal dengan benar, mengosongkan pilihan gunung tujuan | Sistem menghentikan proses dan menampilkan error "Silakan pilih gunung tujuan." | Sesuai |
-| Jalur 3 | Mengisi tanggal yang bertabrakan dengan jadwal sibuk (*busy dates*) guide | Sistem menghentikan proses dan menampilkan error "Guide sudah memiliki jadwal trip pada tanggal tersebut." | Sesuai |
-| Jalur 4 | Mengisi formulir lengkap, namun saldo jaminan deposit di bawah Rp 100.000 | Sistem menghentikan proses dan menampilkan error "Saldo deposit Anda kurang dari Rp 100.000." | Sesuai |
-| Jalur 5 | Seluruh data lengkap dan valid, serta saldo jaminan deposit mencukupi | Sistem berhasil membuat data booking guide baru dan mengarahkan pengguna ke halaman dashboard. | Sesuai |
+| Jalur 1 | Jaringan lancar, mengubah status Gunung Bromo menjadi "Buka" | Data tersimpan di Supabase database dan log tercatat. | Sesuai |
+| Jalur 2 | Jaringan offline/gagal koneksi, mencoba edit status Gunung Bromo | Memicu eksekusi Catch, memicu select cadangan, dan state UI ter-rollback kembali ke "Tutup". | Sesuai |
+| Jalur 3 | Database crash total (query select cadangan juga bernilai null) | Catch dieksekusi, select gagal, UI tidak di-rollback (data lokal tidak berubah). | Sesuai |
 
 ### b. Pengujian Black Box
 | No | Fitur Diuji | Tindakan Pengguna | Hasil Pengujian | Kesimpulan |
 | :---: | :--- | :--- | :--- | :---: |
-| 1 | Validasi Batas Deposit | Melakukan booking guide saat saldo deposit = Rp 80.000 | Proses ditolak dengan pesan kesalahan: "Saldo deposit Anda kurang dari Rp 100.000." | Valid |
-| 2 | Verifikasi Data Admin | Super Admin menyetujui akun Guide pendaftar baru | Status guide berubah menjadi terverifikasi, profil guide langsung terpublikasi di halaman pencarian guide. | Valid |
-| 3 | Pembaruan Buka/Tutup Gunung | Admin mengubah status Gunung Bromo dari "Buka" menjadi "Tutup" | Status gunung langsung ter-update di database Supabase dan memicu toast sukses. Perubahan tetap persis saat di-refresh. | Valid |
-| 4 | Fitur In-App Chat | Mengirim pesan ke sesama pengguna (pendaki ke guide) | Pesan terkirim secara instan ke database chat dan muncul di sisi penerima secara real-time. | Valid |
+| 1 | Pengembalian Deposit | Admin menekan tombol "Selesai" pada transaksi sewa alat tanpa klaim denda | Status rental selesai, jaminan deposit Rp 100.000 otomatis ditransfer kembali ke dompet pendaki. | Valid |
+| 2 | Pembatalan Booking | Menolak pesanan guide yang bertabrakan tanggal dengan jadwal sibuk guide | Booking guide otomatis dibatalkan, dana transaksi escrow dikembalikan utuh ke saldo pendaki. | Valid |
