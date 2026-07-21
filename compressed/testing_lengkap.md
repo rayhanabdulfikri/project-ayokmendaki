@@ -1,252 +1,218 @@
-# LAPORAN PENGUJIAN SISTEM LENGKAP (TESTING SPECIFICATION)
-**Proyek:** AyokMendaki - Platform Marketplace Pendakian  
-**Tahun Akademik:** 2026  
+# Pengujian sistem
 
-Laporan ini menyajikan spesifikasi pengujian perangkat lunak (*software testing*) terpadu untuk platform **AyokMendaki** menggunakan metode **White-Box Testing (Basis Path & Flowgraph)** dan **Black-Box Testing (Fungsional & Antarmuka)**. Dokumen ini dibagi menjadi tiga bagian berdasarkan peran dan kontribusi masing-masing anggota kelompok penguji.
+Pengujian dilakukan menggunakan metode White Box dan Black Box. Berikut adalah beberapa pengujian yang akan dilakukan terhadap sistem:
 
 ---
 
-## DAFTAR PENGUJI & PEMBAGIAN PERAN
-1.  **Rayhan Abdul Fikri (NIM: 24.240.0108)** — *Project Manager & QA Lead*  
-    (Fokus: Logika Bisnis, Perhitungan Pajak PPN 11%, dan Logika Biaya Admin Penarikan Progresif).
-2.  **Muhammad Ubaidillah Rosyid (NIM: 24.240.0101)** — *Full-Stack Developer*  
-    (Fokus: Integrasi Supabase DB, Mekanisme Optimistic Update & Rollback Asinkronus, serta Transaksi Escrow).
-3.  **Ryan Nugraha Adhithama (NIM: 25.240.0007)** — *UI/UX Designer & QA Frontend*  
-    (Fokus: Responsivitas Layout CSS Modal, Batasan Tinggi Max-Height, dan Event Backdrop Dismissal).
+## 1. PENGUJIAN OLEH RYAN NUGRAHA ADHITHAMA (NIM: 25.240.0007)
+**Peran:** UI/UX Designer & QA Frontend
+
+### a. Pengujian White Box
+Pengujian White Box berfokus pada struktur logika kode program. Kita akan menguji fungsi `handleConfirmBooking` yang ada di dalam file `GunungPage.tsx`. Fitur ini dipilih karena merupakan bagian penting dari sistem ayokmendaki.
+
+#### Tabel Pengujian Whitebox
+| Node | Source Code |
+| :---: | :--- |
+| 1 | `const handleConfirmBooking = () => {` |
+| 2 | `  if (!bookingDate) {`<br>`    toast.error("silakan tentukan tanggal pendakian.");`<br>`    return;`<br>`  }` |
+| 3 | `  if (climbersCount < 1) {`<br>`    toast.error("Jumlah pendaki minimal 1 orang.");`<br>`    return;`<br>`  }` |
+| 4 | `  if (bookingMountain.basecamps && bookingMountain.basecamps.length > 0 && !selectedBasecamp) {`<br>`    toast.error("silakan pilih basecamp keberangkatan.");`<br>`    return;`<br>`  }` |
+| 5 | `  const price = bookingMountain.ticketPrice * climbersCount;`<br>`  addBooking({`<br>`    mountainName: bookingMountain.name,`<br>`    basecamp: selectedBasecamp \|\| undefined,`<br>`    pendakiId: currentUser?.id \|\| "guest",`<br>`    pendakiName: currentUser?.name \|\| "Pendaki Demo",`<br>`    bookingDate,`<br>`    price,`<br>`    officialTicketBooking: true,`<br>`    bookingType: "mandiri"`<br>`  });`<br>`  setBookingModalOpen(false);`<br>`  toast.success(\`Berhasil memesan tiket masuk resmi \${bookingMountain.name}!\`, {`<br>`    description: \`Total Pembayaran: Rp \${price.toLocaleString("id-ID")}\`,`<br>`  });`<br>`  navigate("/dashboard");` |
+| 6 | `  return;` |
+
+#### Gambar Flowgraph
+Proses Pemesanan Tiket
+```
+  ( 1 )
+    │
+    ▼
+  ( 2 ) ──────────────┐
+    │                 │
+    ▼                 │
+  ( 3 ) ────────┐     │
+    │           │     │
+    ▼           │     │
+  ( 4 ) ──┐     │     │
+    │     │     │     │
+    ▼     │     │     │
+  ( 5 )   │     │     │
+    │     │     │     │
+    ▼     ▼     ▼     ▼
+  ( 6 ) <─────────────┘
+```
+
+Dari gambar ditentukan Cyclomatic Complexity:
+$V(G) = E - N + 2$  
+$E$ = Jumlah panah (edge) pada flowgraph = $8$  
+$N$ = Jumlah lingkaran (node) pada flowgraph = $6$  
+$V(G) = 8 - 6 + 2 = 4$
+
+#### Tabel 1 Jalur Flowgraph
+| Basis Flowgraph | Jalur Bebas | Keterangan |
+| :---: | :---: | :--- |
+| Jalur 1 | 1 - 2 - 6 | Validasi tanggal gagal dikarenakan `bookingDate` kosong |
+| Jalur 2 | 1 - 2 - 3 - 6 | Validasi Jumlah Pendaki Gagal dikarenakan `climbersCount` kurang dari 1 |
+| Jalur 3 | 1 - 2 - 3 - 4 - 6 | Validasi Basecamp Gagal. `bookingDate` terisi, `climbersCount` > 0, gunung memiliki opsi basecamp, tetapi `selectedBasecamp` kosong |
+| Jalur 4 | 1 - 2 - 3 - 4 - 5 - 6 | Pemesanan Berhasil. Semua input valid dan terisi lengkap. Menampilkan jumlah pembayaran berdasarkan perhitungan. |
+
+#### Tabel 2 Jalur Test Case
+| Jalur | Skenario | Hasil yang diharapkan | Hasil Pengujian |
+| :---: | :--- | :--- | :---: |
+| Jalur 1 | Tidak mengisi data tanggal pendakian, atau `bookingDate` = "" | Sistem menghentikan proses dan menampilkan error "Silakan tentukan tanggal pendakian." | Sesuai |
+| Jalur 2 | Mengisi data tanggal pendakian dengan benar. Mengisi data jumlah pendaki kurang dari 1 | Sistem menghentikan proses dan menampilkan error "Jumlah pendaki minimal 1 orang." | Sesuai |
+| Jalur 3 | Mengisi data tanggal dengan benar dan jumlah pendaki lebih dari 0. Tidak memilih basecamp. | Sistem menghentikan proses dan menampilkan error "Silakan pilih basecamp keberangkatan." | Sesuai |
+| Jalur 4 | Mengisi data tanggal dengan benar, data jumlah pendaki lebih dari 0, telah memilih basecamp keberangkatan. | Sistem menyelesaikan proses memesan tiket masuk dengan data yang telah diberikan. Kemudian menampilkan total pembayaran. | Sesuai |
+
+### b. Pengujian Black Box
+| No | Fitur Diuji | Tindakan Pengguna | Hasil Pengujian | Kesimpulan |
+| :---: | :--- | :--- | :--- | :---: |
+| 1 | Akses Pemesanan (Belum Login) | Mengklik tombol "Pesan Tiket" saat `currentUser` = null | Muncul pesan peringatan: "Silakan masuk terlebih dahulu untuk memesan tiket." dan dialihkan ke halaman `/login`. | Valid |
+| 2 | Hak Akses Role (Bukan Pendaki) | Mengklik tombol "Pesan Tiket" dengan akun role = "admin" | Muncul pesan kesalahan: "Hanya Pendaki yang dapat memesan tiket." | Valid |
+| 3 | Validasi Tanggal Kosong | Mengosongkan kolom tanggal, lalu mengklik "Konfirmasi Booking" | Muncul pesan kesalahan: "Silakan tentukan tanggal pendakian." | Valid |
+| 4 | Validasi Jumlah Pendaki (< 1) | Memasukkan angka 0 atau -1 pada jumlah pendaki | Muncul pesan kesalahan: "Jumlah pendaki minimal 1 orang." | Valid |
+| 5 | Validasi Pilihan Basecamp | Tidak memilih basecamp pada gunung yang memiliki daftar pilihan basecamp | Muncul pesan kesalahan: "Silakan pilih basecamp keberangkatan." | Valid |
+| 6 | Sukses Pemesanan | Mengisi tanggal valid, jumlah pendaki = 2, memilih basecamp, klik "Konfirmasi" | Muncul pesan sukses: "Berhasil memesan tiket masuk resmi...", menghitung total harga dengan benar (`ticketPrice * 2`), dan dialihkan ke `/dashboard`. | Valid |
 
 ---
 
-# BAGIAN 1: PENGUJIAN OLEH RAYHAN ABDUL FIKRI (NIM: 24.240.0108)
-**Peran:** Project Manager & QA Lead  
-**Fokus Area:** Algoritma Keuangan, Pajak PPN 11%, dan Biaya Admin Progresif.
+## 2. PENGUJIAN OLEH RAYHAN ABDUL FIKRI (NIM: 24.240.0108)
+**Peran:** Project Manager & QA Lead
 
-## 1.1 White-Box Testing: Biaya Admin Penarikan Dana Progresif
-Fungsi `withdrawWallet` mengadopsi biaya administrasi berjenjang (progresif) untuk penarikan saldo dompet (*wallet withdrawal*):
-*   Penarikan $< \text{Rp } 50.000$: Biaya admin flat $\text{Rp } 5.000$.
-*   Penarikan $\text{Rp } 50.000 - \text{Rp } 500.000$: Biaya admin $10\%$.
-*   Penarikan $> \text{Rp } 500.000$: Biaya admin $5\%$.
+### a. Pengujian White Box
+Pengujian White Box berfokus pada struktur logika kode program. Kita akan menguji fungsi `handleWithdrawSubmit` yang ada di dalam file `DashboardPage.tsx`. Fitur ini dipilih karena merupakan alur krusial penarikan dana keuangan platform.
 
-### A. Kode Sumber yang Diuji:
-```typescript
-const withdrawWallet = (role: "pendaki" | "guide" | "vendor", amount: number) => {
-  let adminFee = 0;              // Node 1
-  if (amount < 50000) {          // Node 2
-    adminFee = 5000;             // Node 3 (Jalur 1)
-  } else if (amount <= 500000) { // Node 4
-    adminFee = Math.round(amount * 0.10); // Node 5 (Jalur 2)
-  } else {
-    adminFee = Math.round(amount * 0.05); // Node 6 (Jalur 3)
-  }
-  const totalDeduction = amount + adminFee; // Node 7
-  return totalDeduction;         // Node 8
-}
+#### Tabel Pengujian Whitebox
+| Node | Source Code |
+| :---: | :--- |
+| 1 | `const handleWithdrawSubmit = (e: React.FormEvent) => {`<br>`  e.preventDefault();`<br>`  const amount = parseInt(depositAmountInput);` |
+| 2 | `  if (!amount \|\| amount <= 0) {`<br>`    toast.error("Masukkan nominal yang valid!");`<br>`    return;`<br>`  }` |
+| 3 | `  const currentBalance = currentUser?.role === "pendaki" ? climberDeposit : ...;`<br>`  if (amount > currentBalance) {`<br>`    toast.error("Saldo tidak mencukupi!");`<br>`    return;`<br>`  }` |
+| 4 | `  if (!currentUser?.bank_account) {`<br>`    toast.error("Anda belum mengatur rekening bank penarikan dana!");`<br>`    return;`<br>`  }` |
+| 5 | `  const fee = calculateWithdrawalFee(amount);`<br>`  const netReceived = amount - fee;`<br>`  setIsProcessingWd(true);`<br>`  setTimeout(() => {`<br>`    withdrawWallet(currentUser?.role, amount, ...);`<br>`    setIsProcessingWd(false);`<br>`    setWithdrawModalOpen(false);`<br>`    toast.success(\`Berhasil menarik dana sebesar Rp \${amount.toLocaleString("id-ID")}!\`);`<br>`  }, 2000);` |
+| 6 | `  return;` |
+
+#### Gambar Flowgraph
+Proses Penarikan Dana (Withdrawal)
+```
+  ( 1 )
+    │
+    ▼
+  ( 2 ) ──────────────┐
+    │                 │
+    ▼                 │
+  ( 3 ) ────────┐     │
+    │           │     │
+    ▼           │     │
+  ( 4 ) ──┐     │     │
+    │     │     │     │
+    ▼     │     │     │
+  ( 5 )   │     │     │
+    │     │     │     │
+    ▼     ▼     ▼     ▼
+  ( 6 ) <─────────────┘
 ```
 
-### B. Diagram Alir Kontrol (Control Flow Graph - CFG)
-```
-          [ Node 1: Start & init adminFee ]
-                         │
-                         ▼
-             [ Node 2: amount < 50000? ]
-               /                     \
-        True  /                       \ False
-             ▼                         ▼
-    [ Node 3: adminFee=5000 ]    [ Node 4: amount <= 500000? ]
-             │                     /                       \
-             │              True  /                         \ False
-             │                   ▼                           ▼
-             │       [ Node 5: adminFee=10% ]    [ Node 6: adminFee=5% ]
-             │                   │                           │
-             └───────────────────┼───────────────────────────┘
-                                 ▼
-                     [ Node 7: totalDeduction ]
-                                 │
-                                 ▼
-                          [ Node 8: End ]
-```
+Dari gambar ditentukan Cyclomatic Complexity:
+$V(G) = E - N + 2$  
+$E$ = Jumlah panah (edge) pada flowgraph = $8$  
+$N$ = Jumlah lingkaran (node) pada flowgraph = $6$  
+$V(G) = 8 - 6 + 2 = 4$
 
-### C. Deskripsi Teknis Flowgraph untuk AI (Promp Generator)
-*   **Struktur Node:**
-    *   **Node 1 (Sequential):** Entry point, deklarasi variabel `adminFee = 0`.
-    *   **Node 2 (Decision):** Evaluasi kondisi percabangan pertama `amount < 50000`.
-    *   **Node 3 (Sequential):** Blok eksekusi True untuk Node 2 (`adminFee = 5000`).
-    *   **Node 4 (Decision):** Evaluasi kondisi percabangan kedua `amount <= 500000` (jika Node 2 bernilai False).
-    *   **Node 5 (Sequential):** Blok eksekusi True untuk Node 4 (`adminFee = 10%`).
-    *   **Node 6 (Sequential):** Blok eksekusi Else (False untuk Node 4) (`adminFee = 5%`).
-    *   **Node 7 (Sequential):** Titik penggabungan aliran (*junction node*) untuk menjumlahkan `totalDeduction = amount + adminFee`.
-    *   **Node 8 (Sequential):** Return hasil dan mengakhiri eksekusi fungsi.
-*   **Formula Kompleksitas Siklomatis (Cyclomatic Complexity):**
-    *   Jumlah Edges ($E$) = $9$
-    *   Jumlah Nodes ($N$) = $8$
-    *   Kompleksitas $V(G) = E - N + 2 = 9 - 8 + 2 = 3$ (Terdapat 3 jalur independen yang harus diuji).
-*   **Jalur Independen (Independent Paths):**
-    *   *Path 1:* 1 - 2 - 3 - 7 - 8
-    *   *Path 2:* 1 - 2 - 4 - 5 - 7 - 8
-    *   *Path 3:* 1 - 2 - 4 - 6 - 7 - 8
+#### Tabel 1 Jalur Flowgraph
+| Basis Flowgraph | Jalur Bebas | Keterangan |
+| :---: | :---: | :--- |
+| Jalur 1 | 1 - 2 - 6 | Validasi nominal gagal dikarenakan nilai input kosong atau $\le 0$ |
+| Jalur 2 | 1 - 2 - 3 - 6 | Validasi Saldo Gagal dikarenakan nominal penarikan melebihi saldo dompet |
+| Jalur 3 | 1 - 2 - 3 - 4 - 6 | Validasi Rekening Gagal dikarenakan pengguna belum mengatur akun bank di profil |
+| Jalur 4 | 1 - 2 - 3 - 4 - 5 - 6 | Penarikan Berhasil. Sistem menghitung biaya admin progresif, mendebet saldo, dan memicu status pengiriman. |
 
-### D. Tabel Kasus Uji Basis Path (White-Box Test Cases)
-| ID Uji | Input Nominal (Amount) | Jalur yang Dilalui | Ekspektasi Admin Fee | Ekspektasi Total Potong | Status |
-|---|---|---|---|---|---|
-| WT-RF-01 | Rp 30.000 | Path 1 | Rp 5.000 | Rp 35.000 | Lulus |
-| WT-RF-02 | Rp 200.000 | Path 2 | Rp 20.000 | Rp 220.000 | Lulus |
-| WT-RF-03 | Rp 1.000.000 | Path 3 | Rp 50.000 | Rp 1.050.000 | Lulus |
+#### Tabel 2 Jalur Test Case
+| Jalur | Skenario | Hasil yang diharapkan | Hasil Pengujian |
+| :---: | :--- | :--- | :---: |
+| Jalur 1 | Memasukkan nominal penarikan 0 atau kosong | Sistem menghentikan proses dan menampilkan error "Masukkan nominal yang valid!" | Sesuai |
+| Jalur 2 | Nominal penarikan Rp 500.000, sedangkan saldo dompet hanya Rp 200.000 | Sistem menghentikan proses dan menampilkan error "Saldo tidak mencukupi!" | Sesuai |
+| Jalur 3 | Saldo mencukupi, namun profil akun tidak memiliki informasi nomor rekening bank | Sistem menghentikan proses dan menampilkan error "Anda belum mengatur rekening bank penarikan dana!" | Sesuai |
+| Jalur 4 | Saldo mencukupi, input valid, nomor rekening bank terkonfigurasi | Sistem memproses penarikan, memotong saldo, mengenakan biaya admin sesuai jenjang, dan menampilkan toast sukses. | Sesuai |
+
+### b. Pengujian Black Box
+| No | Fitur Diuji | Tindakan Pengguna | Hasil Pengujian | Kesimpulan |
+| :---: | :--- | :--- | :--- | :---: |
+| 1 | PPN 11% Otomatis | Membayar pesanan booking guide senilai Rp 300.000 | Sistem secara otomatis menambahkan beban pajak PPN 11% senilai Rp 33.000, sehingga total bayar adalah Rp 333.000. | Valid |
+| 2 | Biaya Admin Progresif (< 50k) | Melakukan penarikan saldo sebesar Rp 40.000 | Saldo terpotong Rp 45.000 (penarikan Rp 40.000 + biaya flat admin Rp 5.000). | Valid |
+| 3 | Biaya Admin Progresif (50k - 500k) | Melakukan penarikan saldo sebesar Rp 200.000 | Saldo terpotong Rp 220.000 (penarikan Rp 200.000 + biaya admin 10% senilai Rp 20.000). | Valid |
+| 4 | Biaya Admin Progresif (> 500k) | Melakukan penarikan saldo sebesar Rp 1.000.000 | Saldo terpotong Rp 1.050.000 (penarikan Rp 1.000.000 + biaya admin 5% senilai Rp 50.000). | Valid |
 
 ---
 
-## 1.2 Black-Box Testing oleh Rayhan Abdul Fikri
-| ID Uji | Fitur | Skenario | Ekspektasi Hasil | Status |
-|---|---|---|---|---|
-| BB-RF-01 | Pembayaran Escrow | Pendaki membayar booking guide seharga Rp 400.000 dengan saldo dompet mencukupi. | Saldo berkurang sebesar Rp 444.000 (Jasa Rp 400.000 + PPN 11% senilai Rp 44.000) dan status booking berubah menjadi "Telah Dibayar". | Lulus |
-| BB-RF-02 | Filter Gunung Guide | Membuka modal booking untuk guide yang memiliki spesialisasi khusus "Gunung Semeru". | Dropdown gunung tujuan di dalam modal booking hanya menampilkan opsi "Gunung Semeru". Gunung lain otomatis disembunyikan. | Lulus |
+## 3. PENGUJIAN OLEH MUHAMMAD UBAIDILLAH ROSYID (NIM: 24.240.0101)
+**Peran:** Full-Stack Developer
 
----
+### a. Pengujian White Box
+Pengujian White Box berfokus pada struktur logika kode program. Kita akan menguji fungsi `handleConfirmBooking` pada pemesanan jasa guide di file `GuidePage.tsx`. Fitur ini dipilih karena merupakan alur penting yang menangani jaminan deposit, negosiasi harga, dan validasi jadwal sibuk guide.
 
-# BAGIAN 2: PENGUJIAN OLEH MUHAMMAD UBAIDILLAH ROSYID (NIM: 24.240.0101)
-**Peran:** Full-Stack Developer  
-**Fokus Area:** Integrasi Supabase, Mekanisme Optimistic Update, Rollback Asinkronus, dan Escrow.
+#### Tabel Pengujian Whitebox
+| Node | Source Code |
+| :---: | :--- |
+| 1 | `const handleConfirmBooking = () => {` |
+| 2 | `  if (!bookingDate) {`<br>`    toast.error("Silakan tentukan tanggal pendakian.");`<br>`    return;`<br>`  }` |
+| 3 | `  if (!targetMountain) {`<br>`    toast.error("Silakan pilih gunung tujuan.");`<br>`    return;`<br>`  }` |
+| 4 | `  if (bookingGuide.busyDates && bookingGuide.busyDates.includes(bookingDate)) {`<br>`    toast.error("Guide sudah memiliki jadwal trip pada tanggal tersebut.");`<br>`    return;`<br>`  }` |
+| 5 | `  if (currentUser && currentUser.role === "pendaki" && (climberDeposit \|\| 0) < 100000) {`<br>`    toast.error("Saldo deposit Anda kurang dari Rp 100.000.");`<br>`    return;`<br>`  }` |
+| 6 | `  const basePriceProposed = parseInt(proposedPrice) \|\| bookingGuide.price;`<br>`  const finalPrice = Math.round(basePriceProposed * (1 - (bookingGuide.discountPercentage \|\| 0) / 100));`<br>`  addBooking({`<br>`    mountainName: targetMountain,`<br>`    guideId: bookingGuide.id,`<br>`    price: finalPrice * climbersCount,`<br>`    bookingType: "mandiri"`<br>`  });`<br>`  setBookingModalOpen(false);`<br>`  navigate("/dashboard");` |
+| 7 | `  return;` |
 
-## 2.1 White-Box Testing: Mekanisme Optimistic Update & Rollback
-Fungsi `updateMountain` melakukan perubahan lokal di browser klien sebelum mengirim data ke Supabase. Jika transaksi database gagal, sistem melakukan query penarikan ulang (*re-fetch*) data asli dari database untuk memulihkan (*rollback*) data klien.
-
-### A. Kode Sumber yang Diuji:
-```typescript
-const updateMountain = async (name: string, fields: Partial<Mountain>) => {
-  setMountains((prev) => prev.map((m) => (m.name === name ? { ...m, ...fields } : m))); // Node 1
-  try {                                                                                // Node 2
-    const { error } = await supabase.from("mountains").update(dbFields).eq("name", name); // Node 3
-    if (error) throw error;                                                            // Node 4
-    logUserActivity("admin1", "Super Admin", "admin", `Memperbarui data Gunung ${name}`); // Node 5
-  } catch (err: any) {                                                                 // Node 6
-    const { data: mtnData } = await supabase.from("mountains").select("*");            // Node 7
-    if (mtnData) {
-      setMountains(mtnData.map((m: any) => ({ ...m })));                               // Node 8 (Rollback)
-    }
-  }                                                                                    // Node 9 (End)
-};
+#### Gambar Flowgraph
+Proses Pemesanan Jasa Guide
+```
+    ( 1 )
+      │
+      ▼
+    ( 2 ) ────────────────┐
+      │                   │
+      ▼                   │
+    ( 3 ) ──────────┐     │
+      │             │     │
+      ▼             │     │
+    ( 4 ) ────┐     │     │
+      │       │     │     │
+      ▼       │     │     │
+    ( 5 ) ──┐ │     │     │
+      │     │ │     │     │
+      ▼     │ │     │     │
+    ( 6 )   │ │     │     │
+      │     │ │     │     │
+      ▼     ▼ ▼     ▼     ▼
+    ( 7 ) <───────────────┘
 ```
 
-### B. Diagram Alir Kontrol (Control Flow Graph - CFG)
-```
-            [ Node 1: Optimistic Update state lokal ]
-                               │
-                               ▼
-                    [ Node 2: Entry block try ]
-                               │
-                               ▼
-               [ Node 3: supabase.update() call ]
-                               │
-                               ▼
-                     [ Node 4: error thrown? ]
-                       /                   \
-                True  /                     \ False
-                     ▼                       ▼
-            [ Node 6: catch block ]     [ Node 5: logUserActivity ]
-                     │                       │
-                     ▼                       │
-            [ Node 7: supabase.select() ]    │
-                     │                       │
-                     ▼                       │
-            [ Node 8: Rollback state lokal ] │
-                     │                       │
-                     └───────────────────────┼┘
-                                             ▼
-                                      [ Node 9: End ]
-```
+Dari gambar ditentukan Cyclomatic Complexity:
+$V(G) = E - N + 2$  
+$E$ = Jumlah panah (edge) pada flowgraph = $10$  
+$N$ = Jumlah lingkaran (node) pada flowgraph = $7$  
+$V(G) = 10 - 7 + 2 = 5$
 
-### C. Deskripsi Teknis Flowgraph untuk AI (Promp Generator)
-*   **Struktur Node:**
-    *   **Node 1 (Sequential):** Memicu `setMountains` secara lokal (*optimistic*).
-    *   **Node 2 (Sequential):** Blok pembuka asinkronus `try`.
-    *   **Node 3 (Sequential):** Pemanggilan `supabase.from('mountains').update(...)` ke server Supabase.
-    *   **Node 4 (Decision):** Deteksi kondisi apakah objek `error` Supabase bernilai true (terdapat error).
-    *   **Node 5 (Sequential):** Eksekusi sukses jika tidak ada error (pencatatan log aktivitas admin).
-    *   **Node 6 (Sequential):** Blok `catch` yang menangkap error jika terjadi exception/kegagalan koneksi.
-    *   **Node 7 (Sequential):** Melakukan query pemulihan data `supabase.from('mountains').select('*')`.
-    *   **Node 8 (Sequential):** Pemanggilan `setMountains(mtnData)` untuk mengembalikan data lokal ke kondisi semula (*rollback*).
-    *   **Node 9 (Sequential):** Mengakhiri eksekusi fungsi.
-*   **Formula Kompleksitas Siklomatis (Cyclomatic Complexity):**
-    *   Jumlah Edges ($E$) = $9$
-    *   Jumlah Nodes ($N$) = $9$
-    *   Kompleksitas $V(G) = E - N + 2 = 9 - 9 + 2 = 2$ (Terdapat 2 jalur independen).
-*   **Jalur Independen (Independent Paths):**
-    *   *Path 1 (Sukses):* 1 - 2 - 3 - 4 - 5 - 9
-    *   *Path 2 (Gagal):* 1 - 2 - 3 - 4 - 6 - 7 - 8 - 9
+#### Tabel 1 Jalur Flowgraph
+| Basis Flowgraph | Jalur Bebas | Keterangan |
+| :---: | :---: | :--- |
+| Jalur 1 | 1 - 2 - 7 | Validasi tanggal gagal dikarenakan `bookingDate` kosong |
+| Jalur 2 | 1 - 2 - 3 - 7 | Validasi Gunung Gagal dikarenakan `targetMountain` belum dipilih |
+| Jalur 3 | 1 - 2 - 3 - 4 - 7 | Validasi Jadwal Gagal dikarenakan guide berstatus sibuk (*busy*) di tanggal tersebut |
+| Jalur 4 | 1 - 2 - 3 - 4 - 5 - 7 | Validasi Deposit Gagal dikarenakan saldo deposit pendaki di bawah batas jaminan Rp 100.000 |
+| Jalur 5 | 1 - 2 - 3 - 4 - 5 - 6 - 7 | Pemesanan Jasa Guide Berhasil. Transaksi dibuat dengan status menunggu konfirmasi. |
 
-### D. Tabel Kasus Uji Basis Path (White-Box Test Cases)
-| ID Uji | Kondisi Jaringan | Hasil Query Supabase | Ekspektasi Tampilan UI | Status |
-|---|---|---|---|---|
-| WT-UR-01 | Stabil (Online) | Sukses (error = null) | Status Gunung Semeru ter-update permanen. | Lulus |
-| WT-UR-02 | Putus (Offline) | Gagal (error = true) | Sempat berubah sejenak, lalu kembali ke status awal (Rollback). | Lulus |
+#### Tabel 2 Jalur Test Case
+| Jalur | Skenario | Hasil yang diharapkan | Hasil Pengujian |
+| :---: | :--- | :--- | :---: |
+| Jalur 1 | Mengosongkan isian tanggal pemesanan | Sistem menghentikan proses dan menampilkan error "Silakan tentukan tanggal pendakian." | Sesuai |
+| Jalur 2 | Mengisi tanggal dengan benar, mengosongkan pilihan gunung tujuan | Sistem menghentikan proses dan menampilkan error "Silakan pilih gunung tujuan." | Sesuai |
+| Jalur 3 | Mengisi tanggal yang bertabrakan dengan jadwal sibuk (*busy dates*) guide | Sistem menghentikan proses dan menampilkan error "Guide sudah memiliki jadwal trip pada tanggal tersebut." | Sesuai |
+| Jalur 4 | Mengisi formulir lengkap, namun saldo jaminan deposit di bawah Rp 100.000 | Sistem menghentikan proses dan menampilkan error "Saldo deposit Anda kurang dari Rp 100.000." | Sesuai |
+| Jalur 5 | Seluruh data lengkap dan valid, serta saldo jaminan deposit mencukupi | Sistem berhasil membuat data booking guide baru dan mengarahkan pengguna ke halaman dashboard. | Sesuai |
 
----
-
-## 2.2 Black-Box Testing oleh Muhammad Ubaidillah Rosyid
-| ID Uji | Fitur | Skenario | Ekspektasi Hasil | Status |
-|---|---|---|---|---|
-| BB-UR-01 | Pengembalian Deposit | Admin menekan tombol "Selesai" pada transaksi sewa alat tanpa ada laporan kerusakan. | Status rental selesai, jaminan deposit Rp 100.000 otomatis ditransfer kembali ke dompet pendaki. | Lulus |
-| BB-UR-02 | Klaim Denda Kerusakan | Vendor mengajukan denda kerusakan tenda sebesar Rp 60.000 saat pengembalian barang. | Saldo deposit jaminan pendaki dipotong Rp 60.000 (ditransfer ke Vendor) dan sisa deposit Rp 40.000 dikembalikan ke Pendaki. | Lulus |
-
----
-
-# BAGIAN 3: PENGUJIAN OLEH RYAN NUGRAHA ADHITHAMA (NIM: 25.240.0007)
-**Peran:** UI/UX Designer & QA Frontend  
-**Fokus Area:** Desain Responsif, Scrollable View, dan Backdrop Click Dismissal.
-
-## 3.1 White-Box Testing: Logika Penutupan Modal & Backdrop Clicks
-Fungsi penanganan klik pada backdrop luar modal berfungsi menutup modal booking (`setBookingModalOpen(false)`), sedangkan klik di dalam modal dihentikan rambatannya (`e.stopPropagation()`) agar modal tidak tertutup tidak sengaja.
-
-### A. Kode Sumber yang Diuji:
-```typescript
-const handleBackdropClick = (e: React.MouseEvent) => {
-  setBookingModalOpen(false);  // Node 1 (Tutup Modal)
-}
-
-const handleModalBoxClick = (e: React.MouseEvent) => {
-  e.stopPropagation();         // Node 2 (Cegah Rambatan Event Click)
-}
-```
-
-### B. Diagram Alir Kontrol (Control Flow Graph - CFG)
-```
-                  [ Node 1: Event Click Terjadi ]
-                                 │
-                                 ▼
-                     [ Node 2: Klik di luar modal? ]
-                       /                         \
-                True  /                           \ False
-                     ▼                             ▼
-         [ Node 3: Panggil setOpen(false) ]    [ Node 4: e.stopPropagation() ]
-                     │                             │
-                     └─────────────────────────────┼┘
-                                                   ▼
-                                            [ Node 5: End ]
-```
-
-### C. Deskripsi Teknis Flowgraph untuk AI (Promp Generator)
-*   **Struktur Node:**
-    *   **Node 1 (Sequential):** Event klik dideteksi oleh event listener terluar.
-    *   **Node 2 (Decision):** Pengecekan posisi koordinat klik, apakah berada di elemen pembatas backdrop luar.
-    *   **Node 3 (Sequential):** Jalur True (klik di luar), memicu perubahan state modal menjadi `false` (tutup).
-    *   **Node 4 (Sequential):** Jalur False (klik di dalam kotak form), memicu instruksi penghentian gelembung event agar form tetap aktif.
-    *   **Node 5 (Sequential):** Selesai memproses interaksi klik pengguna.
-*   **Formula Kompleksitas Siklomatis (Cyclomatic Complexity):**
-    *   Jumlah Edges ($E$) = $5$
-    *   Jumlah Nodes ($N$) = $5$
-    *   Kompleksitas $V(G) = E - N + 2 = 5 - 5 + 2 = 2$ (Terdapat 2 jalur pengujian independen).
-*   **Jalur Independen (Independent Paths):**
-    *   *Path 1 (Klik Luar):* 1 - 2 - 3 - 5
-    *   *Path 2 (Klik Dalam):* 1 - 2 - 4 - 5
-
-### D. Tabel Kasus Uji Basis Path (White-Box Test Cases)
-| ID Uji | Titik Koordinat Klik | Target Element | Ekspektasi Kondisi Modal | Status |
-|---|---|---|---|---|
-| WT-RA-01 | Di luar kotak dialog modal | Backdrop gelap (`bg-black/60`) | Modal booking tertutup instan. | Lulus |
-| WT-RA-02 | Di dalam formulir modal | Input field / Dropdown | Modal tetap terbuka, elemen input aktif/focus. | Lulus |
-
----
-
-## 3.2 Black-Box Testing oleh Ryan Nugraha Adhithama
-| ID Uji | Fitur | Skenario | Ekspektasi Hasil | Status |
-|---|---|---|---|---|
-| BB-RA-01 | Responsivitas Modal | Membuka modal booking guide di layar smartphone lebar 320px (iPhone SE). | Modal membatasi tinggi maksimal hingga 85% layar, memicu scrollbar vertikal pada form body secara mulus, dan tombol Batal/Kirim tetap menempel di bawah. | Lulus |
-| BB-RA-02 | Scroll Area Form | Menggulir area tengah modal booking yang penuh dengan detail kalkulasi harga. | Guliran scroll lancar tanpa merusak tata letak tulisan header/judul dan tombol di kaki modal. | Lulus |
+### b. Pengujian Black Box
+| No | Fitur Diuji | Tindakan Pengguna | Hasil Pengujian | Kesimpulan |
+| :---: | :--- | :--- | :--- | :---: |
+| 1 | Validasi Batas Deposit | Melakukan booking guide saat saldo deposit = Rp 80.000 | Proses ditolak dengan pesan kesalahan: "Saldo deposit Anda kurang dari Rp 100.000." | Valid |
+| 2 | Verifikasi Data Admin | Super Admin menyetujui akun Guide pendaftar baru | Status guide berubah menjadi terverifikasi, profil guide langsung terpublikasi di halaman pencarian guide. | Valid |
+| 3 | Pembaruan Buka/Tutup Gunung | Admin mengubah status Gunung Bromo dari "Buka" menjadi "Tutup" | Status gunung langsung ter-update di database Supabase dan memicu toast sukses. Perubahan tetap persis saat di-refresh. | Valid |
+| 4 | Fitur In-App Chat | Mengirim pesan ke sesama pengguna (pendaki ke guide) | Pesan terkirim secara instan ke database chat dan muncul di sisi penerima secara real-time. | Valid |
