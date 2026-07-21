@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useApp, Booking, RentalOrder, Negotiation, UserRole, EquipmentItem, User, Mountain } from "../context/AppContext";
 import { supabase } from "../../supabase";
 import Swal from "sweetalert2";
+import logoIcon from "../../assets/logo_icon.jpeg";
 
 const themeConfirm = (title: string, text: string, icon: 'question' | 'warning' | 'info' | 'success' | 'error' = 'question') => {
   return Swal.fire({
@@ -6745,8 +6746,8 @@ export function DashboardPage() {
                 <X className="size-4" />
               </button>
               <div className="flex items-center gap-2 mb-2">
-                <div className="bg-emerald-500 rounded-lg p-1.5 shrink-0">
-                  <MountainIcon className="size-5 text-slate-950 font-bold" />
+                <div className="size-8 rounded-lg overflow-hidden shrink-0 border border-slate-700 bg-white p-0.5">
+                  <img src={logoIcon} alt="Logo" className="size-full object-contain" />
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold uppercase tracking-wider text-slate-200">Secure Payment Gateway</h3>
@@ -7182,8 +7183,8 @@ export function DashboardPage() {
               
               {/* Receipt Header */}
               <div className="text-center border-b border-dashed border-gray-200 pb-5">
-                <div className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 font-extrabold px-3 py-1 rounded-full text-xs mb-3 border border-emerald-100">
-                  <MountainIcon className="size-3.5 text-emerald-650" />
+                <div className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-800 font-extrabold px-3 py-1 rounded-full text-xs mb-3 border border-emerald-100">
+                  <img src={logoIcon} alt="Logo" className="size-4 object-contain rounded" />
                   <span>AYOKMENDAKI</span>
                 </div>
                 <h2 className="text-xl font-black text-gray-900 tracking-tight">KUITANSI PEMBAYARAN RESMI</h2>
